@@ -1,39 +1,50 @@
 # POSCARKIT
 
-#### 介绍
-{**以下是 Gitee 平台说明，您可以替换此简介**
-Gitee 是 OSCHINA 推出的基于 Git 的代码托管平台（同时支持 SVN）。专为开发者提供稳定、高效、安全的云端软件开发协作平台
-无论是个人、团队、或是企业，都能够用 Gitee 实现代码托管、项目管理、协作开发。企业项目请看 [https://gitee.com/enterprises](https://gitee.com/enterprises)}
+## 介绍
 
-#### 软件架构
-软件架构说明
+POSCARKIT 是一个用于处理 VASP POSCAR 文件的工具，支持多种操作，
+包括超胞生成、原子洗牌、原子分配、切片等。
 
+## 使用说明
 
-#### 安装教程
+以下是对于可执行文件的使用说明：
 
-1.  xxxx
-2.  xxxx
-3.  xxxx
+### 1. 打开方式
 
-#### 使用说明
+- 支持双击打开。
+- 支持POSCAR拖拽使用该文件打开。
+- 支持命令行参数打开。
+`POSCARKIT.exe <POSCAR.vasp>`
+`POSCARKIT.exe -f <POSCAR.vasp> -c <choice>`
 
-1.  xxxx
-2.  xxxx
-3.  xxxx
+PS. 不指定参数则默认读取 config.toml 文件的配置。
 
-#### 参与贡献
+### 2. 操作选项
 
-1.  Fork 本仓库
-2.  新建 Feat_xxx 分支
-3.  提交代码
-4.  新建 Pull Request
+1. 读取配置：读取 config.toml 文件中的配置。
+2. 超胞生成：根据配置生成超胞文件。
+3. 切片：根据配置对 POSCAR 文件进行切片。
+4. 洗牌：根据配置对 POSCAR 文件中的原子进行洗牌。
+5. 分配：根据配置对 POSCAR 文件中的原子进行分配。
+6. 工作流：结合超胞生成、洗牌和分配操作。
+7. 统计配位数：统计 POSCAR 文件中每个原子的配位数。
+8. Exit：Ctrl+C 退出工具。
 
+### 3. config.toml 配置
 
-#### 特技
+config.toml 文件用于配置工具行为，包括超胞生成、切片、洗牌和分配等操作的参数。
+**可以不进行配置，在程序中手动输入参数。**
 
-1.  使用 Readme\_XXX.md 来支持不同的语言，例如 Readme\_en.md, Readme\_zh.md
-2.  Gitee 官方博客 [blog.gitee.com](https://blog.gitee.com)
-3.  你可以 [https://gitee.com/explore](https://gitee.com/explore) 这个地址来了解 Gitee 上的优秀开源项目
-4.  [GVP](https://gitee.com/gvp) 全称是 Gitee 最有价值开源项目，是综合评定出的优秀开源项目
-5.  Gitee 官方提供的使用手册 [https://gitee.com/help](https://gitee.com/help)
-6.  Gitee 封面人物是一档用来展示 Gitee 会员风采的栏目 [https://gitee.com/gitee-stars/](https://gitee.com/gitee-stars/)
+- `FilePath`：POSCAR 文件的路径。
+- `SupercellFactors`：超胞生成的因子，用于指定沿 x, y, z 方向的倍数。
+- `Structure`：指定结构类型（例如 "fcc", "bcc", "hcp"）。
+- `ShuffleSeeds`：洗牌操作使用的随机种子列表。
+- `Shuffle`：是否在分配前进行洗牌操作。
+- `SliceDirection`：切片操作的方向，指定沿 x, y, z 方向的切片方向。
+
+- Site of Fractions 参数，这些参数用于指定不同 Wyckoff 位置的原子分数
+  （例如，`FCC.1a.sofs`：FCC 结构中 Wyckoff 位置 'a' 的原子分数；
+  `BCC.1b.sofs`：BCC 结构中 Wyckoff 位置 'b' 的原子分数。）。
+
+- 单元胞结构参数
+这些参数用于指定不同结构类型的单元胞参数。（晶体常数基本不使用）

@@ -1,0 +1,103 @@
+# config.toml
+
+# ====== Operations on POSCAR, commenting out what won't be used ======
+# Filepath of POSCAR
+# Filepath = "data/POSCAR-CoNiV-303030-r1-CoNiV.vasp"
+
+# Used for 'Supercell', 'Allocation'
+# SupercellFactors = [30, 30, 30]
+
+# # Used for 'Shuffle', 'Allocation'
+Structure = "fcc" # Case sensitive
+
+ShuffleSeeds = [7 ,42, 83] # Seed list Used for 'Shuffle'
+
+# Shuffle = true # If true, shuffle before allocation
+
+SliceDirection = [0, 0, 1] # Direction of slicing Used for 'Slice'
+
+
+# ====== Site of Fractions parameters, be cautious when modifying ======
+# write the fraction of each symbol in sofs
+# Li = 0.0
+# B = 0.0
+# Mg = 0.0
+# Al = 0.0
+# Ti = 0.0
+# V = 0.0
+# Cr = 0.0
+# Mn = 0.0
+# Fe = 0.0
+# Co = 0.0
+# Ni = 0.0
+# Cu = 0.0
+# Zn = 0.0
+# Y = 0.0
+# Zr = 0.0
+# Nb = 0.0
+# Mo = 0.0
+# Ag = 0.0
+# Sn = 0.0
+# Hf = 0.0
+# Ta = 0.0
+# W = 0.0
+# Re = 0.0
+
+# Wyckoff Letter 'a' of 'Site of Fractions', with 1 multiplicity
+[FCC.1a.sofs]
+# Co = 0.002987421117722990000
+# Cr = 0.727947115898132000000
+# Cu = 0.000082384758570697200
+# Fe = 0.000134568443172611000
+# Ni = 0.265203267335892000000
+# Ti = 0.003645207267254590000
+V=1.0
+
+# Wyckoff Letter 'c' of 'Site of Fractions', with 3 multiplicity
+[FCC.3c.sofs]
+# Co = 0.241670861840248000000
+# Cr = 0.000017621838196646400
+# Cu = 0.241305872797966000000
+# Fe = 0.242621809244156000000
+# Ni = 0.154265567660332000000
+# Ti = 0.120118260383606000000
+Co=0.4444
+Ni=0.4444
+V=0.1112
+
+# Wyckoff Letter 'a' of 'Site of Fractions', with 1 multiplicity
+[BCC.1a.sofs]
+
+# Wyckoff Letter 'b' of 'Site of Fractions', with 1 multiplicity
+[BCC.1b.sofs]
+
+# Wyckoff Letter 'a' of 'Site of Fractions', with 2 multiplicity
+[HCP.2a.sofs]
+
+# Wyckoff Letter 'c' of 'Site of Fractions', with 6 multiplicity
+[HCP.6c.sofs]
+
+
+# ====== !!!Unit cell structure parameters, be cautious when modifying!!! ======
+[FCC]
+cell = [4.7158193544950560, 4.7158193544950560, 4.7158193544950560]
+1a.atoms = ["Au", [[0, 0, 0]]]
+3c.atoms = ["Cu", [[0, 0.5, 0.5], [0.5, 0, 0.5], [0.5, 0.5, 0]]]
+
+[BCC]
+cell = [3.2401067830709420, 3.2401067830709420, 3.2401067830709420]
+1a.atoms = ["Al", [[0, 0, 0]]]
+1b.atoms = ["Ni", [[0.5, 0.5, 0.5]]]
+
+[HCP]
+cell = [[2.4936731042083125, -4.319179729646203, 0],
+        [2.4936731042083125, 4.319179729646203, 0],
+        [0, 0, 3.977752541545741]]
+2a.atoms = ["Sn", [[0.3333333300000021, 0.6666666699999979, 0.25],
+                   [0.6666666699999979, 0.3333333300000021, 0.75]]]
+6c.atoms = ["Ni", [[0.8342059600225937, 0.6684119299927218, 0.25],
+                   [0.3315880400072757, 0.1657940699774088, 0.25],
+                   [0.8342059599701273, 0.1657940700298752, 0.25],
+                   [0.1657940699774088, 0.3315880400072757, 0.75],
+                   [0.6684119299927218, 0.8342059600225937, 0.75],
+                   [0.1657940400298727, 0.8342059599701273, 0.75]]]
