@@ -7,12 +7,11 @@ import tomllib
 from copy import deepcopy
 from dataclasses import dataclass, field
 
-sys.path.append(os.path.join(os.path.dirname(__file__), "PoscarTools"))
-from Supercell import supercell2file
-from AtomSlice import slice2file
-from AtomShuffle import shuffle2files
-from AtomAllocate import allocate2file
-from AtomCountCN import countCN2files
+from PoscarTools.Supercell import supercell2file
+from PoscarTools.AtomSlice import slice2file
+from PoscarTools.AtomShuffle import shuffle2files
+from PoscarTools.AtomAllocate import allocate2file
+from PoscarTools.AtomCountCN import countCN2files
 
 
 VERSION = "0.7"
@@ -33,7 +32,7 @@ INFO_CHOICES = """
   Exit. Ctrl+C
 =======================================
 """
-CHOICES = (1, 2, 3, 4, 5, 6 ,7)
+CHOICES = (1, 2, 3, 4, 5, 6, 7)
 
 
 @dataclass
@@ -61,6 +60,9 @@ class Config:
 
 
 def read_config() -> Config:
+    cfg_path = os.path.join(os.path.dirname(sys.argv[0]), "config.toml")
+    if not os.path.isfile(cfg_path):
+        raise FileNotFoundError("config.toml not found!")
     with open(os.path.join(os.path.dirname(sys.argv[0]), "config.toml"), "rb") as tf:
         config = Config(**tomllib.load(tf))
     return config
@@ -176,7 +178,6 @@ def main(config: Config, filepath: str = "", option: int = 0):
                     if factors:
                         countCN2files(filepath, factors)
 
-                
                 case _:
                     raise ValueError(f"Invalid option {option}")
 
@@ -203,5 +204,10 @@ if __name__ == "__main__":
     args = parser.parse_args()
     file = args.filepath or args.file
     opt = args.choice
-    cfg = read_config()
-    main(config=cfg, filepath=file, option=opt)
+    try:
+        cfg = read_config()
+        main(config=cfg, filepath=file, option=opt)
+    except Exception as e:
+        print(f"[ERROR]An error occurred: {e}")
+        input("Press Enter to exit...")
+        sys.exit(1)

@@ -141,4 +141,4 @@ cython_debug/
 .idea/
 *temp*
 data/
-output/
+out*/
