@@ -22,7 +22,7 @@ This tool has many uses of supercell, slice, shuffle, allocation, etc.
 developed by FZU-MCMF, main developers: Gao Min-Liang, Wu Bo*, et al.,
 please contact via wubo@fzu.edu.cn, 654489521@qq.com in case.
 Ctrl+C to exit.
-----------------------------
+------------------------------
 """
 INFO_CHOICES = """
 =======================================
