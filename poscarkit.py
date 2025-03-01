@@ -1,6 +1,7 @@
 """main.py"""
 
 import argparse
+import logging
 import os
 import sys
 import tomllib
@@ -14,7 +15,7 @@ from PoscarTools.AtomAllocate import allocate2file
 from PoscarTools.AtomCountCN import countCN2files
 
 
-VERSION = "0.7"
+VERSION = "0.7.2"
 INFO_EXEC = f"""
 --- POSCAR tool (ver{VERSION}) ---
 This tool has many uses of supercell, slice, shuffle, allocation, etc.
@@ -23,7 +24,6 @@ please contact via wubo@fzu.edu.cn, 654489521@qq.com in case.
 Ctrl+C to exit.
 ----------------------------
 """
-
 INFO_CHOICES = """
 =======================================
   1. Read config
@@ -33,6 +33,8 @@ INFO_CHOICES = """
 =======================================
 """
 CHOICES = (1, 2, 3, 4, 5, 6, 7)
+
+logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 
 
 @dataclass
@@ -62,10 +64,11 @@ class Config:
 def read_config() -> Config:
     cfg_path = os.path.join(os.path.dirname(sys.argv[0]), "config.toml")
     if not os.path.isfile(cfg_path):
-        raise FileNotFoundError("config.toml not found!")
+        logging.warning("config.toml not found! Using default configuration.")
+        return Config()
+
     with open(os.path.join(os.path.dirname(sys.argv[0]), "config.toml"), "rb") as tf:
-        config = Config(**tomllib.load(tf))
-    return config
+        return Config(**tomllib.load(tf))
 
 
 def handle_supercell_factors(factors: tuple[int, int, int] = ()) -> tuple[int, int, int]:
@@ -79,7 +82,7 @@ def handle_supercell_factors(factors: tuple[int, int, int] = ()) -> tuple[int, i
                 raise ValueError("Input must be 3 positive integers")
             return factors
         except ValueError as e:
-            print(f"Invalid input: {e}. Please try again.")
+            logging.warning(f"{e}. Please try again.")
             factors = ()
 
 
@@ -90,7 +93,7 @@ def handle_structure(config: Config, structure: str = "") -> dict[str, list | di
         if structure in config.__dict__:
             return deepcopy(config.__dict__[structure])
         else:
-            print(f"{structure} not found in configuration. Please try again.")
+            logging.warning(f"{structure} not found. Please try again.")
 
 
 def handle_slice_direction(direction: tuple[int, int, int] = ()) -> tuple[int, int, int]:
@@ -104,7 +107,7 @@ def handle_slice_direction(direction: tuple[int, int, int] = ()) -> tuple[int, i
                 raise ValueError("Input must be a tuple of three integers.")
             return direction
         except ValueError as e:
-            print(f"Invalid input: {e}. Please try again.")
+            logging.warning(f"{e}. Please try again.")
             direction = ()
 
 
@@ -118,7 +121,7 @@ def main(config: Config, filepath: str = "", option: int = 0):
             if option != 1:
                 filepath = filepath or config.Filepath or input("Enter filepath >>> ")
                 if not os.path.isfile(filepath):
-                    print("[ERROR]File not found! Please try again.")
+                    logging.warning("File not found! Please try again.")
                     filepath = ""
                     config.Filepath = ""
                     option = 0
@@ -128,11 +131,10 @@ def main(config: Config, filepath: str = "", option: int = 0):
             # Flag = False
             match option:
                 case 1:
-                    print("Reading config...", end="")
                     config = read_config()
                     filepath = ""
                     option = 0
-                    print("Done.")
+                    logging.info("Configurations reloaded.")
 
                 case 2:
                     factors = tuple(config.SupercellFactors)
@@ -187,11 +189,11 @@ def main(config: Config, filepath: str = "", option: int = 0):
             option = 0
 
         except ValueError as e:
-            print(f"[ERROR]Invalid input: {e}", end=" ")
+            logging.error(f"Invalid input: {e}")
             filepath = ""
             option = 0
         except KeyboardInterrupt:
-            print("\nExiting... Thank you for using POSCAR tool!")
+            logging.info("\nThank you for using POSCAR tool! Exiting...")
             sys.exit(0)
 
 
@@ -208,6 +210,6 @@ if __name__ == "__main__":
         cfg = read_config()
         main(config=cfg, filepath=file, option=opt)
     except Exception as e:
-        print(f"[ERROR]An error occurred: {e}")
+        logging.critical(e)
         input("Press Enter to exit...")
         sys.exit(1)

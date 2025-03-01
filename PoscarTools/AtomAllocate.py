@@ -1,14 +1,14 @@
 """allocate.py"""
 
+import logging
 import os
 import random
-import tomllib
 from collections import defaultdict
 
 import numpy as np
 from tqdm import tqdm
 
-from SimplePoscar import Atoms, SimplePoscar
+from .SimplePoscar import Atoms, SimplePoscar
 
 
 def _integer_fractions(fracts: dict, factors: tuple[int, int, int], multi: int) -> dict:
@@ -121,11 +121,11 @@ def allocate2file(filepath: str, structure: dict[str, dict],
             raise ValueError("The sum of fractions must be 1.")
         site_fracts[site] = _integer_fractions(fracts, factors, int(site[0]))
 
-    print(f"Site fractions: {dict(site_fracts)}")
+    logging.info(f"Site fractions: {dict(site_fracts)}")
 
     # Allocate atoms
     if shuffle:
-        print("Would shuffle before allocating atoms.")
+        logging.info("Would shuffle before allocating atoms.")
 
     new_atoms = allocate_atoms(atoms.copy(), vac_sites, site_fracts, shuffle)
 
@@ -133,6 +133,7 @@ def allocate2file(filepath: str, structure: dict[str, dict],
     symbol_str = "".join(s for s, _ in new_atoms.symbol_count)
     output = f"{os.path.splitext(filepath)[0]}-{symbol_str}.vasp"
     poscar.write_poscar(output, new_atoms)
-    print(f"Allocated atoms saved to {output}")
+    
+    logging.info(f"Allocated atoms saved to {output}")
 
     return output

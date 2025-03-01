@@ -10,7 +10,7 @@
 # # Used for 'Shuffle', 'Allocation'
 Structure = "fcc" # Case sensitive
 
-ShuffleSeeds = [7 ,42, 83] # Seed list Used for 'Shuffle'
+ShuffleSeeds = [7, 42, 83] # Seed list Used for 'Shuffle'
 
 # Shuffle = true # If true, shuffle before allocation
 

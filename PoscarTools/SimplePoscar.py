@@ -1,10 +1,9 @@
 """SimplePoscar.py"""
 
+import logging
 import re
-import sys
 from collections import defaultdict, Counter
 from collections.abc import Iterable
-
 from copy import deepcopy
 from dataclasses import dataclass
 from typing import Generator, Optional
@@ -143,11 +142,12 @@ class Atoms:
         """Return a list of atoms with duplicate coordinates."""
         results = []
         for coord, atom_list in self.coord_map.items():
-            if len(atom_list) <= 1: continue
+            if len(atom_list) <= 1:
+                continue
             symbol_count = "".join(
                 f"{s}{c}" for s, c in Atoms(self.cell, atom_list=atom_list).symbol_count)
             results.append(f"in {coord} {len(atom_list)} atoms {symbol_count}")
-        return "\n".join(results)  
+        return "\n".join(results)
 
     def remove_duplicates(self, reserve_old: bool = False):
         """Remove duplicate atoms."""
@@ -156,7 +156,7 @@ class Atoms:
             reserve_idx = 0 if reserve_old else -1
             atom_list.append(al[reserve_idx])
         self.atom_list = atom_list
-        
+
     def compare(self, atoms2: 'Atoms') -> tuple[bool, str]:
         """Compare two Atoms objects."""
         atoms1 = self
@@ -195,7 +195,7 @@ class SimplePoscar:
         self.selective_dynamics = False
         self.direct_coordinates = True
 
-    def parse_comment(self, line: str) -> tuple[int, str]:
+    def _parse_comment(self, line: str) -> tuple[int, str]:
         result = (-1, "")
         if not line or "#" not in line:
             return result
@@ -255,7 +255,7 @@ class SimplePoscar:
         start_idx = 8 + self.selective_dynamics
         for symbol, count in zip(symbols, counts):
             for i, line in enumerate(lines[start_idx:start_idx + count]):
-                idx, comment = self.parse_comment(line)
+                idx, comment = self._parse_comment(line)
                 idx = idx if idx != -1 else i
                 parts = line.split()
                 coord = np.array(list(map(float, parts[:3])))
@@ -271,9 +271,9 @@ class SimplePoscar:
 
         # Check for duplicates
         if duplicates := atoms.duplicates:
-            print(f"[WARNNING]Duplicate atoms found: {duplicates}")
+            logging.warning(f"Duplicate atoms found: {duplicates}")
             atoms.remove_duplicates()
-            
+
         # Switch to direct coordinates
         self.direct_coordinates = True
         atoms.switch_coords(self.direct_coordinates)
@@ -290,9 +290,9 @@ class SimplePoscar:
         """
         # Check for duplicates
         if duplicates := atoms.duplicates:
-            print(f"[WRANNING]Duplicate atoms found: {duplicates}")
+            logging.warning(f"Duplicate atoms found: {duplicates}")
             atoms.remove_duplicates()
-            
+
         self.comment_line = comment_line if comment_line else self.comment_line
         lines = []
 
@@ -338,4 +338,4 @@ def compare_poscar(filepath1: str, filepath2: str):
     atoms2 = poscar.read_poscar(filepath2)
 
     flag, msg = atoms1.compare(atoms2)
-    print(flag, msg)
+    logging.info(f"{flag}, {msg}")

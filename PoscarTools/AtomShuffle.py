@@ -1,13 +1,13 @@
 """shuffle.py"""
 
+import logging
 import os
 import random
-import tomllib
 from typing import Optional
 
 from tqdm import tqdm
 
-from SimplePoscar import Atoms, SimplePoscar
+from .SimplePoscar import Atoms, SimplePoscar
 
 
 def shuffle_atoms(atoms: Atoms, symbol_sites: dict[str, str], seed: Optional[int] = None):
@@ -41,7 +41,8 @@ def shuffle_atoms(atoms: Atoms, symbol_sites: dict[str, str], seed: Optional[int
     return new_atoms
 
 
-def shuffle2files(filepath: str, structure: dict[str, dict], seeds: list[int | None] = [None]):
+def shuffle2files(filepath: str, structure: dict[str, dict],
+                  seeds: list[int | None] = [None]) -> list[str]:
     """Shuffle atoms and save to series of files"""
     # Generate symbol_sites mapping
     info = structure.copy()
@@ -56,13 +57,16 @@ def shuffle2files(filepath: str, structure: dict[str, dict], seeds: list[int | N
     atoms = poscar.read_poscar(filepath)
 
     # Shuffle atoms for each time
+    outputs = []
     for t, seed in enumerate(seeds, start=1):
         sl = len(seeds)
-        print(f"\nWorking... {t}/{sl}")
+        logging.info(f"\nWorking... {t}/{sl}")
         new_atoms = shuffle_atoms(atoms.copy(), symbol_sites, seed)
 
         # Save to file
         output = f"{os.path.splitext(filepath)[0]}-r{t:0{len(str(sl))}d}.vasp"
         poscar.write_poscar(output, new_atoms)
-        print(f"POSCAR Saved to {output}")
-        yield output
+        logging.info(f"POSCAR Saved to {output}")
+        outputs.append(output)
+
+    return outputs

@@ -1,10 +1,11 @@
 """supercell.py"""
 
+import logging
 import os
 
 import numpy as np
 from tqdm import tqdm
-from SimplePoscar import Atom, Atoms, SimplePoscar
+from .SimplePoscar import Atom, Atoms, SimplePoscar
 
 
 def _clean_matrix(matrix: np.ndarray, eps: float = 1e-12) -> np.ndarray:
@@ -60,8 +61,7 @@ def make_supercell(atoms: Atoms, factors: tuple[int, int, int]) -> Atoms:
                         coord=coord,
                         constr=atom.constr,
                         comment=f"{atom.symbol}-{idx+1:0{l}d}")
-        new_atoms.append(new_atom)
-        # print(new_atom)
+        new_atoms.append(new_atom)        
 
     return new_atoms
 
@@ -73,7 +73,7 @@ def supercell2file(filepath: str, factors: tuple[int, int, int]) -> str:
     atoms = poscar.read_poscar(filepath)
 
     # Make supercell
-    print(f"Expanding {filepath}...")
+    logging.info(f"Expanding {filepath}...")
     new_atoms = make_supercell(atoms, factors)
 
     # Save to file
@@ -96,16 +96,16 @@ def supercell2file(filepath: str, factors: tuple[int, int, int]) -> str:
     # output = f"{os.path.splitext(filepath)[0]}-{''.join(str(f) for f in factors)}.vasp"
     # write_vasp(output, supercell, direct=True, sort=True, vasp5=True)
 
-    print(f"Supercell saved to {output}")
+    logging.info(f"Supercell saved to {output}")
     return output
 
 
-def __test():
-    filepath = "POSCAR-fcc.vasp"
-    factors = (20, 20, 20)
-    supercell2file(filepath, factors)
-    # make_supercell(filepath, factors)
+# def __test():
+#     filepath = "POSCAR-fcc.vasp"
+#     factors = (20, 20, 20)
+#     supercell2file(filepath, factors)
+#     # make_supercell(filepath, factors)
 
 
-if __name__ == "__main__":
-    __test()
+# if __name__ == "__main__":
+#     __test()

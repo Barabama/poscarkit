@@ -1,9 +1,9 @@
 """AtomSeparate.py"""
 
+import logging
 import math
 import os
 import re
-import sys
 from collections import defaultdict
 
 import numpy as np
@@ -11,12 +11,13 @@ import matplotlib.pyplot as plt
 from scipy.spatial import KDTree
 from tqdm import tqdm
 
-from SimplePoscar import Atoms, SimplePoscar
-from AtomSlice import _get_basis, group_by_direction
-from Utils import color_map
+from .SimplePoscar import Atoms, SimplePoscar
+from .AtomSlice import _get_basis, group_by_direction
+from .Utils import color_map
 
 
 def group_by_sites(atoms: Atoms):
+    """Group atoms by their site names."""
     grouped_atoms = defaultdict(list)
     for atom in atoms:
         match = re.search(r"([^#-]+)", atom.comment)
@@ -27,27 +28,22 @@ def group_by_sites(atoms: Atoms):
     return grouped_atoms
 
 
-def separate2files(filepath: str):
-
+def separate2files(filepath: str) -> list[str]:
+    """Separate atoms by their site names and save to separate files."""
     poscar = SimplePoscar()
     atoms = poscar.read_poscar(filepath)
 
-    print(f"Separating {filepath}...")
+    logging.info(f"Separating {filepath}...")
+    outputs = []
     for site, atom_list in group_by_sites(atoms).items():
         new_atoms = atoms.copy(clean=True)
         new_atoms.extend(atom_list)
         output = f"{os.path.splitext(filepath)[0]}-{site}.vasp"
         poscar.write_poscar(output, new_atoms)
-        print(f"POSCAR saved to {output}")
-        yield output
+        logging.info(f"POSCAR saved to {output}")
+        outputs.append(output)
 
-
-def verify_atoms(coords: np.ndarray, atoms: Atoms):
-    for i, coord in enumerate(tqdm(coords, desc="Verifying atoms", ncols=80)):
-        atom = atoms[i]
-        if not np.allclose(coord, atom.coord):
-            return coord, atom
-    return False
+    return outputs
 
 
 def calculate_nearest_neighbors(atoms: Atoms, rqstd: float, tolerance: float = 1e-2):
@@ -99,57 +95,41 @@ def countCN2files(filepath: str, factors: tuple[int, int, int]):
 
         rqstds = np.diagonal(atoms.cell) / np.array(factors)
         if len(set(rqstds)) != 1:
-            print(f"Failed to determine crystal constant, as {factors}")
+            logging.warning(f"Failed to determine crystal constant, as {factors}")
             rqstd = int(input("Please input crystal constant:"))
         else:
             rqstd = rqstds[0] * math.sqrt(2) / 2
 
         if len([s for s, _ in atoms.symbol_count]) <= 1:
-            print(f"{atoms} is pure, skipping")
+            logging.warning(f"{atoms} is pure, skipping")
             continue
 
         output = os.path.splitext(os.path.abspath(sep_output))[0]
         if not os.path.exists(output):
             os.makedirs(output)
-            
-        all_cn_data = defaultdict(list)
 
+        all_cn_data = defaultdict(list)
         for symbol, atom_list in atoms.group_atoms:
             symbol_atoms = Atoms(atoms.cell, is_direct=atoms.is_direct, atom_list=atom_list)
 
-            # fn = os.path.join(output, f"POSCAR-{symbol}.vasp")
-            # poscar.write_poscar(fn, symbol_atoms)
-
+            # Get neighbor atoms
             neighbor_atoms = atoms.copy(clean=True)
             cn_values = []
-            # for i, (proj, layer) in enumerate(group_by_direction(symbol_atoms, basis)):
-            #     # fn = os.path.join(output, f"POSCAR-{symbol}-{i}.vasp")
-            #     # poscar.write_poscar(fn, layer)
-
-            #     neighbors, count = calculate_nearest_neighbors(layer, rqstd)
-            #     if not neighbors:
-            #         continue
-
-            #     print(f"{symbol}-{symbol}", count)
-            #     neighbor_atoms.extend(neighbors)
-
-            # In Cube
             neighbors_map, pair_count = calculate_nearest_neighbors(symbol_atoms, rqstd)
-            print(f"{symbol}-{symbol} pair count: {pair_count}")
+            logging.info(f"{symbol}-{symbol} pair count: {pair_count}")
             for neighbors in neighbors_map.values():
-                cn_values.append(len(neighbors))
                 neighbor_atoms.extend(neighbors)
-                # print(neighbor_atoms)
-
-            # Count Coordinate Number
-            avg_cn = np.mean(cn_values)
-            std_cn = np.std(cn_values)
-            print(f"{symbol}: Average CN = {avg_cn:.2f}, Standard Deviation CN = {std_cn:.2f}")
-            all_cn_data[symbol].extend(cn_values)
+                cn_values.append(len(neighbors))
 
             # Save neighbor atoms to POSCAR file
             filname = os.path.join(output, f'POSCAR-neighbors-{symbol}.vasp')
             poscar.write_poscar(filname, neighbor_atoms)
+
+            # Count Coordinate Number
+            avg_cn = np.mean(cn_values)
+            std_cn = np.std(cn_values)
+            logging.info(f"{symbol}: Average CN = {avg_cn:.2f}, Standard Deviation CN = {std_cn:.2f}")
+            all_cn_data[symbol].extend(cn_values)
 
         # Plot the histogram of Coordinate Numbers
         symbols, all_cn_values = zip(*all_cn_data.items())

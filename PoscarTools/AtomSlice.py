@@ -1,5 +1,6 @@
 """slice.py"""
 
+import logging
 import os
 from collections import defaultdict
 from itertools import groupby
@@ -8,8 +9,8 @@ import numpy as np
 from matplotlib import pyplot as plt
 from tqdm import tqdm
 
-from SimplePoscar import Atoms, SimplePoscar
-from Utils import color_map
+from .SimplePoscar import Atoms, SimplePoscar
+from .Utils import color_map
 
 basis_map = {
     (0, 0, 1): ((1, 0, 0), (0, 1, 0), (0, 0, 1)),
@@ -94,7 +95,6 @@ def plot_layer(layer: Atoms, basis: tuple, title: str, filepath: str):
     # Plot layer with projected coordinates
     plt.figure(figsize=(6, 6))
     for symbol, coords in symbol_coords.items():
-        # print(symbol, len(coords))
         color = color_map.get(symbol, "magenta")
         x, y = zip(*coords)
         plt.scatter(x, y, marker="o", s=10, color=color, label=symbol)
@@ -126,13 +126,13 @@ def slice2file(filepath: str, direction: tuple[int, int, int]):
     # Group atoms by direction
     layers = [ls for ls in group_by_direction(atoms, basis)]
     num_layers = len(layers)
-    print(f"Found {num_layers} layers")
+    logging.info(f"Found {num_layers} layers")
 
     # Save layers as POSCAR and plot layers
     l = len(str(num_layers))
     for i, (proj, layer) in enumerate(tqdm(layers, desc="Processing layers",
                                            total=num_layers, ncols=80), start=1):
-        # print(f"Layer {i:0{l}d} proj={proj:.4f}")
+        logging.debug(f"Layer {i:0{l}d} proj={proj:.4f}")
 
         # Save layer to POSCAR file
         direct_str = "".join(str(d) for d in direction)
@@ -145,4 +145,4 @@ def slice2file(filepath: str, direction: tuple[int, int, int]):
         plot_layer(layer, basis, comment, imgname)
         # break  # for test
 
-    print(f"Results saved in {output}")
+    logging.info(f"Results saved in {output}")
