@@ -114,12 +114,13 @@ def handle_slice_direction(direction: tuple[int, int, int] = ()) -> tuple[int, i
 def main(config: Config, filepath: str = "", option: int = 0):
     """Main function."""
     print(INFO_EXEC)
+    filepath = filepath or config.Filepath
     while True:
         try:
             # Check option and filepath, passed option==1
             option = option or int(input(f"{INFO_CHOICES}Enter choice >>> "))
             if option != 1:
-                filepath = filepath or config.Filepath or input("Enter filepath >>> ")
+                filepath = filepath or input("Enter filepath >>> ")
                 if not os.path.isfile(filepath):
                     logging.warning("File not found! Please try again.")
                     filepath = ""
@@ -128,24 +129,22 @@ def main(config: Config, filepath: str = "", option: int = 0):
                     continue
 
             # Execute option
-            # Flag = False
             match option:
                 case 1:
                     config = read_config()
-                    filepath = ""
-                    option = 0
+                    filepath = config.Filepath
                     logging.info("Configurations reloaded.")
 
                 case 2:
                     factors = tuple(config.SupercellFactors)
                     if factors := handle_supercell_factors(factors):
                         supercell2file(filepath, factors)
-                    # Flag = True
+                    filepath = ""
                 case 3:
                     direction = tuple(config.SliceDirection)
                     if direction := handle_slice_direction(direction):
                         slice2file(filepath, direction)
-                    # Flag = True
+                    filepath = ""
 
                 case 4:
                     structure = handle_structure(config, config.Structure.upper())
@@ -153,7 +152,7 @@ def main(config: Config, filepath: str = "", option: int = 0):
                     print
                     if structure and seeds:
                         fs = [f for f in shuffle2files(filepath, structure, seeds)]
-                    # Flag = True
+                    filepath = ""
 
                 case 5:
                     structure = handle_structure(config, config.Structure.upper())
@@ -161,7 +160,7 @@ def main(config: Config, filepath: str = "", option: int = 0):
                     shuffle = config.Shuffle
                     if structure and factors:
                         allocate2file(filepath, structure, factors, shuffle)
-                    # Flag = True
+                    filepath = ""
 
                 case 6:
                     factors = handle_supercell_factors(tuple(config.SupercellFactors))
@@ -173,19 +172,16 @@ def main(config: Config, filepath: str = "", option: int = 0):
                         shuffled_files = [f for f in shuffle2files(supercell_file, structure, seeds)]
                         for f in shuffled_files:
                             _ = allocate2file(f, structure, factors, shuffle)
-                    # Flag = True
+                    filepath = ""
 
                 case 7:
-                    factors = handle_supercell_factors(tuple(config.SupercellFactors))
-                    if factors:
-                        countCN2files(filepath, factors)
+                    countCN2files(filepath)
+                    filepath = ""
 
                 case _:
                     raise ValueError(f"Invalid option {option}")
 
             # # Reset
-            # if Flag:
-            filepath = ""
             option = 0
 
         except ValueError as e:

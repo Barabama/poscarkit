@@ -2,5 +2,6 @@
 # ase
 numpy
 matplotlib
+pandas
 scipy
 tqdm

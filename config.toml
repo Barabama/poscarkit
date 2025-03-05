@@ -14,7 +14,7 @@ ShuffleSeeds = [7, 42, 83] # Seed list Used for 'Shuffle'
 
 # Shuffle = true # If true, shuffle before allocation
 
-SliceDirection = [0, 0, 1] # Direction of slicing Used for 'Slice'
+# SliceDirection = [0, 0, 1] # Direction of slicing Used for 'Slice'
 
 
 # ====== Site of Fractions parameters, be cautious when modifying ======

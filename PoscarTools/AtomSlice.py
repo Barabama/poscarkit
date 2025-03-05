@@ -64,8 +64,7 @@ def group_by_direction(atoms: Atoms, basis: tuple, precision: int = 6):
     # Sort atoms based on rounded projections
     sorted_indices = np.argsort(projs)
     for proj, group in groupby(sorted_indices, key=lambda x: projs[x]):
-        layer = atoms.copy(clean=True)
-        layer.extend([atoms[i] for i in group])
+        layer = atoms.rebuild([atoms[i] for i in group])
         yield proj, layer
 
 

@@ -66,17 +66,17 @@ class Atoms:
             for atom in atoms:
                 self.atom_list.append(atom)
 
-    # def insert(self, idx: int, atom: Atom):
-    #     self.atoms.insert(idx, atom)
+    def insert(self, idx: int, atom: Atom):
+        self.atom_list.insert(idx, atom)
 
-    # def remove(self, atom: Atom):
-    #     self.atoms.remove(atom)
+    def remove(self, atom: Atom):
+        self.atom_list.remove(atom)
 
-    # def pop(self, idx: int) -> Atom:
-    #     return self.atoms.pop(idx)
+    def pop(self, idx: int) -> Atom:
+        return self.atom_list.pop(idx)
 
-    # def clear(self):
-    #     self.atoms.clear()
+    def clear(self):
+        self.atom_list.clear()
 
     def copy(self, clean: bool = False) -> 'Atoms':
         atom_list = [] if clean else deepcopy(self.atom_list)
@@ -84,6 +84,11 @@ class Atoms:
                      is_direct=self.is_direct,
                      atom_list=atom_list)
 
+    def rebuild(self, atom_list: list[Atom] = []) -> 'Atoms':
+        return Atoms(cell=self.cell.copy(),
+                     is_direct=self.is_direct,
+                     atom_list=atom_list)
+    
     def sort(self, key="symbol", reverse: bool = False):
         if key == "symbol":
             def key_func(atom: Atom): return atom.symbol
