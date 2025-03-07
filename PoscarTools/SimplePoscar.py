@@ -88,16 +88,15 @@ class Atoms:
         return Atoms(cell=self.cell.copy(),
                      is_direct=self.is_direct,
                      atom_list=atom_list)
-    
-    def sort(self, key="symbol", reverse: bool = False):
-        if key == "symbol":
-            def key_func(atom: Atom): return atom.symbol
-        elif key in ["x", "y", "z"]:
-            coord_map = {"x": 0, "y": 1, "z": 2}
 
-            def key_func(atom: Atom): return atom.coord[coord_map[key]]
-        else:
-            key_func = key
+    def sort(self, key="symbol", reverse: bool = False):
+        key_funcs = {"symbol": lambda atom: atom.symbol,
+                     "coord": lambda atom: tuple(atom.coord),
+                     "x": lambda atom: atom.coord[0],
+                     "y": lambda atom: atom.coord[1],
+                     "z": lambda atom: atom.coord[2],
+                     "comment": lambda atom: atom.comment}
+        key_func = key_funcs[key]if key in key_funcs else lambda key: key
 
         self.atom_list.sort(key=key_func, reverse=reverse)
 
@@ -118,6 +117,8 @@ class Atoms:
 
     @property
     def direct_coords(self) -> np.ndarray:
+        if not self.is_direct:
+            self.switch_coords(direct=True)
         return np.array([atom.coord for atom in self.atom_list])
 
     @property
@@ -130,8 +131,8 @@ class Atoms:
             return  # Already in correct format
         inv_cell = np.linalg.inv(self.cell)
         for atom in self.atom_list:
-            atom.coord = np.dot(atom.coord, self.cell) if not direct \
-                else np.dot(atom.coord, inv_cell) % 1.0
+            atom.coord = np.dot(atom.coord, inv_cell) % 1.0 if direct \
+                else np.dot(atom.coord, self.cell)
         self.is_direct = direct
 
     @property
@@ -328,7 +329,8 @@ class SimplePoscar:
         atoms.sort()
         for atom in atoms:
             coord_str = " " + " ".join(f"{c:.16f}" for c in atom.coord)
-            constr_str = " " + " ".join(c for c in atom.constr) if self.selective_dynamics else ""
+            constr_str = " " + " ".join(c for c in atom.constr) \
+                if self.selective_dynamics and atom.constr is not None else ""
             comment_str = " # " + atom.comment
             lines.append(f" {coord_str}{constr_str}{comment_str}")
 

@@ -30,7 +30,7 @@ def _get_basis(direction: tuple[int, int, int]) -> tuple:
         direction (tuple[int, int, int]): Direction of the plane.
 
     Returns:
-        np.ndarray: 3 base vectors.
+        tuple[tuple, tuple, tuple]: 3 base vectors.
     """
     if direction in basis_map:
         basis = basis_map[direction]
@@ -56,7 +56,7 @@ def group_by_direction(atoms: Atoms, basis: tuple, precision: int = 6):
     Yields:
         tuple[float, Atoms]: Projection, layer.
     """
-    # Calculate  and Round projections
+    # Calculate and Round projections
     coords = atoms.direct_coords
     projs = np.dot(coords, _normalize(basis[-1]))  # Projections onto direction
     projs = np.round(projs, precision)

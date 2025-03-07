@@ -61,7 +61,7 @@ def make_supercell(atoms: Atoms, factors: tuple[int, int, int]) -> Atoms:
                         coord=coord,
                         constr=atom.constr,
                         comment=f"{atom.symbol}-{idx+1:0{l}d}")
-        new_atoms.append(new_atom)        
+        new_atoms.append(new_atom)
 
     return new_atoms
 

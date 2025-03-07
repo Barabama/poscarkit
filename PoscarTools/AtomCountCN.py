@@ -69,7 +69,7 @@ def calculate_nearest_neighbors(atoms: Atoms, cut_off: float):
 
     nn_map = defaultdict(list)
     pair_count = 0
-    
+
     for i, coord in enumerate(tqdm(coords, desc="Searching for NN", ncols=80)):
         # Search for neighbors in rqstd + tolerance
         neighbor_indices = tree.query_ball_point(coord, r=1.5 * cut_off)
@@ -83,7 +83,7 @@ def calculate_nearest_neighbors(atoms: Atoms, cut_off: float):
         for j, dist in zip(neighbor_indices, distances):
             if (dist - cut_off) > tolerance:
                 continue
-            
+
             atom_j = atoms[j]
             nn_map[atom_i].append(atom_j)
             if atom_j not in nn_map:
@@ -94,7 +94,7 @@ def calculate_nearest_neighbors(atoms: Atoms, cut_off: float):
 
 def countCN2files(filepath: str):
     cut_off = float(input("Please input the cut-off distance (A): "))
-    
+
     poscar = SimplePoscar()
     atoms = poscar.read_poscar(filepath)
 
@@ -110,7 +110,7 @@ def countCN2files(filepath: str):
         # Get nearest neighbors
         nn_map, pair_count = calculate_nearest_neighbors(symbol_atoms, cut_off)
         logging.info(f"{symbol}-{symbol} pair count: {pair_count}")
-                
+
         # Collect CN data map
         cn_data_map = defaultdict(list[CNData])
         for center, neighbors in nn_map.items():
@@ -124,13 +124,13 @@ def countCN2files(filepath: str):
             for cn_data in cn_data_list:
                 sets = {cn_data["center"], *cn_data["neighbors"]}
                 atom_sets.update(sets)
-            
+
             filename = os.path.join(output, f"POSCAR-nn-{symbol}-{cn}.vasp")
             comment = f"Coordination number of {symbol}={cn}"
             poscar.write_poscar(filename, atoms.rebuild(list(atom_sets)), comment)
-        
+
             nn_atoms.update(atom_sets)
-        
+
         comment = f"Nearest Neighbors of {symbol} pair count={pair_count}"
         filename = os.path.join(output, f"POSCAR-nn-{symbol}.vasp")
         poscar.write_poscar(filename, atoms.rebuild(list(nn_atoms)), comment)
@@ -141,9 +141,9 @@ def countCN2files(filepath: str):
         symbol_df[symbol] = cn_df
 
         # Collect CN data to list
-        cn_freq = [d["cn"] for ds in cn_data_map.values() for d in ds ]
+        cn_freq = [d["cn"] for ds in cn_data_map.values() for d in ds]
         symbol_cn_freq[symbol] = cn_freq
-        
+
     # Write CN data to CSV
     all_df = pd.concat(symbol_df.values(), ignore_index=True)
     filename = os.path.join(output, "CN_Counts.csv")
@@ -153,7 +153,7 @@ def countCN2files(filepath: str):
     # Plot the histogram of Coordinate Numbers
     symbols, cn_freqs = zip(*symbol_cn_freq.items())
     colors = [color_map[s] for s in symbols]
-    plt.hist(cn_freqs, bins=np.arange(0, 12),
+    plt.hist(cn_freqs, bins=list(range(0, 12)),
              alpha=0.5, label=symbols, color=colors, edgecolor="black")
     plt.legend()
     plt.title(f"Histogram of Coordination Numbers")
@@ -161,5 +161,5 @@ def countCN2files(filepath: str):
     plt.ylabel("Frequency")
     plt.savefig(os.path.join(output, f"CN-Histogram.png"))
     plt.close()
-    
+
     return output

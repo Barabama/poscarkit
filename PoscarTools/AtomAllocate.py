@@ -64,14 +64,14 @@ def _integer_fractions(fracts: dict, factors: tuple[int, int, int], multi: int) 
 
 
 def allocate_atoms(atoms: Atoms, vac_sites: dict[str, str],
-                   site_fracts: dict[str, dict[str, float]],
+                   site_fracts: dict[str, dict[str, int]],
                    shuffle: bool = False) -> Atoms:
     """Allocate atoms according to the integer site fractions.
 
     Args:
         atoms (Atoms): Atoms template.
         vac_sites (dict[str, str]): Dictionary mapping vacancy symbol to sublattice site.
-        site_fracts (dict[str, dict[str, float]]): Dictionary mapping symbol to site fractions.
+        site_fracts (dict[str, dict[str, int]]): Dictionary mapping symbol to site fractions.
         shuffle (bool, optional): Whether to shuffle atoms. Defaults to False.
     Returns:
         Atoms: Allocated atoms.
@@ -133,7 +133,7 @@ def allocate2file(filepath: str, structure: dict[str, dict],
     symbol_str = "".join(s for s, _ in new_atoms.symbol_count)
     output = f"{os.path.splitext(filepath)[0]}-{symbol_str}.vasp"
     poscar.write_poscar(output, new_atoms)
-    
+
     logging.info(f"Allocated atoms saved to {output}")
 
     return output
