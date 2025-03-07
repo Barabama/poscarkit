@@ -71,7 +71,7 @@ def read_config() -> Config:
         return Config(**tomllib.load(tf))
 
 
-def handle_supercell_factors(factors: tuple[int, int, int] = ()) -> tuple[int, int, int]:
+def handle_supercell_factors(factors: tuple = ()) -> tuple[int, int, int]:
     """Check supercell factors."""
     while True:
         try:
@@ -86,7 +86,7 @@ def handle_supercell_factors(factors: tuple[int, int, int] = ()) -> tuple[int, i
             factors = ()
 
 
-def handle_structure(config: Config, structure: str = "") -> dict[str, list | dict]:
+def handle_structure(config: Config, structure: str = "") -> dict[str, dict]:
     """return a structure (FCC, BCC, HCP) information from the configuration."""
     while True:
         structure = structure or input("Enter Structure (fcc, bcc, hcp) >>> ").upper()
@@ -96,7 +96,7 @@ def handle_structure(config: Config, structure: str = "") -> dict[str, list | di
             logging.warning(f"{structure} not found. Please try again.")
 
 
-def handle_slice_direction(direction: tuple[int, int, int] = ()) -> tuple[int, int, int]:
+def handle_slice_direction(direction: tuple = ()) -> tuple[int, int, int]:
     """Check slice direction."""
     while True:
         try:
@@ -149,7 +149,6 @@ def main(config: Config, filepath: str = "", option: int = 0):
                 case 4:
                     structure = handle_structure(config, config.Structure.upper())
                     seeds = config.ShuffleSeeds or [None]
-                    print
                     if structure and seeds:
                         fs = [f for f in shuffle2files(filepath, structure, seeds)]
                     filepath = ""
