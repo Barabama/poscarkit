@@ -81,6 +81,8 @@ def calculate_nearest_neighbors(atoms: Atoms, cut_off: float):
         atom_i = atoms[i]
         tolerance = 0.1 * cut_off
         for j, dist in zip(neighbor_indices, distances):
+            if dist < tolerance:
+                continue
             if (dist - cut_off) > tolerance:
                 continue
 
@@ -98,7 +100,7 @@ def countCN2files(filepath: str):
     poscar = SimplePoscar()
     atoms = poscar.read_poscar(filepath)
 
-    output = os.path.splitext(os.path.abspath(filepath))[0]
+    output = os.path.splitext(filepath)[0]
     if not os.path.exists(output):
         os.makedirs(output)
 
@@ -153,12 +155,18 @@ def countCN2files(filepath: str):
     # Plot the histogram of Coordinate Numbers
     symbols, cn_freqs = zip(*symbol_cn_freq.items())
     colors = [color_map[s] for s in symbols]
+    plt.figure(figsize=(10, 6))
     plt.hist(cn_freqs, bins=list(range(0, 12)),
              alpha=0.5, label=symbols, color=colors, edgecolor="black")
     plt.legend()
     plt.title(f"Histogram of Coordination Numbers")
     plt.xlabel("Coordinate Number")
     plt.ylabel("Frequency")
+    
+    # Define ticks
+    plt.xticks(range(0, 12))
+    
+    plt.grid(True, linestyle='--', alpha=0.7)
     plt.savefig(os.path.join(output, f"CN-Histogram.png"))
     plt.close()
 
