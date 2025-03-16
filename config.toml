@@ -2,7 +2,7 @@
 
 # ====== Operations on POSCAR, commenting out what won't be used ======
 # Filepath of POSCAR
-# Filepath = "data/POSCAR-CoNiV-303030-r1-CoNiV.vasp"
+Filepath = "./examples/CoNiV.vasp"
 
 # Used for 'Supercell', 'Allocation'
 # SupercellFactors = [30, 30, 30]
@@ -61,7 +61,7 @@ V=1.0
 # Fe = 0.242621809244156000000
 # Ni = 0.154265567660332000000
 # Ti = 0.120118260383606000000
-Co=0.4444
+Co=4.444E-1
 Ni=0.4444
 V=0.1112
 
