@@ -57,6 +57,10 @@ def shuffle2files(filepath: str, structure: dict[str, dict],
     atoms = poscar.read_poscar(filepath)
 
     # Shuffle atoms for each time
+    output = os.path.splitext(filepath)[0]
+    if not os.path.exists(output):
+        os.makedirs(output)
+
     outputs = []
     for t, seed in enumerate(seeds, start=1):
         sl = len(seeds)
@@ -64,9 +68,10 @@ def shuffle2files(filepath: str, structure: dict[str, dict],
         new_atoms = shuffle_atoms(atoms.copy(), symbol_sites, seed)
 
         # Save to file
-        output = f"{os.path.splitext(filepath)[0]}-r{t:0{len(str(sl))}d}.vasp"
-        poscar.write_poscar(output, new_atoms)
-        logging.info(f"POSCAR Saved to {output}")
-        outputs.append(output)
+        filename = os.path.join(output, f"POSCAR-r{t:0{len(str(sl))}d}.vasp")
+        poscar.write_poscar(filename, new_atoms)
+        outputs.append(filename)
+
+    logging.info(f"POSCAR Saved to {output}")
 
     return outputs
