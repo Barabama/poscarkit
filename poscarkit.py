@@ -1,6 +1,7 @@
 """main.py"""
 
 import argparse
+import glob
 import logging
 import os
 import sys
@@ -15,7 +16,7 @@ from PoscarTools.AtomAllocate import allocate2file
 from PoscarTools.AtomCountCN import countCN2files
 
 
-VERSION = "0.7.2"
+VERSION = "0.7.3"
 INFO_EXEC = f"""
 --- POSCAR tool (ver{VERSION}) ---
 This tool has many uses of supercell, slice, shuffle, allocation, etc.
@@ -28,7 +29,7 @@ INFO_CHOICES = """
 =======================================
   1. Read config
   2. Supercell   3. Slice    4. Shuffle
-  5. Allocation  6. FlowWork 7. CountCN
+  5. Allocation  6. WorkFlow 7. CountCN
   Exit. Ctrl+C
 =======================================
 """
@@ -110,6 +111,51 @@ def handle_slice_direction(direction: tuple = ()) -> tuple[int, int, int]:
             logging.warning(f"{e}. Please try again.")
             direction = ()
 
+def process_file(filepath: str, config: Config, option: int = 0):
+    """Process a signle POSCAR file."""
+    try:
+        match option:
+            case 1:
+                config = read_config()
+                logging.info("Configurations reloaded.")
+            case 2:
+                factors = tuple(config.SupercellFactors)
+                if factors := handle_supercell_factors(factors):
+                    supercell2file(filepath, factors)
+            case 3:
+                direction = tuple(config.SliceDirection)
+                if direction := handle_slice_direction(direction):
+                    slice2file(filepath, direction)
+            case 4:
+                structure = handle_structure(config, config.Structure.upper())
+                seeds = config.ShuffleSeeds or [None]
+                if structure and seeds:
+                    fs = [f for f in shuffle2files(filepath, structure, seeds)]
+            case 5:
+                structure = handle_structure(config, config.Structure.upper())
+                factors = handle_supercell_factors(tuple(config.SupercellFactors))
+                shuffle = config.Shuffle
+                if structure and factors:
+                    allocate2file(filepath, structure, factors, shuffle)
+            case 6:
+                factors = handle_supercell_factors(tuple(config.SupercellFactors))
+                structure = handle_structure(config, config.Structure.upper())
+                seeds = config.ShuffleSeeds or [None]
+                shuffle = config.Shuffle
+                if structure and factors:
+                    supercell_file = supercell2file(filepath, factors)
+                    shuffled_files = [f for f in shuffle2files(supercell_file, structure, seeds)]
+                    for f in shuffled_files:
+                        _ = allocate2file(f, structure, factors, shuffle)
+            case 7:
+                countCN2files(filepath)
+            case _:
+                raise ValueError(f"Invalid option {option}")
+            
+    except ValueError as e:
+        logging.error(f"Invalid input: {e}")
+    
+
 
 def main(config: Config, filepath: str = "", option: int = 0):
     """Main function."""
@@ -117,70 +163,35 @@ def main(config: Config, filepath: str = "", option: int = 0):
     filepath = filepath or config.Filepath
     while True:
         try:
-            # Check option and filepath, passed option==1
+            # Check option, passed option==1
             option = option or int(input(f"{INFO_CHOICES}Enter choice >>> "))
-            if option != 1:
-                filepath = filepath or input("Enter filepath >>> ")
-                if not os.path.isfile(filepath):
-                    logging.warning("File not found! Please try again.")
-                    filepath = ""
-                    config.Filepath = ""
-                    option = 0
-                    continue
+            if option == 1:
+                config = read_config()
+                filepath = config.Filepath
+                option = 0
+                logging.info("Configurations reloaded.")
+                continue
+            
+            # Check filepath
+            files = []
+            filepath = filepath or input("Enter filepath >>> ")
+            filepath = os.path.abspath(filepath)
+            if os.path.isfile(filepath):
+                files.append(filepath)
+            elif os.path.isdir(filepath):
+                files.extend(glob.glob(os.path.join(filepath, "*.vasp")))
+            
+            if len(files) > 0:
+                for file in files:
+                    if not os.path.isfile(file):
+                        logging.warning("*.vasp file Not found")
+                        break
+                    process_file(file, config, option)
+            else:
+                logging.warning(f"No *.vasp file found in {filepath}")
 
-            # Execute option
-            match option:
-                case 1:
-                    config = read_config()
-                    filepath = config.Filepath
-                    logging.info("Configurations reloaded.")
-
-                case 2:
-                    factors = tuple(config.SupercellFactors)
-                    if factors := handle_supercell_factors(factors):
-                        supercell2file(filepath, factors)
-                    filepath = ""
-                case 3:
-                    direction = tuple(config.SliceDirection)
-                    if direction := handle_slice_direction(direction):
-                        slice2file(filepath, direction)
-                    filepath = ""
-
-                case 4:
-                    structure = handle_structure(config, config.Structure.upper())
-                    seeds = config.ShuffleSeeds or [None]
-                    if structure and seeds:
-                        fs = [f for f in shuffle2files(filepath, structure, seeds)]
-                    filepath = ""
-
-                case 5:
-                    structure = handle_structure(config, config.Structure.upper())
-                    factors = handle_supercell_factors(tuple(config.SupercellFactors))
-                    shuffle = config.Shuffle
-                    if structure and factors:
-                        allocate2file(filepath, structure, factors, shuffle)
-                    filepath = ""
-
-                case 6:
-                    factors = handle_supercell_factors(tuple(config.SupercellFactors))
-                    structure = handle_structure(config, config.Structure.upper())
-                    seeds = config.ShuffleSeeds or [None]
-                    shuffle = config.Shuffle
-                    if structure and factors:
-                        supercell_file = supercell2file(filepath, factors)
-                        shuffled_files = [f for f in shuffle2files(supercell_file, structure, seeds)]
-                        for f in shuffled_files:
-                            _ = allocate2file(f, structure, factors, shuffle)
-                    filepath = ""
-
-                case 7:
-                    countCN2files(filepath)
-                    filepath = ""
-
-                case _:
-                    raise ValueError(f"Invalid option {option}")
-
-            # # Reset
+            # Reset
+            filepath = ""
             option = 0
 
         except ValueError as e:
