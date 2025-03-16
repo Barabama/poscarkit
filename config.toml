@@ -2,19 +2,19 @@
 
 # ====== Operations on POSCAR, commenting out what won't be used ======
 # Filepath of POSCAR
-Filepath = "./examples/CoNiV.vasp"
+# Filepath = "./examples/CoNiV.vasp"
 
 # Used for 'Supercell', 'Allocation'
 # SupercellFactors = [30, 30, 30]
 
-# # Used for 'Shuffle', 'Allocation'
-Structure = "fcc" # Case sensitive
+# Used for 'Shuffle', 'Allocation'
+# Structure = "fcc"  # Case-insensitive
 
-ShuffleSeeds = [7, 42, 83] # Seed list Used for 'Shuffle'
+# ShuffleSeeds = [7, 42, 83]  # Seed list Used for 'Shuffle'
 
-# Shuffle = true # If true, shuffle before allocation
+# Shuffle = true  # If true, shuffle before allocation
 
-# SliceDirection = [0, 0, 1] # Direction of slicing Used for 'Slice'
+# SliceDirection = [0, 0, 1]  # Direction of slicing Used for 'Slice'
 
 
 # ====== Site of Fractions parameters, be cautious when modifying ======
