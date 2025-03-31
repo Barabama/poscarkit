@@ -268,6 +268,9 @@ class SimplePoscar:
                 constr = parts[3:6] if self.selective_dynamics else []
                 comment = comment if comment else \
                     f"{symbol}-#{idx + 1:0{len(str(count))}d}"
+                # Apply scale factor to Cartesian coordinates
+                if not self.direct_coordinates:
+                    coord *= scale
                 atoms.append(Atom(index=idx,
                                   symbol=symbol,
                                   coord=coord,

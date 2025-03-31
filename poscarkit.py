@@ -199,7 +199,8 @@ def main(config: Config, filepath: str = "", option: int = 0):
             filepath = ""
             option = 0
         except KeyboardInterrupt:
-            logging.info("\nThank you for using POSCAR tool! Exiting...")
+            print("\n")
+            logging.info("Thank you for using POSCAR tool! Exiting...")
             sys.exit(0)
 
 
