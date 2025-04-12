@@ -111,6 +111,7 @@ def handle_slice_direction(direction: tuple = ()) -> tuple[int, int, int]:
             logging.warning(f"{e}. Please try again.")
             direction = ()
 
+
 def process_file(filepath: str, config: Config, option: int = 0):
     """Process a signle POSCAR file."""
     try:
@@ -151,10 +152,9 @@ def process_file(filepath: str, config: Config, option: int = 0):
                 countCN2files(filepath)
             case _:
                 raise ValueError(f"Invalid option {option}")
-            
+
     except ValueError as e:
         logging.error(f"Invalid input: {e}")
-    
 
 
 def main(config: Config, filepath: str = "", option: int = 0):
@@ -171,7 +171,7 @@ def main(config: Config, filepath: str = "", option: int = 0):
                 option = 0
                 logging.info("Configurations reloaded.")
                 continue
-            
+
             # Check filepath
             files = []
             filepath = filepath or input("Enter filepath >>> ")
@@ -180,7 +180,7 @@ def main(config: Config, filepath: str = "", option: int = 0):
                 files.append(filepath)
             elif os.path.isdir(filepath):
                 files.extend(glob.glob(os.path.join(filepath, "*.vasp")))
-            
+
             if len(files) > 0:
                 for file in files:
                     if not os.path.isfile(file):

@@ -3,10 +3,9 @@
 import logging
 import re
 from collections import defaultdict, Counter
-from collections.abc import Iterable
+from collections.abc import Generator, Iterable
 from copy import deepcopy
 from dataclasses import dataclass
-from typing import Generator, Optional
 
 import numpy as np
 
@@ -16,7 +15,7 @@ class Atom:
     index: int
     symbol: str
     coord: np.ndarray
-    constr: Optional[list[str]] = None
+    constr: list[str] | None = None
     comment: str = ""
     # meta: Any
 
@@ -30,7 +29,7 @@ class Atom:
 
 
 class Atoms:
-    def __init__(self, cell: np.ndarray, is_direct: bool = True, atom_list: Optional[list[Atom]] = None):
+    def __init__(self, cell: np.ndarray, is_direct: bool = True, atom_list: list[Atom] | None = None):
         self.cell = cell
         self.is_direct = is_direct
         self.atom_list = atom_list if atom_list is not None else []
@@ -331,7 +330,7 @@ class SimplePoscar:
         # Write atoms (coordinates, constraint, comment)
         atoms.sort()
         for atom in atoms:
-            coord_str = " " + " ".join(f"{c:.16f}" for c in atom.coord)
+            coord_str = " " + " ".join(f"{c:19.16f}" for c in atom.coord)
             constr_str = " " + " ".join(c for c in atom.constr) \
                 if self.selective_dynamics and atom.constr is not None else ""
             comment_str = " # " + atom.comment
