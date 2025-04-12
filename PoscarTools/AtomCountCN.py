@@ -159,7 +159,7 @@ def countCN2files(filepath: str):
     plt.hist(cn_freqs, bins=list(range(0, 12)),
              alpha=0.5, label=symbols, color=colors, edgecolor="black")
     plt.legend()
-    plt.title(f"Histogram of Coordination Numbers")
+    plt.title("Histogram of Coordination Numbers")
     plt.xlabel("Coordinate Number")
     plt.ylabel("Frequency")
     
@@ -167,7 +167,7 @@ def countCN2files(filepath: str):
     plt.xticks(range(0, 12))
     
     plt.grid(True, linestyle='--', alpha=0.7)
-    plt.savefig(os.path.join(output, f"CN-Histogram.png"))
+    plt.savefig(os.path.join(output, "CN-Histogram.png"))
     plt.close()
 
     return output
