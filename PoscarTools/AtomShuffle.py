@@ -46,27 +46,35 @@ def shuffle2files(filepath: str, structure: dict[str, dict],
     """Shuffle atoms and save to series of files"""
     # Generate symbol_sites mapping
     info = structure.copy()
-    info.pop("cell")
-    symbol_sites = {}  # e.g. {'Ag': '1a', 'Cu': '3c'}
+    info.pop("cell", None)
+    symbol_sites = {}  # e.g. {'Au': '1a', 'Cu': '3c'}
     for site, value in info.items():
-        symbol, _ = value["atoms"]
+        symbol, coords = value["atoms"]
         symbol_sites[symbol] = site
-
+    logging.debug(f"Symbol sites: {symbol_sites}")
+    
     # Read POSCAR
     poscar = SimplePoscar()
     atoms = poscar.read_poscar(filepath)
-
+    logging.debug(f"Atoms: {atoms}")
+    
     # Shuffle atoms for each time
     output = os.path.splitext(filepath)[0]
     if not os.path.exists(output):
         os.makedirs(output)
 
+    # Check if sites are defined
+    for s, c in atoms.symbol_count:
+        if s not in symbol_sites:
+            logging.warning(f"Unknown site for {s}")
+    
     outputs = []
     for t, seed in enumerate(seeds, start=1):
         sl = len(seeds)
-        logging.info(f"\nWorking... {t}/{sl}")
+        logging.info(f"Shuffling {t}/{sl}")
         new_atoms = shuffle_atoms(atoms.copy(), symbol_sites, seed)
-
+        logging.debug(f"Shuffled: {new_atoms}")
+        
         # Save to file
         filename = os.path.join(output, f"POSCAR-r{t:0{len(str(sl))}d}.vasp")
         poscar.write_poscar(filename, new_atoms)

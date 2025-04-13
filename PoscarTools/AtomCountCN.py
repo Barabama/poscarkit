@@ -99,6 +99,7 @@ def countCN2files(filepath: str):
 
     poscar = SimplePoscar()
     atoms = poscar.read_poscar(filepath)
+    logging.debug(f"Atoms: {atoms}")
 
     output = os.path.splitext(filepath)[0]
     if not os.path.exists(output):
@@ -132,10 +133,12 @@ def countCN2files(filepath: str):
             poscar.write_poscar(filename, atoms.rebuild(list(atom_sets)), comment)
 
             nn_atoms.update(atom_sets)
-
+        
+        new_atoms = atoms.rebuild(list(nn_atoms))
+        logging.debug(f"NN atoms: {new_atoms}")
         comment = f"Nearest Neighbors of {symbol} pair count={pair_count}"
         filename = os.path.join(output, f"POSCAR-nn-{symbol}.vasp")
-        poscar.write_poscar(filename, atoms.rebuild(list(nn_atoms)), comment)
+        poscar.write_poscar(filename, new_atoms, comment)
 
         # Collect CN data to df
         cn_counts = [[f"{symbol}*-{cn}{symbol}", len(d)] for cn, d in cn_data_map.items()]
@@ -156,18 +159,15 @@ def countCN2files(filepath: str):
     symbols, cn_freqs = zip(*symbol_cn_freq.items())
     colors = [color_map[s] for s in symbols]
     plt.figure(figsize=(10, 6))
-    plt.hist(cn_freqs, bins=list(range(0, 12)),
-             alpha=0.5, label=symbols, color=colors, edgecolor="black")
+    plt.hist(cn_freqs, bins=list(range(0, 12)), alpha=0.5, label=symbols, color=colors, edgecolor="black")
     plt.legend()
     plt.title("Histogram of Coordination Numbers")
     plt.xlabel("Coordinate Number")
     plt.ylabel("Frequency")
-    
-    # Define ticks
-    plt.xticks(range(0, 12))
-    
+    plt.xticks(range(0, 12))# Define ticks
     plt.grid(True, linestyle='--', alpha=0.7)
     plt.savefig(os.path.join(output, "CN-Histogram.png"))
     plt.close()
+    logging.info(f"Coordination Number histogram saved to {output}")
 
     return output

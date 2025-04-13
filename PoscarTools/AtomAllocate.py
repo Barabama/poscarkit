@@ -11,7 +11,8 @@ from tqdm import tqdm
 from .SimplePoscar import Atoms, SimplePoscar
 
 
-def _integer_fractions(fracts: dict, factors: tuple[int, int, int], multi: int) -> dict:
+def _integer_fractions(fracts: dict[str, float], factors: tuple[int, int, int], 
+                       multi: int) -> dict:
     """Convert decimal fractions to integer fractions .
 
     Args:
@@ -41,8 +42,8 @@ def _integer_fractions(fracts: dict, factors: tuple[int, int, int], multi: int) 
 
         # Apply adjustments
         for i in range(abs(adjustment)):
-            s, (_, direction) = sorted_diffs[i]
-            rounded_fracts[s] += direction
+            symbol, (decimal, direction) = sorted_diffs[i]
+            rounded_fracts[symbol] += direction
 
     return rounded_fracts
 
@@ -89,7 +90,7 @@ def allocate_atoms(atoms: Atoms, vac_sites: dict[str, str],
 
         # Assign symbols and comments
         l = len(str(len(vac_atoms)))
-        symbol_iter = (s for s, c in site_fracts[site].items() for _ in range(c))
+        symbol_iter = (s for s, c in site_fracts[site].items() for i in range(c))
         for idx, (symbol, atom) in enumerate(zip(symbol_iter, vac_atoms), start=1):
             atom.symbol = symbol
             atom.comment = f"{site}-{vac}-#{atom.index+1:0{l}d} {idx:0{l}d} {symbol}"
@@ -106,34 +107,43 @@ def allocate2file(filepath: str, structure: dict[str, dict],
     # Read POSCAR
     poscar = SimplePoscar()
     atoms = poscar.read_poscar(filepath)
-
+    logging.debug(f"Atoms: {atoms}")
+    
     # Generate vacancy sites and site fractions
     info = structure.copy()
     info.pop("cell")
     vac_sites = {}  # e.g. {'Ag': '1a', 'Cu': '3c'}
     site_fracts = defaultdict(dict)  # template symbol to sofs
     for site, value in info.items():
-        vac, _ = value["atoms"]
+        vac, coords = value["atoms"]
         vac_sites[vac] = site
 
         fracts: dict = value["sofs"]
         if abs(sum(fracts.values()) - 1) > 1e-6:
-            raise ValueError("The sum of fractions must be 1.")
+            logging.error("The sum of fractions must be 1.0!")
+            return
         site_fracts[site] = _integer_fractions(fracts, factors, int(site[0]))
-
+    logging.debug(f"Vacancy sites: {vac_sites}")
     logging.info(f"Site fractions: {dict(site_fracts)}")
+
+    # Check if vacancy sites are defined
+    for s, c in atoms.symbol_count:
+        if s not in vac_sites:
+            logging.error(f"Unknown site for {s}", )
+            logging.error(f"Vacancy sites: {vac_sites}")
+            return
 
     # Allocate atoms
     if shuffle:
         logging.info("Would shuffle before allocating atoms.")
 
     new_atoms = allocate_atoms(atoms.copy(), vac_sites, site_fracts, shuffle)
-
+    logging.debug(f"Allocated: {new_atoms}")
+    
     # Save to file
-    symbol_str = "".join(s for s, _ in new_atoms.symbol_count)
+    symbol_str = "".join(s for s, c in new_atoms.symbol_count)
     output = f"{os.path.splitext(filepath)[0]}-{symbol_str}.vasp"
     poscar.write_poscar(output, new_atoms)
-
     logging.info(f"Allocated atoms saved to {output}")
 
     return output

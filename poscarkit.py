@@ -31,8 +31,7 @@ INFO_CHOICES = """
   2. Supercell   3. Slice    4. Shuffle
   5. Allocation  6. WorkFlow 7. CountCN
   Exit. Ctrl+C
-=======================================
-"""
+======================================="""
 CHOICES = (1, 2, 3, 4, 5, 6, 7)
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
@@ -147,7 +146,7 @@ def process_file(filepath: str, config: Config, option: int = 0):
                     supercell_file = supercell2file(filepath, factors)
                     shuffled_files = [f for f in shuffle2files(supercell_file, structure, seeds)]
                     for f in shuffled_files:
-                        _ = allocate2file(f, structure, factors, shuffle)
+                        out = allocate2file(f, structure, factors, shuffle)
             case 7:
                 countCN2files(filepath)
             case _:

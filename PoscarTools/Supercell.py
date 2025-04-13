@@ -61,7 +61,8 @@ def make_supercell(atoms: Atoms, factors: tuple[int, int, int]) -> Atoms:
                         symbol=atom.symbol,
                         coord=coord,
                         constr=atom.constr,
-                        comment=f"{atom.symbol}-{idx+1:0{l}d}")
+                        comment=f"{atom.comment}")
+                        # comment=f"{atom.symbol}-{idx+1:0{l}d}")
         new_atoms.append(new_atom)
 
     return new_atoms
@@ -72,14 +73,16 @@ def supercell2file(filepath: str, factors: tuple[int, int, int]) -> str:
     # Read original POSCAR
     poscar = SimplePoscar()
     atoms = poscar.read_poscar(filepath)
+    logging.debug(f"atoms: {atoms}")
 
     # Make supercell
     logging.info(f"Expanding {filepath}...")
     new_atoms = make_supercell(atoms, factors)
+    logging.debug(f"supercell: {new_atoms}")
 
     # Save to file
     factors_str = "".join(str(f) for f in factors)
-    symbols_str = "".join(f"{s}" for s, _ in new_atoms.symbol_count)
+    symbols_str = "".join(f"{s}" for s, c in new_atoms.symbol_count)
     output = f"{os.path.splitext(filepath)[0]}-{factors_str}.vasp"
     comment = f"Supercell-{symbols_str}-{factors_str}"
     poscar.write_poscar(output, new_atoms, comment)
@@ -99,14 +102,3 @@ def supercell2file(filepath: str, factors: tuple[int, int, int]) -> str:
 
     logging.info(f"Supercell saved to {output}")
     return output
-
-
-# def __test():
-#     filepath = "POSCAR-fcc.vasp"
-#     factors = (20, 20, 20)
-#     supercell2file(filepath, factors)
-#     # make_supercell(filepath, factors)
-
-
-# if __name__ == "__main__":
-#     __test()
