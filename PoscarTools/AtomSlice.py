@@ -23,7 +23,7 @@ def _normalize(vector: np.ndarray) -> np.ndarray:
     return vector / np.linalg.norm(vector)
 
 
-def _get_basis(direction: tuple[int, int, int]) -> tuple:
+def _get_basis(direction: tuple[int, int, int]) -> tuple[np.ndarray]:
     """Find the base vectors by the direction of the plane.
 
     Args:
@@ -68,12 +68,12 @@ def group_by_direction(atoms: Atoms, basis: tuple, precision: int = 6):
         yield proj, layer
 
 
-def plot_layer(layer: Atoms, basis: tuple, title: str, filepath: str):
+def plot_layer(layer: Atoms, basis: tuple[np.ndarray], title: str, filepath: str):
     """Plot layer by base vectors.
 
     Args:
         layer (list[Atom]): list of atoms in layer.
-        basis (tuple): Base vectors.
+        basis (tuple[ndarray]): Base vectors.
         title (str): Title of plot.
         filepath (str): File path to save plot.
     """
@@ -99,8 +99,8 @@ def plot_layer(layer: Atoms, basis: tuple, title: str, filepath: str):
         plt.scatter(x, y, marker="o", s=10, color=color, label=symbol)
 
     plt.title(title)
-    plt.xlabel(f"[{' '.join(str(_) for _ in basis[0])}] Coordinate (Å)")
-    plt.ylabel(f"[{' '.join(str(_) for _ in basis[1])}] Coordinate (Å)")
+    plt.xlabel(f"[{' '.join(str(v) for v in basis[0])}] Coordinate (Å)")
+    plt.ylabel(f"[{' '.join(str(v) for v in basis[1])}] Coordinate (Å)")
     plt.axis("equal")
     plt.grid()
     plt.legend(title="Symbols", bbox_to_anchor=(1, 1), loc="upper left")
@@ -113,15 +113,18 @@ def slice2file(filepath: str, direction: tuple[int, int, int]):
     """Slice POSCAR by direction."""
     output = f"{os.path.splitext(os.path.abspath(filepath))[0]}-sliced"
     os.makedirs(output, exist_ok=True)  # Force directory creation
+    direct_str = "".join(str(d) for d in direction)
 
     # Read POSCAR to get atoms
     poscar = SimplePoscar()
     atoms = poscar.read_poscar(filepath)
-    symbols_str = "".join(s for s, _ in atoms.symbol_count)
+    symbols_str = "".join(s for s, c in atoms.symbol_count)
+    logging.debug(atoms)
 
     # Get_basis, Regarding direction as z_axis
     basis = _get_basis(direction)  # (b1, b2, n)
-
+    logging.debug(f"Basis: {basis}")
+    
     # Group atoms by direction
     layers = [ls for ls in group_by_direction(atoms, basis)]
     num_layers = len(layers)
@@ -132,9 +135,9 @@ def slice2file(filepath: str, direction: tuple[int, int, int]):
     for i, (proj, layer) in enumerate(tqdm(layers, desc="Processing layers",
                                            total=num_layers, ncols=80), start=1):
         logging.debug(f"Layer {i:0{l}d} proj={proj:.4f}")
+        logging.debug(f"layer: {layer}")
 
         # Save layer to POSCAR file
-        direct_str = "".join(str(d) for d in direction)
         filename = os.path.join(output, f"POSCAR-({direct_str})-Layer{i:0{l}d}.vasp")
         comment = f"{symbols_str}-({direct_str})-Layer{i:0{l}d}"
         poscar.write_poscar(filename, layer, comment)
