@@ -140,6 +140,5 @@ cython_debug/
 .vscode/
 .idea/
 *temp*
-*test*
 data/
 out*/
