@@ -1,84 +1,48 @@
 # config.toml
 
 # ====== Operations on POSCAR, commenting out what won't be used ======
-# Filepath of POSCAR
+# ====== 程序操作使用以下配置参数, 不使用的参数请注释掉以免被程序读取 ======
+# Filepath of POSCAR # POSCAR 文件的路径
 # Filepath = "./examples/CoNiV.vasp"
 
-# Used for 'Supercell', 'Allocation'
+# Used for 'Supercell', 'Allocation' # 指定超胞因子, 沿晶格矢量方向的倍数
 # SupercellFactors = [30, 30, 30]
 
-# Used for 'Shuffle', 'Allocation'
-# Structure = "fcc"  # Case-insensitive
+# Used for 'Shuffle', 'Allocation' # 指定晶体结构类型, 不区分大小写
+# Structure = "fcc"
 
-# ShuffleSeeds = [7, 42, 83]  # Seed list Used for 'Shuffle'
+# Used for 'Shuffle' # 乱序亚晶格位置的随机种子列表
+# ShuffleSeeds = [7, 42, 83]
 
-# Shuffle = true  # If true, shuffle before allocation
+# Used for 'Allocation' # 如果启用, 则在亚晶格分配原子前, 乱序一次位置
+# Shuffle = true
 
+# Used for 'Slice' # 指定切片操作的方向，基于晶格矢量方向, 如 z 轴
 # SliceDirection = [0, 0, 1]  # Direction of slicing Used for 'Slice'
 
 
-# ====== Site of Fractions parameters, be cautious when modifying ======
-# write the fraction of each symbol in sofs
-# Li = 0.0
-# B = 0.0
-# Mg = 0.0
-# Al = 0.0
-# Ti = 0.0
-# V = 0.0
-# Cr = 0.0
-# Mn = 0.0
-# Fe = 0.0
-# Co = 0.0
-# Ni = 0.0
-# Cu = 0.0
-# Zn = 0.0
-# Y = 0.0
-# Zr = 0.0
-# Nb = 0.0
-# Mo = 0.0
-# Ag = 0.0
-# Sn = 0.0
-# Hf = 0.0
-# Ta = 0.0
-# W = 0.0
-# Re = 0.0
-
-# Wyckoff Letter 'a' of 'Site of Fractions', with 1 multiplicity
+# ====== Site of Fractions parameters, used for 'Allocation' ======
+# ====== 晶体结构对应亚晶格的占位分数的配置参数, 用于 '分配' 操作 ======
+# Sum of sofs must be close to 1 # 分数的和必须接近于1
 [FCC.1a.sofs]
-# Co = 0.002987421117722990000
-# Cr = 0.727947115898132000000
-# Cu = 0.000082384758570697200
-# Fe = 0.000134568443172611000
-# Ni = 0.265203267335892000000
-# Ti = 0.003645207267254590000
 V=1.0
 
-# Wyckoff Letter 'c' of 'Site of Fractions', with 3 multiplicity
 [FCC.3c.sofs]
-# Co = 0.241670861840248000000
-# Cr = 0.000017621838196646400
-# Cu = 0.241305872797966000000
-# Fe = 0.242621809244156000000
-# Ni = 0.154265567660332000000
-# Ti = 0.120118260383606000000
 Co=4.444E-1
 Ni=0.4444
 V=0.1112
 
-# Wyckoff Letter 'a' of 'Site of Fractions', with 1 multiplicity
 [BCC.1a.sofs]
 
-# Wyckoff Letter 'b' of 'Site of Fractions', with 1 multiplicity
 [BCC.1b.sofs]
 
-# Wyckoff Letter 'a' of 'Site of Fractions', with 2 multiplicity
 [HCP.2a.sofs]
 
-# Wyckoff Letter 'c' of 'Site of Fractions', with 6 multiplicity
 [HCP.6c.sofs]
 
 
-# ====== !!!Unit cell structure parameters, be cautious when modifying!!! ======
+# ====== ! Unit cell structure parameters, be cautious when modifying ! ======
+# ====== ! 单胞的晶体结构参数, 程序从这里生成单胞原型, 修改时请小心 ! ======
 [FCC]
 cell = [4.7158193544950560, 4.7158193544950560, 4.7158193544950560]
 1a.atoms = ["Au", [[0, 0, 0]]]

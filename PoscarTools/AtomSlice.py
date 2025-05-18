@@ -1,4 +1,4 @@
-"""slice.py"""
+# AtomSlice.py
 
 import logging
 import os
@@ -13,27 +13,25 @@ from .SimplePoscar import Atoms, SimplePoscar
 from .Utils import color_map
 
 basis_map = {
-    (0, 0, 1): ((1, 0, 0), (0, 1, 0), (0, 0, 1)),
-    (1, 1, 0): ((-1, 1, 0), (0, 0, 1), (1, 1, 0)),
-    (1, 1, 1): ((-1, 1, 0), (-1, -1, 2), (1, 1, 1))
-}
+    (0, 0, 1): [(1, 0, 0), (0, 1, 0), (0, 0, 1)],
+    (1, 1, 0): [(-1, 1, 0), (0, 0, 1), (1, 1, 0)],
+    (1, 1, 1): [(-1, 1, 0), (-1, -1, 2), (1, 1, 1)], }
 
 
 def _normalize(vector: np.ndarray) -> np.ndarray:
     return vector / np.linalg.norm(vector)
 
 
-def _get_basis(direction: tuple[int, int, int]) -> tuple[np.ndarray]:
+def _get_basis(direction: tuple[int, int, int]) -> np.ndarray:
     """Find the base vectors by the direction of the plane.
 
     Args:
         direction (tuple[int, int, int]): Direction of the plane.
-
     Returns:
-        tuple[tuple, tuple, tuple]: 3 base vectors.
+        ndarray: 3 base vectors.
     """
     if direction in basis_map:
-        basis = basis_map[direction]
+        basis = np.array(basis_map[direction])
     else:
         n = np.array(direction)
 
@@ -41,24 +39,24 @@ def _get_basis(direction: tuple[int, int, int]) -> tuple[np.ndarray]:
         t0 = np.array([1, 0, 0]) if abs(n[0]) < abs(n[1]) else np.array([0, 1, 0])
         b1 = np.cross(n, t0)
         b2 = np.cross(n, b1)
-        basis = (b1, b2, n)
+        basis = np.column_stack([_normalize(v) for v in [b1, b2, n]])
 
     return basis
 
 
-def group_by_direction(atoms: Atoms, basis: tuple, precision: int = 6):
+def group_by_direction(atoms: Atoms, basis: np.ndarray, precision: int = 6):
     """Group atoms by projection distance along a direction.
 
     Args:
         atoms (Atoms): Atoms object.
-        basis (tuple): Base vectors.
+        basis (ndarray): Base vectors.
         precision (int, optional): Number of decimal places to round to. Defaults to 6.
     Yields:
         tuple[float, Atoms]: Projection, layer.
     """
     # Calculate and Round projections
-    coords = atoms.direct_coords
-    projs = np.dot(coords, _normalize(basis[-1]))  # Projections onto direction
+    coords = atoms.cartesian_coords
+    projs = np.dot(coords, basis[-1])  # Projections onto direction
     projs = np.round(projs, precision)
 
     # Sort atoms based on rounded projections
@@ -68,17 +66,17 @@ def group_by_direction(atoms: Atoms, basis: tuple, precision: int = 6):
         yield proj, layer
 
 
-def plot_layer(layer: Atoms, basis: tuple[np.ndarray], title: str, filepath: str):
+def plot_layer(layer: Atoms, basis: np.ndarray, title: str, filepath: str):
     """Plot layer by base vectors.
 
     Args:
         layer (list[Atom]): list of atoms in layer.
-        basis (tuple[ndarray]): Base vectors.
+        basis (ndarray): Base vectors.
         title (str): Title of plot.
         filepath (str): File path to save plot.
     """
     # Calculate projections onto direction to get projected coordinates
-    b1, b2, n = [_normalize(v) for v in basis]
+    b1, b2, n = basis
     coords = layer.cartesian_coords
     n_projs = np.dot(coords, n)  # Projections onto direction
     p_projs = coords - np.outer(n_projs, n)  # Projections onto plane
@@ -96,7 +94,7 @@ def plot_layer(layer: Atoms, basis: tuple[np.ndarray], title: str, filepath: str
     for symbol, coords in symbol_coords.items():
         color = color_map.get(symbol, "magenta")
         x, y = zip(*coords)
-        plt.scatter(x, y, marker="o", s=10, color=color, label=symbol)
+        plt.scatter(x, y, marker="o", s=10, color=color, alpha=1.0, label=symbol)
 
     plt.title(title)
     plt.xlabel(f"[{' '.join(str(v) for v in basis[0])}] Coordinate (Å)")
@@ -122,9 +120,9 @@ def slice2file(filepath: str, direction: tuple[int, int, int]):
     logging.debug(atoms)
 
     # Get_basis, Regarding direction as z_axis
-    basis = _get_basis(direction)  # (b1, b2, n)
+    basis = _get_basis(direction)  # ndarray([b1, b2, n])
     logging.debug(f"Basis: {basis}")
-    
+
     # Group atoms by direction
     layers = [ls for ls in group_by_direction(atoms, basis)]
     num_layers = len(layers)

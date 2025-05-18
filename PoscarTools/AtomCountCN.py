@@ -1,4 +1,4 @@
-"""AtomSeparate.py"""
+# AtomCountCN.py
 
 import logging
 import os
@@ -57,10 +57,6 @@ def calculate_nearest_neighbors(atoms: Atoms, cut_off: float):
     within the given cut-off distance.
     Use KDTree to improve efficiency and reduce memory usage.
     """
-    # coords = atoms.direct_coords
-    # if res := verify_atoms(coords=coords, atoms=atoms):
-    #     raise ValueError(res)
-
     # Get cartesian coordinates
     coords = atoms.cartesian_coords
 
@@ -133,7 +129,7 @@ def countCN2files(filepath: str):
             poscar.write_poscar(filename, atoms.rebuild(list(atom_sets)), comment)
 
             nn_atoms.update(atom_sets)
-        
+
         new_atoms = atoms.rebuild(list(nn_atoms))
         logging.debug(f"NN atoms: {new_atoms}")
         comment = f"Nearest Neighbors of {symbol} pair count={pair_count}"
@@ -164,7 +160,7 @@ def countCN2files(filepath: str):
     plt.title("Histogram of Coordination Numbers")
     plt.xlabel("Coordinate Number")
     plt.ylabel("Frequency")
-    plt.xticks(range(0, 12))# Define ticks
+    plt.xticks(range(0, 12))  # Define ticks
     plt.grid(True, linestyle='--', alpha=0.7)
     plt.savefig(os.path.join(output, "CN-Histogram.png"))
     plt.close()

@@ -36,11 +36,11 @@ config.toml 文件用于配置工具行为，包括超胞生成、切片、洗�
 **可以不进行配置，在程序中手动输入参数。**
 
 - `FilePath`：POSCAR 文件的路径。
-- `SupercellFactors`：超胞生成的因子，用于指定沿 x, y, z 方向的倍数。
+- `SupercellFactors`：超胞生成的因子，用于指定沿晶格矢量方向的倍数。
 - `Structure`：指定结构类型（例如 "fcc", "bcc", "hcp"）。
 - `ShuffleSeeds`：洗牌操作使用的随机种子列表。
 - `Shuffle`：是否在分配前进行洗牌操作。
-- `SliceDirection`：切片操作的方向，指定沿 x, y, z 方向的切片方向。
+- `SliceDirection`：切片操作的方向，指定沿晶格矢量方向的切片方向。
 
 - Site of Fractions 参数，这些参数用于指定不同 Wyckoff 位置的原子分数
   （例如，`FCC.1a.sofs`：FCC 结构中 Wyckoff 位置 'a' 的原子分数；
