@@ -30,9 +30,9 @@ class Atom:
 
 class Atoms:
     def __init__(self, cell: np.ndarray, is_direct: bool = True, atom_list: list[Atom] | None = None):
-        self.cell = cell
+        self.cell = cell.copy()
         self.is_direct = is_direct
-        self.atom_list = atom_list if atom_list is not None else []
+        self.atom_list = deepcopy(atom_list) if atom_list is not None else []
 
     def __len__(self) -> int:
         return len(self.atom_list)
@@ -78,13 +78,13 @@ class Atoms:
         self.atom_list.clear()
 
     def copy(self, clean: bool = False) -> 'Atoms':
-        atom_list = [] if clean else deepcopy(self.atom_list)
-        return Atoms(cell=self.cell.copy(),
+        atom_list = [] if clean else self.atom_list
+        return Atoms(cell=self.cell,
                      is_direct=self.is_direct,
                      atom_list=atom_list)
 
     def rebuild(self, atom_list: list[Atom] = []) -> 'Atoms':
-        return Atoms(cell=self.cell.copy(),
+        return Atoms(cell=self.cell,
                      is_direct=self.is_direct,
                      atom_list=atom_list)
 

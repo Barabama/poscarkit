@@ -51,7 +51,7 @@ def make_supercell(atoms: Atoms, factors: tuple[int, int, int]) -> Atoms:
 
     # New atoms
     matrix = np.array([[n, 0, 0], [0, m, 0], [0, 0, p]])
-    new_cell = _clean_matrix(atoms.cell @ matrix)
+    new_cell = _clean_matrix(np.dot(atoms.cell, matrix))
     new_atoms = Atoms(cell=new_cell, is_direct=True)
 
     l = len(str(len(super_coords)))

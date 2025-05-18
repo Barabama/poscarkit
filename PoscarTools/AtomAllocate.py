@@ -1,4 +1,4 @@
-"""allocate.py"""
+# AtomAllocate.py
 
 import logging
 import os
@@ -11,8 +11,7 @@ from tqdm import tqdm
 from .SimplePoscar import Atoms, SimplePoscar
 
 
-def _integer_fractions(fracts: dict[str, float], factors: tuple[int, int, int], 
-                       multi: int) -> dict:
+def _integer_fractions(fracts: dict[str, float], factors: tuple[int, int, int], multi: int) -> dict:
     """Convert decimal fractions to integer fractions .
 
     Args:
@@ -34,15 +33,15 @@ def _integer_fractions(fracts: dict[str, float], factors: tuple[int, int, int],
     # Adjusting rounding errors
     if total_rounded != target_total:
         # Calculate differences and adjust based on closeness to the next integer
-        diffs = {s: (abs(f - round(f)), 1 if f - round(f) > 0 else -1) for s, f in super_fracts.items()}
-        sorted_diffs = sorted(diffs.items(), key=lambda x: x[1][0], reverse=True)
-
+        diffs = [(s, float(abs(f - round(f))), 1 if f - round(f) > 0 else -1)
+                 for s, f in super_fracts.items()]
+        diffs.sort(key=lambda x: x[1], reverse=True)
         # Determine the adjustment needed
         adjustment = target_total - total_rounded
 
         # Apply adjustments
         for i in range(abs(adjustment)):
-            symbol, (decimal, direction) = sorted_diffs[i]
+            symbol, decimal, direction = diffs[i]
             rounded_fracts[symbol] += direction
 
     return rounded_fracts
@@ -64,8 +63,7 @@ def _integer_fractions(fracts: dict[str, float], factors: tuple[int, int, int],
     # return int_fracts
 
 
-def allocate_atoms(atoms: Atoms, vac_sites: dict[str, str],
-                   site_fracts: dict[str, dict[str, int]],
+def allocate_atoms(atoms: Atoms, vac_sites: dict[str, str], site_fracts: dict[str, dict[str, int]],
                    shuffle: bool = False) -> Atoms:
     """Allocate atoms according to the integer site fractions.
 
@@ -101,14 +99,14 @@ def allocate_atoms(atoms: Atoms, vac_sites: dict[str, str],
     return new_atoms
 
 
-def allocate2file(filepath: str, structure: dict[str, dict],
-                  factors: tuple[int, int, int], shuffle: bool = False) -> str:
+def allocate2file(filepath: str, structure: dict[str, dict], factors: tuple[int, int, int],
+                  shuffle: bool = False) -> str:
     """Allocate atoms according to the site fractions."""
     # Read POSCAR
     poscar = SimplePoscar()
     atoms = poscar.read_poscar(filepath)
     logging.debug(f"Atoms: {atoms}")
-    
+
     # Generate vacancy sites and site fractions
     info = structure.copy()
     info.pop("cell")
@@ -121,7 +119,7 @@ def allocate2file(filepath: str, structure: dict[str, dict],
         fracts: dict = value["sofs"]
         if abs(sum(fracts.values()) - 1) > 1e-6:
             logging.error("The sum of fractions must be 1.0!")
-            return
+            return ""
         site_fracts[site] = _integer_fractions(fracts, factors, int(site[0]))
     logging.debug(f"Vacancy sites: {vac_sites}")
     logging.info(f"Site fractions: {dict(site_fracts)}")
@@ -131,7 +129,7 @@ def allocate2file(filepath: str, structure: dict[str, dict],
         if s not in vac_sites:
             logging.error(f"Unknown site for {s}", )
             logging.error(f"Vacancy sites: {vac_sites}")
-            return
+            return ""
 
     # Allocate atoms
     if shuffle:
@@ -139,7 +137,7 @@ def allocate2file(filepath: str, structure: dict[str, dict],
 
     new_atoms = allocate_atoms(atoms.copy(), vac_sites, site_fracts, shuffle)
     logging.debug(f"Allocated: {new_atoms}")
-    
+
     # Save to file
     symbol_str = "".join(s for s, c in new_atoms.symbol_count)
     output = f"{os.path.splitext(filepath)[0]}-{symbol_str}.vasp"

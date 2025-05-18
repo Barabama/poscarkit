@@ -32,7 +32,8 @@ INFO_CHOICES = """
   2. Supercell   3. Slice    4. Shuffle
   5. Allocation  6. WorkFlow 7. CountCN
   Exit. Ctrl+C
-======================================="""
+=======================================
+"""
 CHOICES = (1, 2, 3, 4, 5, 6, 7)
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
