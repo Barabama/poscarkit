@@ -6,6 +6,7 @@ import logging
 import os
 import sys
 import tomllib
+import traceback
 from copy import deepcopy
 from dataclasses import dataclass, field
 
@@ -114,47 +115,43 @@ def handle_slice_direction(direction: tuple = ()) -> tuple[int, int, int]:
 
 def process_file(filepath: str, config: Config, option: int = 0):
     """Process a signle POSCAR file."""
-    try:
-        match option:
-            case 1:
-                config = read_config()
-                logging.info("Configurations reloaded.")
-            case 2:
-                factors = tuple(config.SupercellFactors)
-                if factors := handle_supercell_factors(factors):
-                    supercell2file(filepath, factors)
-            case 3:
-                direction = tuple(config.SliceDirection)
-                if direction := handle_slice_direction(direction):
-                    slice2file(filepath, direction)
-            case 4:
-                structure = handle_structure(config, config.Structure.upper())
-                seeds = config.ShuffleSeeds or [None]
-                if structure and seeds:
-                    fs = [f for f in shuffle2files(filepath, structure, seeds)]
-            case 5:
-                structure = handle_structure(config, config.Structure.upper())
-                factors = handle_supercell_factors(tuple(config.SupercellFactors))
-                shuffle = config.Shuffle
-                if structure and factors:
-                    allocate2file(filepath, structure, factors, shuffle)
-            case 6:
-                factors = handle_supercell_factors(tuple(config.SupercellFactors))
-                structure = handle_structure(config, config.Structure.upper())
-                seeds = config.ShuffleSeeds or [None]
-                shuffle = config.Shuffle
-                if structure and factors:
-                    supercell_file = supercell2file(filepath, factors)
-                    shuffled_files = [f for f in shuffle2files(supercell_file, structure, seeds)]
-                    for f in shuffled_files:
-                        _ = allocate2file(f, structure, factors, shuffle)
-            case 7:
-                countCN2files(filepath)
-            case _:
-                raise ValueError(f"Invalid option {option}")
-
-    except ValueError as e:
-        logging.error(f"Invalid input: {e}")
+    match option:
+        case 1:
+            config = read_config()
+            logging.info("Configurations reloaded.")
+        case 2:
+            factors = tuple(config.SupercellFactors)
+            if factors := handle_supercell_factors(factors):
+                supercell2file(filepath, factors)
+        case 3:
+            direction = tuple(config.SliceDirection)
+            if direction := handle_slice_direction(direction):
+                slice2file(filepath, direction)
+        case 4:
+            structure = handle_structure(config, config.Structure.upper())
+            seeds = config.ShuffleSeeds or [None]
+            if structure and seeds:
+                fs = [f for f in shuffle2files(filepath, structure, seeds)]
+        case 5:
+            structure = handle_structure(config, config.Structure.upper())
+            factors = handle_supercell_factors(tuple(config.SupercellFactors))
+            shuffle = config.Shuffle
+            if structure and factors:
+                allocate2file(filepath, structure, factors, shuffle)
+        case 6:
+            factors = handle_supercell_factors(tuple(config.SupercellFactors))
+            structure = handle_structure(config, config.Structure.upper())
+            seeds = config.ShuffleSeeds or [None]
+            shuffle = config.Shuffle
+            if structure and factors:
+                supercell_file = supercell2file(filepath, factors)
+                shuffled_files = [f for f in shuffle2files(supercell_file, structure, seeds)]
+                for f in shuffled_files:
+                    _ = allocate2file(f, structure, factors, shuffle)
+        case 7:
+            countCN2files(filepath)
+        case _:
+            raise ValueError(f"Invalid option {option}")
 
 
 def main(config: Config, filepath: str = "", option: int = 0):
@@ -195,12 +192,13 @@ def main(config: Config, filepath: str = "", option: int = 0):
             option = 0
 
         except ValueError as e:
+            traceback.print_exc()
             logging.error(f"Invalid input: {e}")
             filepath = ""
             option = 0
         except KeyboardInterrupt:
             print("\n")
-            logging.info("Thank you for using POSCAR tool! Exiting...")
+            print("Thank you for using POSCAR tool! Exiting...")
             sys.exit(0)
 
 
@@ -218,5 +216,7 @@ if __name__ == "__main__":
         main(config=cfg, filepath=file, option=opt)
     except Exception as e:
         logging.critical(e)
+
+        traceback.print_exc()
         input("Press Enter to exit...")
         sys.exit(1)

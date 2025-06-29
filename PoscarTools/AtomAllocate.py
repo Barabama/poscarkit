@@ -118,7 +118,7 @@ def allocate2file(filepath: str, structure: dict[str, dict],
 
         fracts: dict = value["sofs"]
         if abs(sum(fracts.values()) - 1) > 1e-6:
-            raise ValueError("The sum of fractions must be 1.")
+            raise ValueError(f"The fractions for {site} do not sum to 1.")
         site_fracts[site] = _integer_fractions(fracts, factors, int(site[0]))
 
     logging.info(f"Site fractions: {dict(site_fracts)}")

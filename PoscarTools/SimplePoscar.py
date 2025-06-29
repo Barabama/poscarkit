@@ -315,7 +315,12 @@ class SimplePoscar:
             lines.append(" " + " ".join(f"{v:21.16f}" for v in vec))
 
         # Write symbol count
-        symbols, counts = zip(*atoms.symbol_count)
+        if len(atoms) == 0:
+            symbols = []
+            counts = []
+        else:
+            symbols, counts = zip(*atoms.symbol_count)
+        
         lines.append(" " + " ".join(f"{s:>3s}" for s in symbols))
         lines.append(" " + " ".join(f"{c:>3d}" for c in counts))
 
