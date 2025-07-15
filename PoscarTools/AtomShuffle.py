@@ -3,20 +3,19 @@
 import logging
 import os
 import random
-from typing import Optional
 
 from tqdm import tqdm
 
 from .SimplePoscar import Atoms, SimplePoscar
 
 
-def shuffle_atoms(atoms: Atoms, symbol_sites: dict[str, str], seed: Optional[int] = None):
+def shuffle_atoms(atoms: Atoms, symbol_sites: dict[str, str], seed: int | None = None):
     """Shuffle atoms within the same species
 
     Args:
         atoms (Atoms): Atoms to shuffle
         symbol_sites (dict[str, str]): Dictionary mapping symbol to sublattice site
-        seed (int, optional): Random seed for reproducibility
+        seed (int | None): Random seed for reproducibility
     """
     if seed is not None:
         random.seed(seed)

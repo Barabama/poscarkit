@@ -22,20 +22,20 @@ def _normalize(vector: np.ndarray) -> np.ndarray:
     return vector / np.linalg.norm(vector)
 
 
-def _get_basis(direction: tuple[int, int, int]) -> np.ndarray:
-    """Find the base vectors by the direction of the plane.
+def _get_basis(miller_index: tuple[int, int, int]) -> np.ndarray:
+    """Find the base vectors by the miller_index of the plane.
 
     Args:
-        direction (tuple[int, int, int]): Direction of the plane.
+        miller_index (tuple[int, int, int]): The miller_index of the plane.
     Returns:
         ndarray: 3 base vectors.
     """
-    if direction in basis_map:
-        basis = np.array(basis_map[direction])
+    if miller_index in basis_map:
+        basis = np.array(basis_map[miller_index])
     else:
-        n = np.array(direction)
+        n = np.array(miller_index)
 
-        # Find two base vectors to the direction
+        # Find two base vectors to the miller index
         t0 = np.array([1, 0, 0]) if abs(n[0]) < abs(n[1]) else np.array([0, 1, 0])
         b1 = np.cross(n, t0)
         b2 = np.cross(n, b1)
@@ -44,8 +44,8 @@ def _get_basis(direction: tuple[int, int, int]) -> np.ndarray:
     return basis
 
 
-def group_by_direction(atoms: Atoms, basis: np.ndarray, precision: int = 6):
-    """Group atoms by projection distance along a direction.
+def group_by_normal(atoms: Atoms, basis: np.ndarray, precision: int = 6):
+    """Group atoms by projection distance along the normal of base vectors.
 
     Args:
         atoms (Atoms): Atoms object.
@@ -56,7 +56,7 @@ def group_by_direction(atoms: Atoms, basis: np.ndarray, precision: int = 6):
     """
     # Calculate and Round projections
     coords = atoms.cartesian_coords
-    projs = np.dot(coords, basis[-1])  # Projections onto direction
+    projs = np.dot(coords, basis[-1])  # Projections onto the normal
     projs = np.round(projs, precision)
 
     # Sort atoms based on rounded projections
@@ -75,10 +75,10 @@ def plot_layer(layer: Atoms, basis: np.ndarray, title: str, filepath: str):
         title (str): Title of plot.
         filepath (str): File path to save plot.
     """
-    # Calculate projections onto direction to get projected coordinates
+    # Calculate projections onto the normal to get projected coordinates
     b1, b2, n = basis
     coords = layer.cartesian_coords
-    n_projs = np.dot(coords, n)  # Projections onto direction
+    n_projs = np.dot(coords, n)  # Projections onto the normal
     p_projs = coords - np.outer(n_projs, n)  # Projections onto plane
     # xs = np.dot(p_projs, b1)  # Components of on b1
     # ys = np.dot(p_projs, b2)  # Components of on b2
@@ -107,11 +107,11 @@ def plot_layer(layer: Atoms, basis: np.ndarray, title: str, filepath: str):
     plt.close()
 
 
-def slice2file(filepath: str, direction: tuple[int, int, int]):
-    """Slice POSCAR by direction."""
+def slice2file(filepath: str, miller_index: tuple[int, int, int]) -> str:
+    """Slice POSCAR by the miller index."""
     output = f"{os.path.splitext(os.path.abspath(filepath))[0]}-sliced"
     os.makedirs(output, exist_ok=True)  # Force directory creation
-    direct_str = "".join(str(d) for d in direction)
+    direct_str = "".join(str(d) for d in miller_index)
 
     # Read POSCAR to get atoms
     poscar = SimplePoscar()
@@ -119,12 +119,12 @@ def slice2file(filepath: str, direction: tuple[int, int, int]):
     symbols_str = "".join(s for s, c in atoms.symbol_count)
     logging.debug(atoms)
 
-    # Get_basis, Regarding direction as z_axis
-    basis = _get_basis(direction)  # ndarray([b1, b2, n])
+    # Get_basis, Regarding miller index as the normal
+    basis = _get_basis(miller_index)  # ndarray([b1, b2, n])
     logging.debug(f"Basis: {basis}")
 
-    # Group atoms by direction
-    layers = [ls for ls in group_by_direction(atoms, basis)]
+    # Group atoms by the normal
+    layers = [ls for ls in group_by_normal(atoms, basis)]
     num_layers = len(layers)
     logging.info(f"Found {num_layers} layers")
 
@@ -146,3 +146,4 @@ def slice2file(filepath: str, direction: tuple[int, int, int]):
         # break  # for test
 
     logging.info(f"Results saved in {output}")
+    return output

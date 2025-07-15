@@ -1,4 +1,4 @@
-"""supercell.py"""
+# Supercell.py
 
 import logging
 import os

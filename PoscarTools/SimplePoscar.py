@@ -1,4 +1,4 @@
-"""SimplePoscar.py"""
+# SimplePoscar.py
 
 import logging
 import re

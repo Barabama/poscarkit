@@ -46,22 +46,6 @@ def _integer_fractions(fracts: dict[str, float], factors: tuple[int, int, int], 
 
     return rounded_fracts
 
-    # ###### Hamilton's Method useless ######
-    # # Step 1: Assign integer parts
-    # int_fracts = {s: int(f) for s, f in super_fracts.items()}
-    # remaining = total - sum(int_fracts.values())
-
-    # # Step 2: Sort symbols by their decimal parts (largest first)
-    # sorted_symbols = sorted(super_fracts.keys(),
-    #                         key=lambda s: super_fracts[s] - int(super_fracts[s]),
-    #                         reverse=True)
-
-    # # Step 3: Assign remaining counts based on decimal parts
-    # for symbol in sorted_symbols[:remaining]:
-    #     int_fracts[symbol] += 1
-
-    # return int_fracts
-
 
 def allocate_atoms(atoms: Atoms, vac_sites: dict[str, str], site_fracts: dict[str, dict[str, int]],
                    shuffle: bool = False) -> Atoms:

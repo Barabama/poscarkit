@@ -1,4 +1,4 @@
-"""utils.py"""
+# utils.py
 
 color_map = {"Li": "pink",
              "B": "sienna",

@@ -8,6 +8,9 @@
 # Used for 'Supercell', 'Allocation' # 指定超胞因子, 沿晶格矢量方向的倍数
 # SupercellFactors = [30, 30, 30]
 
+# Used for 'Slice' # 指定切片操作的方向，基于晶格矢量方向, 如 z 轴
+# SliceDirection = [0, 0, 1]  # Direction of slicing Used for 'Slice'
+
 # Used for 'Shuffle', 'Allocation' # 指定晶体结构类型, 不区分大小写
 # Structure = "fcc"
 
@@ -16,9 +19,6 @@
 
 # Used for 'Allocation' # 如果启用, 则在亚晶格分配原子前, 乱序一次位置
 # Shuffle = true
-
-# Used for 'Slice' # 指定切片操作的方向，基于晶格矢量方向, 如 z 轴
-# SliceDirection = [0, 0, 1]  # Direction of slicing Used for 'Slice'
 
 
 # ====== Site of Fractions parameters, used for 'Allocation' ======
@@ -42,7 +42,7 @@ V=0.1112
 
 
 # ====== ! Unit cell structure parameters, be cautious when modifying ! ======
-# ====== ! 单胞的晶体结构参数, 程序从这里生成单胞原型, 修改时请小心 ! ======
+# ====== ! 单胞的晶体结构参数, 程序从这里检查亚晶格对应原子, 修改时请小心 ! ======
 [FCC]
 cell = [4.7158193544950560, 4.7158193544950560, 4.7158193544950560]
 1a.atoms = ["Au", [[0, 0, 0]]]
