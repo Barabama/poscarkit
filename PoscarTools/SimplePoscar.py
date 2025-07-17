@@ -8,6 +8,7 @@ from copy import deepcopy
 from dataclasses import dataclass
 
 import numpy as np
+from ase import Atoms as ASEAtoms
 
 
 @dataclass
@@ -56,14 +57,12 @@ class Atoms:
     def append(self, atom: Atom):
         self.atom_list.append(atom)
 
-    def extend(self, atoms: "list[Atom] | Atoms"):
+    def extend(self, atoms: list[Atom] | "Atoms"):
         if isinstance(atoms, Atoms):
-            self.atom_list.extend(atoms.atom_list)
-        elif isinstance(atoms, list):
-            self.atom_list.extend(atoms)
+            atom_list = atoms.atom_list
         elif isinstance(atoms, Iterable):
-            for atom in atoms:
-                self.atom_list.append(atom)
+            atom_list = [atom for atom in atoms if isinstance(atom, Atom)]
+        self.atom_list.extend(atom_list)
 
     def insert(self, idx: int, atom: Atom):
         self.atom_list.insert(idx, atom)
@@ -194,162 +193,156 @@ class Atoms:
             else (True, f"{atoms1} equals {atoms2}")
 
 
-class SimplePoscar:
-    def __init__(self):
-        self.comment_line = ""
-        self.selective_dynamics = False
-        self.direct_coordinates = True
-
-    def _parse_comment(self, line: str) -> tuple[int, str]:
-        result = (-1, "")
-        if not line or "#" not in line:
-            return result
-
-        comment_part = line.split("#", 1)[1].strip()
-        if not comment_part:
-            return result
-
-        match = re.search(r"([^#]+)-#(\d+)", comment_part)
-        if match:
-            try:
-                comment = match.group(1) + "-#" + match.group(2)
-                return (int(match.group(2)) - 1, comment)
-            except (ValueError, AttributeError):
-                return result
+def _parse_comment(line: str) -> tuple[int, str]:
+    result = (-1, "")
+    if not line or "#" not in line:
         return result
 
-    def read_poscar(self, filepath: str) -> Atoms:
-        """Read POSCAR file.
+    comment_part = line.split("#", 1)[1].strip()
+    if not comment_part:
+        return result
 
-        Args:
-            filepath (str): Path to POSCAR file.
+    match = re.search(r"([^#]+)-#(\d+)", comment_part)
+    if match:
+        try:
+            comment = match.group(1) + "-#" + match.group(2)
+            return (int(match.group(2)) - 1, comment)
+        except (ValueError, AttributeError):
+            return result
+    return result
 
-        Returns:
-            Atoms: Atoms from POSCAR.
-        """
-        with open(filepath, "r") as f:
-            lines = f.readlines()
 
-        # Read comment line
-        self.comment_line = lines[0].strip()
+def read_poscar(filepath: str) -> Atoms:
+    """Read POSCAR file.
 
-        # Read scale factor
-        scale = np.array(list(map(float, lines[1].strip().split())))
+    Args:
+        filepath (str): Path to POSCAR file.
 
-        # Read cell vectors
-        cell = np.array([list(map(float, line.split())) for line in lines[2:5]])
+    Returns:
+        Atoms: Atoms from POSCAR.
+    """
+    with open(filepath, "r") as f:
+        lines = f.readlines()
 
-        # Apply scale factor to cell vectors
-        scale = scale if scale[0] >= 0.0 else \
-            np.cbrt(-1.0 * scale / np.linalg.det(cell))
-        cell *= scale  # Working for both one and three scale factors
+    # Read comment line
+    comment_line = lines[0].strip()
 
-        # Read symbols and counts
-        symbols = lines[5].split()
-        counts = list(map(int, lines[6].split()))
+    # Read scale factor
+    scale = np.array(list(map(float, lines[1].strip().split())))
 
-        # Check if selective dynamics is present
-        self.selective_dynamics = "selective" in lines[7].lower()
+    # Read cell vectors
+    cell = np.array([list(map(float, line.split())) for line in lines[2:5]])
 
-        # Check coordinate type (Direct or Cartesian)
-        coord_type = lines[7 + self.selective_dynamics].strip().lower()[0]
-        self.direct_coordinates = coord_type == "d"
+    # Apply scale factor to cell vectors
+    scale = scale if scale[0] >= 0.0 else \
+        np.cbrt(-1.0 * scale / np.linalg.det(cell))
+    cell *= scale  # Working for both one and three scale factors
 
-        # Read atoms (coordinates, constraints, comment)
-        atoms = Atoms(cell=cell, is_direct=self.direct_coordinates)
-        start_idx = 8 + self.selective_dynamics
-        for symbol, count in zip(symbols, counts):
-            for i, line in enumerate(lines[start_idx:start_idx + count]):
-                idx, comment = self._parse_comment(line)
-                idx = idx if idx != -1 else i
-                parts = line.split()
-                coord = np.array(list(map(float, parts[:3])))
-                constr = parts[3:6] if self.selective_dynamics else []
-                comment = comment if comment else \
-                    f"{symbol}-#{idx + 1:0{len(str(count))}d}"
-                # Apply scale factor to Cartesian coordinates
-                if not self.direct_coordinates:
-                    coord *= scale
-                atoms.append(Atom(index=idx,
-                                  symbol=symbol,
-                                  coord=coord,
-                                  constr=constr,
-                                  comment=comment))
-            start_idx += count
+    # Read symbols and counts
+    symbols = lines[5].split()
+    counts = list(map(int, lines[6].split()))
 
-        # Check for duplicates
-        if duplicates := atoms.duplicates:
-            logging.warning(f"Duplicate atoms found: {duplicates}")
-            atoms.remove_duplicates()
+    # Check if selective dynamics is present
+    constrainted = "selective" in lines[7].lower()
 
-        # Switch to direct coordinates
-        self.direct_coordinates = True
-        atoms.switch_coords(self.direct_coordinates)
+    # Check coordinate type (Direct or Cartesian)
+    coord_type = lines[7 + constrainted].strip().lower()[0]
+    is_direct = coord_type == "d"
 
-        return atoms
+    # Read atoms (coordinates, constraints, comment)
+    atoms = Atoms(cell=cell, is_direct=is_direct)
+    start_idx = 8 + constrainted
+    for symbol, count in zip(symbols, counts):
+        for i, line in enumerate(lines[start_idx:start_idx + count]):
+            idx, comment = _parse_comment(line)
+            idx = idx if idx != -1 else i
+            parts = line.split()
+            coord = np.array(list(map(float, parts[:3])))
+            constr = parts[3:6] if constrainted else []
+            comment = comment if comment else \
+                f"{symbol}-#{idx + 1:0{len(str(count))}d}"
+            # Apply scale factor to Cartesian coordinates
+            if not is_direct:
+                coord *= scale
+            atoms.append(Atom(index=idx,
+                              symbol=symbol,
+                              coord=coord,
+                              constr=constr,
+                              comment=comment))
+        start_idx += count
 
-    def write_poscar(self, filepath: str, atoms: Atoms, comment_line: str = ""):
-        """Write POSCAR file.
+    # Check for duplicates
+    if duplicates := atoms.duplicates:
+        logging.warning(f"Duplicate atoms found: {duplicates}")
+        atoms.remove_duplicates()
 
-        Args:
-            filepath (str): POSCAR file path to write to.
-            atoms (Atoms): Atoms to write to POSCAR file.
-            comment_line (str, optional): Comment line to write to POSCAR file.
-        """
-        # Check for duplicates
-        if duplicates := atoms.duplicates:
-            logging.warning(f"Duplicate atoms found: {duplicates}")
-            atoms.remove_duplicates()
+    # Switch to direct coordinates
+    is_direct = True
+    atoms.switch_coords(is_direct)
 
-        self.comment_line = comment_line if comment_line else self.comment_line
-        lines = []
+    return atoms
 
-        # Write comment line
-        lines.append(self.comment_line)
 
-        # Write scale factor as 1.0
-        lines.append(f"{1.0:19.16f}")
+def write_poscar(filepath: str, atoms: Atoms, comment_line: str = "",
+                 is_direct: bool = True, constrainted: bool = True):
+    """Write POSCAR file.
 
-        # Write cell vectors
-        for vec in atoms.cell:
-            lines.append(" " + " ".join(f"{v:21.16f}" for v in vec))
+    Args:
+        filepath (str): POSCAR file path to write to.
+        atoms (Atoms): Atoms to write to POSCAR file.
+        comment_line (str, optional): Comment line to write to POSCAR file.
+    """
+    # Check for duplicates
+    if duplicates := atoms.duplicates:
+        logging.warning(f"Duplicate atoms found: {duplicates}")
+        atoms.remove_duplicates()
 
-        # Write symbol count
-        if len(atoms) == 0:
-            symbols = []
-            counts = []
-        else:
-            symbols, counts = zip(*atoms.symbol_count)
-        
-        lines.append(" " + " ".join(f"{s:>3s}" for s in symbols))
-        lines.append(" " + " ".join(f"{c:>3d}" for c in counts))
+    lines = []
 
-        # Write if selective dynamics are present
-        if self.selective_dynamics:
-            lines.append("Selective dynamics")
+    # Write comment line
+    lines.append(comment_line)
 
-        # Write direct or cartesian coordinates
-        lines.append("Direct" if self.direct_coordinates else "Cartesian")
-        atoms.switch_coords(self.direct_coordinates)
+    # Write scale factor as 1.0
+    lines.append(f"{1.0:19.16f}")
 
-        # Write atoms (coordinates, constraint, comment)
-        atoms.sort()
-        for atom in atoms:
-            coord_str = " " + " ".join(f"{c:19.16f}" for c in atom.coord)
-            constr_str = " " + " ".join(c for c in atom.constr) \
-                if self.selective_dynamics and atom.constr is not None else ""
-            comment_str = " # " + atom.comment
-            lines.append(f" {coord_str}{constr_str}{comment_str}")
+    # Write cell vectors
+    for vec in atoms.cell:
+        lines.append(" " + " ".join(f"{v:21.16f}" for v in vec))
 
-        with open(filepath, "w") as f:
-            f.write("\n".join(lines) + "\n")
+    # Write symbol count
+    if len(atoms) == 0:
+        symbols = []
+        counts = []
+    else:
+        symbols, counts = zip(*atoms.symbol_count)
+
+    lines.append(" " + " ".join(f"{s:>3s}" for s in symbols))
+    lines.append(" " + " ".join(f"{c:>3d}" for c in counts))
+
+    # Write if selective dynamics are present
+    if constrainted:
+        lines.append("Selective dynamics")
+
+    # Write direct or cartesian coordinates
+    lines.append("Direct" if is_direct else "Cartesian")
+    atoms.switch_coords(is_direct)
+
+    # Write atoms (coordinates, constraint, comment)
+    atoms.sort()
+    for atom in atoms:
+        coord_str = " " + " ".join(f"{c:19.16f}" for c in atom.coord)
+        constr_str = " " + " ".join(c for c in atom.constr) \
+            if constrainted and atom.constr is not None else ""
+        comment_str = " # " + atom.comment
+        lines.append(f" {coord_str}{constr_str}{comment_str}")
+
+    with open(filepath, "w") as f:
+        f.write("\n".join(lines) + "\n")
 
 
 def compare_poscar(filepath1: str, filepath2: str):
-    poscar = SimplePoscar()
-
-    atoms1 = poscar.read_poscar(filepath1)
-    atoms2 = poscar.read_poscar(filepath2)
+    atoms1 = read_poscar(filepath1)
+    atoms2 = read_poscar(filepath2)
 
     flag, msg = atoms1.compare(atoms2)
     logging.info(f"{flag}, {msg}")

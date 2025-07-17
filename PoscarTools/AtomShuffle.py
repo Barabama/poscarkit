@@ -6,7 +6,7 @@ import random
 
 from tqdm import tqdm
 
-from .SimplePoscar import Atoms, SimplePoscar
+from .SimplePoscar import Atoms, read_poscar, write_poscar
 
 
 def shuffle_atoms(atoms: Atoms, symbol_sites: dict[str, str], seed: int | None = None):
@@ -53,8 +53,7 @@ def shuffle2files(filepath: str, structure: dict[str, dict],
     logging.debug(f"Symbol sites: {symbol_sites}")
 
     # Read POSCAR
-    poscar = SimplePoscar()
-    atoms = poscar.read_poscar(filepath)
+    atoms = read_poscar(filepath)
     logging.debug(f"Atoms: {atoms}")
 
     # Shuffle atoms for each time
@@ -76,7 +75,7 @@ def shuffle2files(filepath: str, structure: dict[str, dict],
 
         # Save to file
         filename = os.path.join(output, f"POSCAR-r{t:0{len(str(sl))}d}.vasp")
-        poscar.write_poscar(filename, new_atoms)
+        write_poscar(filename, new_atoms)
         outputs.append(filename)
 
     logging.info(f"POSCAR Saved to {output}")

@@ -9,7 +9,7 @@ import numpy as np
 from matplotlib import pyplot as plt
 from tqdm import tqdm
 
-from .SimplePoscar import Atoms, SimplePoscar
+from .SimplePoscar import Atoms, read_poscar, write_poscar, to_ase_atoms, from_ase_atoms
 from .Utils import color_map
 
 basis_map = {
@@ -34,13 +34,11 @@ def _get_basis(miller_index: tuple[int, int, int]) -> np.ndarray:
         basis = np.array(basis_map[miller_index])
     else:
         n = np.array(miller_index)
-
         # Find two base vectors to the miller index
         t0 = np.array([1, 0, 0]) if abs(n[0]) < abs(n[1]) else np.array([0, 1, 0])
         b1 = np.cross(n, t0)
         b2 = np.cross(n, b1)
         basis = np.column_stack([_normalize(v) for v in [b1, b2, n]])
-
     return basis
 
 
@@ -114,8 +112,7 @@ def slice2file(filepath: str, miller_index: tuple[int, int, int]) -> str:
     direct_str = "".join(str(d) for d in miller_index)
 
     # Read POSCAR to get atoms
-    poscar = SimplePoscar()
-    atoms = poscar.read_poscar(filepath)
+    atoms = read_poscar(filepath)
     symbols_str = "".join(s for s, c in atoms.symbol_count)
     logging.debug(atoms)
 
@@ -138,7 +135,7 @@ def slice2file(filepath: str, miller_index: tuple[int, int, int]) -> str:
         # Save layer to POSCAR file
         filename = os.path.join(output, f"POSCAR-({direct_str})-Layer{i:0{l}d}.vasp")
         comment = f"{symbols_str}-({direct_str})-Layer{i:0{l}d}"
-        poscar.write_poscar(filename, layer, comment)
+        write_poscar(filename, layer, comment)
 
         # Plot layer by base vectors
         imgname = os.path.join(output, f"({direct_str})-Layer{i:0{l}d}.png")

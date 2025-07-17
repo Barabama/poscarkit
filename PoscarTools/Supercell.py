@@ -6,7 +6,7 @@ import os
 import numpy as np
 from tqdm import tqdm
 
-from .SimplePoscar import Atom, Atoms, SimplePoscar
+from .SimplePoscar import Atom, Atoms, read_poscar, write_poscar
 
 
 def _clean_matrix(matrix: np.ndarray, eps: float = 1e-12) -> np.ndarray:
@@ -71,8 +71,7 @@ def make_supercell(atoms: Atoms, factors: tuple[int, int, int]) -> Atoms:
 def supercell2file(filepath: str, factors: tuple[int, int, int]) -> str:
     """Make supercell and save to file"""
     # Read original POSCAR
-    poscar = SimplePoscar()
-    atoms = poscar.read_poscar(filepath)
+    atoms = read_poscar(filepath)
     logging.debug(f"atoms: {atoms}")
 
     # Make supercell
@@ -85,7 +84,7 @@ def supercell2file(filepath: str, factors: tuple[int, int, int]) -> str:
     symbols_str = "".join(f"{s}" for s, c in new_atoms.symbol_count)
     output = f"{os.path.splitext(filepath)[0]}-{factors_str}.vasp"
     comment = f"Supercell-{symbols_str}-{factors_str}"
-    poscar.write_poscar(output, new_atoms, comment)
+    write_poscar(output, new_atoms, comment)
 
     # # ===============================================================================
     # """Make supercell by ASE.make_supercell()"""

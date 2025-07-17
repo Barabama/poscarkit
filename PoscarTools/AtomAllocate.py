@@ -8,7 +8,7 @@ from collections import defaultdict
 import numpy as np
 from tqdm import tqdm
 
-from .SimplePoscar import Atoms, SimplePoscar
+from .SimplePoscar import Atoms, read_poscar, write_poscar
 
 
 def _integer_fractions(fracts: dict[str, float], factors: tuple[int, int, int], multi: int) -> dict:
@@ -87,8 +87,7 @@ def allocate2file(filepath: str, structure: dict[str, dict], factors: tuple[int,
                   shuffle: bool = False) -> str:
     """Allocate atoms according to the site fractions."""
     # Read POSCAR
-    poscar = SimplePoscar()
-    atoms = poscar.read_poscar(filepath)
+    atoms = read_poscar(filepath)
     logging.debug(f"Atoms: {atoms}")
 
     # Generate vacancy sites and site fractions
@@ -125,7 +124,7 @@ def allocate2file(filepath: str, structure: dict[str, dict], factors: tuple[int,
     # Save to file
     symbol_str = "".join(s for s, c in new_atoms.symbol_count)
     output = f"{os.path.splitext(filepath)[0]}-{symbol_str}.vasp"
-    poscar.write_poscar(output, new_atoms)
+    write_poscar(output, new_atoms)
     logging.info(f"Allocated atoms saved to {output}")
 
     return output
