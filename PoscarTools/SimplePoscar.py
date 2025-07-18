@@ -76,13 +76,13 @@ class Atoms:
     def clear(self):
         self.atom_list.clear()
 
-    def copy(self, clean: bool = False) -> 'Atoms':
+    def copy(self, clean: bool = False) -> "Atoms":
         atom_list = [] if clean else self.atom_list
         return Atoms(cell=self.cell,
                      is_direct=self.is_direct,
                      atom_list=atom_list)
 
-    def rebuild(self, atom_list: list[Atom] = []) -> 'Atoms':
+    def rebuild(self, atom_list: list[Atom] = []) -> "Atoms":
         return Atoms(cell=self.cell,
                      is_direct=self.is_direct,
                      atom_list=atom_list)
@@ -161,7 +161,7 @@ class Atoms:
             atom_list.append(al[reserve_idx])
         self.atom_list = atom_list
 
-    def compare(self, atoms2: 'Atoms') -> tuple[bool, str]:
+    def compare(self, atoms2: "Atoms") -> tuple[bool, str]:
         """Compare two Atoms objects."""
         atoms1 = self
 
@@ -350,7 +350,7 @@ def to_ase_atoms(atoms: Atoms) -> ASEAtoms:
 
 def from_ase_atoms(ase_atoms: ASEAtoms, direct: bool = True) -> Atoms:
     """Convert ASEAtoms to Atoms."""
-    cell = ase_atoms.get_cell().copy()
+    cell = np.array(ase_atoms.get_cell().copy())
     atom_list = []
     for idx, (symbol, position) in enumerate(
             zip(ase_atoms.get_chemical_symbols(), ase_atoms.get_positions())):
