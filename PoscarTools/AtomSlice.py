@@ -14,8 +14,8 @@ from .Utils import color_map
 
 basis_map = {
     (0, 0, 1): [(1, 0, 0), (0, 1, 0), (0, 0, 1)],
-    (1, 1, 0): [(-1, 1, 0), (0, 0, 1), (1, 1, 0)],
-    (1, 1, 1): [(-1, 1, 0), (-1, -1, 2), (1, 1, 1)], }
+    (1, 1, 0): [(1, -1, 0), (0, 0, -1), (1, 1, 0)],
+    (1, 1, 1): [(1, -1, 0), (1, 1, -2), (1, 1, 1)], }
 
 
 def _normalize(vector: np.ndarray) -> np.ndarray:
@@ -42,18 +42,34 @@ def _get_basis(miller_index: tuple[int, int, int]) -> np.ndarray:
     return basis
 
 
-def group_by_normal(atoms: Atoms, basis: np.ndarray, precision: int = 6):
+def _convert(atoms: Atoms, basis: np.ndarray) -> Atoms:
+    from ase.atoms import Atoms as ASEAtoms
+    from ase.build.tools import cut
+    ase_atoms: ASEAtoms = to_ase_atoms(atoms)
+    a, b, c = basis
+    converted = cut(ase_atoms, a, b, c, maxatoms=len(atoms))
+    # from ase.io.vasp import write_vasp
+    # from ase.visualize import view
+    # view(ase_atoms)
+    # view(converted)
+    # write_vasp("original.vasp", ase_atoms, direct=True, sort=True, vasp5=True)
+    # write_vasp("converted.vasp", converted, direct=True, sort=True, vasp5=True)
+    return from_ase_atoms(converted)
+
+
+def group_by_normal(atoms: Atoms, precision: int = 2):
     """Group atoms by projection distance along the normal of base vectors.
 
     Args:
         atoms (Atoms): Atoms object.
-        basis (ndarray): Base vectors.
         precision (int, optional): Number of decimal places to round to. Defaults to 6.
     Yields:
         tuple[float, Atoms]: Projection, layer.
     """
+    basis = np.array([(1, 0, 0), (0, 1, 0), (0, 0, 1)])
     # Calculate and Round projections
-    coords = atoms.cartesian_coords
+    # coords = atoms.cartesian_coords
+    coords = atoms.direct_coords
     projs = np.dot(coords, basis[-1])  # Projections onto the normal
     projs = np.round(projs, precision)
 
@@ -107,9 +123,9 @@ def plot_layer(layer: Atoms, basis: np.ndarray, title: str, filepath: str):
 
 def slice2file(filepath: str, miller_index: tuple[int, int, int]) -> str:
     """Slice POSCAR by the miller index."""
-    output = f"{os.path.splitext(os.path.abspath(filepath))[0]}-sliced"
+    miller_index_str = "".join(str(d) for d in miller_index)
+    output = f"{os.path.splitext(os.path.abspath(filepath))[0]}-({miller_index_str})-sliced"
     os.makedirs(output, exist_ok=True)  # Force directory creation
-    direct_str = "".join(str(d) for d in miller_index)
 
     # Read POSCAR to get atoms
     atoms = read_poscar(filepath)
@@ -120,8 +136,14 @@ def slice2file(filepath: str, miller_index: tuple[int, int, int]) -> str:
     basis = _get_basis(miller_index)  # ndarray([b1, b2, n])
     logging.debug(f"Basis: {basis}")
 
+    # Convert atoms alone with basis
+    converted = _convert(atoms, basis)
+    comment = f"{symbols_str}-({miller_index_str})-converted"
+    filename = os.path.join(output, f"POSCAR-{comment}.vasp")
+    write_poscar(filename, converted, comment)
+
     # Group atoms by the normal
-    layers = [ls for ls in group_by_normal(atoms, basis)]
+    layers = [ls for ls in group_by_normal(converted)]
     num_layers = len(layers)
     logging.info(f"Found {num_layers} layers")
 
@@ -133,12 +155,12 @@ def slice2file(filepath: str, miller_index: tuple[int, int, int]) -> str:
         logging.debug(f"layer: {layer}")
 
         # Save layer to POSCAR file
-        filename = os.path.join(output, f"POSCAR-({direct_str})-Layer{i:0{l}d}.vasp")
-        comment = f"{symbols_str}-({direct_str})-Layer{i:0{l}d}"
+        comment = f"{symbols_str}-({miller_index_str})-Layer{i:0{l}d}"
+        filename = os.path.join(output, f"POSCAR-{comment}.vasp")
         write_poscar(filename, layer, comment)
 
         # Plot layer by base vectors
-        imgname = os.path.join(output, f"({direct_str})-Layer{i:0{l}d}.png")
+        imgname = os.path.join(output, f"{comment}.png")
         plot_layer(layer, basis, comment, imgname)
         # break  # for test
 

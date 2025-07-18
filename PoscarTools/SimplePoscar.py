@@ -57,7 +57,7 @@ class Atoms:
     def append(self, atom: Atom):
         self.atom_list.append(atom)
 
-    def extend(self, atoms: list[Atom] | "Atoms"):
+    def extend(self, atoms: "list[Atom] | Atoms"):
         if isinstance(atoms, Atoms):
             atom_list = atoms.atom_list
         elif isinstance(atoms, Iterable):
@@ -338,6 +338,34 @@ def write_poscar(filepath: str, atoms: Atoms, comment_line: str = "",
 
     with open(filepath, "w") as f:
         f.write("\n".join(lines) + "\n")
+
+
+def to_ase_atoms(atoms: Atoms) -> ASEAtoms:
+    """Convert Atoms to ASEAtoms."""
+    symbols = [atom.symbol for atom in atoms]
+    cell = atoms.cell
+    positions = atoms.cartesian_coords
+    return ASEAtoms(symbols=symbols, cell=cell, positions=positions, pbc=True)
+
+
+def from_ase_atoms(ase_atoms: ASEAtoms, direct: bool = True) -> Atoms:
+    """Convert ASEAtoms to Atoms."""
+    cell = ase_atoms.get_cell().copy()
+    atom_list = []
+    for idx, (symbol, position) in enumerate(
+            zip(ase_atoms.get_chemical_symbols(), ase_atoms.get_positions())):
+        atom_list.append(Atom(index=idx, symbol=symbol, coord=position.copy()))
+    atoms = Atoms(cell=cell, is_direct=False, atom_list=atom_list)
+    if direct:
+        atoms.switch_coords(direct)
+    return atoms
+
+
+def merge_poscar(filepath1: str, filepath2: str, filepath: str):
+    atoms1 = read_poscar(filepath1)
+    atoms2 = read_poscar(filepath2)
+    atoms = atoms1.rebuild(atoms1.atom_list.extend(atoms2.atom_list))
+    write_poscar(filepath, atoms)
 
 
 def compare_poscar(filepath1: str, filepath2: str):
