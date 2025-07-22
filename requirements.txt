@@ -1,6 +1,6 @@
 # requirements.txt
 
-# ase
+ase
 numpy
 matplotlib
 pandas
