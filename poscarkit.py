@@ -18,55 +18,56 @@ from PoscarTools.AtomSlice import slice2file
 
 INFO_EXEC = f"""
 ============================= POSCARKIT (v0.8.0) ==============================
-This toolkit has many uses of Supercell, Allocation, Count, Slice, etc.
-developed by FZU-MCMF, main developers: Gao Min-Liang, Wu Bo*, et al..
-Please contact via wubo@fzu.edu.cn, 654489521@qq.com in case.
+This toolkit has many Functions such as Making Supercell, Allocating atoms
+based on SOFs, Counting Coordinate Numbers between same type atoms, Slicng,
+developed by FZU-MCMF, main developers: Gao Min-Liang, Wu Bo*, Qiao Yang,
+Yang Su-wen, et al..
+Please contact via wubo@fzu.edu.cn, 654489521@qq.com in case need further guide
+and information.
 """
 INFO_CHOICES = """
 ========================== Options with instructions ==========================
-  1) Help           : Instructions of this toolkit.
-  2) Read config    : from <config.toml> as changing <Structure> or <SOFs>.
-  3) Run Workflow   : First [Make Supercell] and then [Allocate Atoms].
-  4) Make Supercell : based on <SupercellFactors> along the basis vectors.
-  5) Allocate Atoms : based on <SupercellFactors>, <Structure>, <ShuffleSeeds>.
-  6) Count CN       : CN(Coordinate Numbers) and NN(Nearest Neighbors).
-  7) Slice to films : based on <SliceDirection>.
+  1) Help            : Instructions of this toolkit.
+  2) Read config     : from <config.toml> as changing <Structure> or <SOFs>.
+  3) Run Workflow    : First [Make Supercell] and then [Allocate Atoms].
+  4) Make Supercell  : based on <SupercellFactors> along the basis vectors.
+  5) Allocate Atoms  : based on <SupercellFactors> <Structure> <ShuffleSeeds>.
+  6) Count CN        : CN(Coordinate Numbers) and NN(Nearest Neighbors).
+  7) Slice to layers : normal to <SliceDirection> also known as Miller Index.
 """
 INFO_HELP = f"""
 ============================ How to use POSCARKIT =============================
   Note: No need to configure everything. Just write down SOFs data and run the
-        program and it will ask you to input the information.
+        program and you will be asked to input the information.
 
   2) Read config    : Read the configuration <config.toml> again as changing:
-        <Filepath> ---------- File path of POSCAR to be processed.
-        <outdir>   ---------- Output directory of results.
-        <SupercellFactors> -- 3-int factors alone basis to make supercell.
-        <Structure> --------- Specify the structure to be loaded.
-        <ShuffleSeeds> ------ Seeds for shuffle when allocating atoms.
-        <SliceDirection> ---- Direction of slicing.
-        <StructureInfo> ----- include Structure information and SOFs data.
+    <Filepath> ---------- File path of POSCAR to be processed.
+    <outdir>   ---------- Output directory of results.
+    <SupercellFactors> -- 3-int factors alone basis to make supercell.
+    <Structure> --------- Specify the structure to be loaded.
+    <ShuffleSeeds> ------ Seeds for shuffle when allocating atoms.
+    <SliceDirection> ---- Direction of slicing.
+    <StructureInfo> ----- include Structure information and SOFs data.
 
-  3) Run Workflow   : Workflow is set to do First [Make Supercell] and then
-                      [Allocate Atoms]. See 4) and 5) for more details.
+  3) Run Workflow    : Workflow is set to do First [Make Supercell] and then
+    [Allocate Atoms]. See 4) and 5) for more details.
 
-  4) Make Supercell : Choose a POSCAR or the unitcell built by config, and then
-                      expand it to a supercell based on <SupercellFactors>
-                      (such as (3x3x3), (30x30x30) for Cube; (2x2x3) for Hex).
+  4) Make Supercell  : Choose a POSCAR or the unitcell of prescribed prototype
+    built by config, and then expand it to a supercell based on
+    <SupercellFactors> (such as (3x3x3), (30x30x30) for Cube; (2x2x3) for Hex).
 
-  5) Allocate Atoms : Shuffle based on <ShuffleSeeds> and Allocate atoms based
-                      on <SupercellFactors> and SOFs data of <Structure>.
-                      These works will be grouped by sublattices, output each
-                      sublattice POSCARs and a whole POSCAR.
-                      If not <Structure> provided, Shuffle atoms only.
+  5) Allocate Atoms  : Shuffle based on <ShuffleSeeds> and Allocate atoms based
+    on <SupercellFactors> and SOFs data of <Structure>. These works will be
+    grouped by sublattices, output each sublattice POSCARs and a whole POSCAR.
+    If not <Structure> provided, Shuffle atoms only.
 
-  6) Count CN       : Count CN(Coordinate Numbers) of each atom in the
-                      supercell and calculate the NN(Nearest Neighbors).
-                      Mi*-Mi as d1NN(the Distance of the First Nearest
-                      Neighbors), the CN of an atom Mi coordinated with its
-                      own type.
+  6) Count CN        : Count CN(Coordinate Numbers) of all the same type atoms
+    in the supercell and calculate the NN(Nearest Neighbors). Mi*-Mi as d1NN
+    (the Distance of the First Nearest Neighbors of the same type atom Mi),
+    the CN of an atom Mi coordinated with its own type.
 
-  7) Slice to films : Slice the supercell to films based on <SliceDirections>
-                      (such as [001], [110], [111]) and plot the films.
+  7) Slice to layers : Slice atoms to get all the single layers normal to
+    <SliceDirections> (such as [001], [110], [111]) and plot the layers.
 """
 CHOICES = (1, 2, 3, 4, 5, 6, 7)
 
@@ -262,6 +263,7 @@ class PoscarKit:
                 func = self._func_map[option]
                 result = func(**{"filepath": filepath})
                 # Reset
+                filepath = ""
                 option = 0
 
             except ValueError as e:

@@ -305,7 +305,7 @@ class SimplePoscar:
         lines.append(" " + " ".join(f"{c:>3d}" for c in counts))
 
         # Write if selective dynamics are present
-        if constrainted:
+        if constrainted and any(a.constr is not None for a in atoms):
             lines.append("Selective dynamics")
 
         # Write direct or cartesian coordinates
