@@ -10,52 +10,88 @@ import traceback
 from copy import deepcopy
 from dataclasses import dataclass, field
 
-from PoscarTools.Supercell import supercell2file
-from PoscarTools.AtomSlice import slice2file
-from PoscarTools.AtomShuffle import shuffle2files
-from PoscarTools.AtomAllocate import allocate2file
+from PoscarTools.AtomSupercell import unitcell2file, supercell2file
+from PoscarTools.AtomAllocate import allocate2files
 from PoscarTools.AtomCountCN import countCN2files
+from PoscarTools.AtomSlice import slice2file
 
 
-VERSION = "0.7.5"
 INFO_EXEC = f"""
---- POSCAR tool (ver{VERSION}) ---
-This tool has many uses of supercell, slice, shuffle, allocation, etc.
-developed by FZU-MCMF, main developers: Gao Min-Liang, Wu Bo*, et al.,
-please contact via wubo@fzu.edu.cn, 654489521@qq.com in case.
-Ctrl+C to exit.
-------------------------------
+============================= POSCARKIT (v0.8.0) ==============================
+This toolkit has many uses of Supercell, Allocation, Count, Slice, etc.
+developed by FZU-MCMF, main developers: Gao Min-Liang, Wu Bo*, et al..
+Please contact via wubo@fzu.edu.cn, 654489521@qq.com in case.
 """
 INFO_CHOICES = """
-=======================================
-  1. Read config
-  2. Supercell   3. Slice    4. Shuffle
-  5. Allocation  6. WorkFlow 7. CountCN
-  Exit. Ctrl+C
-=======================================
+========================== Options with instructions ==========================
+  1) Help           : Instructions of this toolkit.
+  2) Read config    : from <config.toml> as changing <Structure> or <SOFs>.
+  3) Run Workflow   : First [Make Supercell] and then [Allocate Atoms].
+  4) Make Supercell : based on <SupercellFactors> along the basis vectors.
+  5) Allocate Atoms : based on <SupercellFactors>, <Structure>, <ShuffleSeeds>.
+  6) Count CN       : CN(Coordinate Numbers) and NN(Nearest Neighbors).
+  7) Slice to films : based on <SliceDirection>.
 """
-CHOICES = (2, 3, 4, 5, 6, 7)
+INFO_HELP = f"""
+============================ How to use POSCARKIT =============================
+  Note: No need to configure everything. Just write down SOFs data and run the
+        program and it will ask you to input the information.
+
+  2) Read config    : Read the configuration <config.toml> again as changing:
+        <Filepath> ---------- File path of POSCAR to be processed.
+        <outdir>   ---------- Output directory of results.
+        <SupercellFactors> -- 3-int factors alone basis to make supercell.
+        <Structure> --------- Specify the structure to be loaded.
+        <ShuffleSeeds> ------ Seeds for shuffle when allocating atoms.
+        <SliceDirection> ---- Direction of slicing.
+        <StructureInfo> ----- include Structure information and SOFs data.
+
+  3) Run Workflow   : Workflow is set to do First [Make Supercell] and then
+                      [Allocate Atoms]. See 4) and 5) for more details.
+
+  4) Make Supercell : Choose a POSCAR or the unitcell built by config, and then
+                      expand it to a supercell based on <SupercellFactors>
+                      (such as (3x3x3), (30x30x30) for Cube; (2x2x3) for Hex).
+
+  5) Allocate Atoms : Shuffle based on <ShuffleSeeds> and Allocate atoms based
+                      on <SupercellFactors> and SOFs data of <Structure>.
+                      These works will be grouped by sublattices, output each
+                      sublattice POSCARs and a whole POSCAR.
+                      If not <Structure> provided, Shuffle atoms only.
+
+  6) Count CN       : Count CN(Coordinate Numbers) of each atom in the
+                      supercell and calculate the NN(Nearest Neighbors).
+                      Mi*-Mi as d1NN(the Distance of the First Nearest
+                      Neighbors), the CN of an atom Mi coordinated with its
+                      own type.
+
+  7) Slice to films : Slice the supercell to films based on <SliceDirections>
+                      (such as [001], [110], [111]) and plot the films.
+"""
+CHOICES = (1, 2, 3, 4, 5, 6, 7)
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
+workdir = os.path.dirname(sys.argv[0])
 
 
 @dataclass
 class Config:
+    # Filepath of POSCAR to operate
     Filepath: str = field(default="")
 
-    # Used for 'Supercell', 'Allocation', 'ShuffleAllocation'
+    # Output directory
+    Outdir: str = field(default=os.path.join(workdir, "out"))
+
+    # Used for 'Supercell', 'Allocation'
     SupercellFactors: list[int] = field(default_factory=lambda: [])
 
-    # Used for 'Shuffle', 'Allocation', 'ShuffleAllocation'
+    # Used for 'Allocation'
     Structure: str = field(default="")
 
-    # Used for 'Shuffle'
-    ShuffleSeeds: list[int | None] = field(default_factory=lambda: [None])
+    # Used for 'Allocation'
+    ShuffleSeeds: list = field(default_factory=lambda: [None])
 
-    # Used for 'Allocation', 'ShuffleAllocation'
-    Shuffle: bool = field(default=False)
-
-    # Direction of slicing Used for 'Slice'
+    # Used for 'Slice
     SliceDirection: list[int] = field(default_factory=lambda: [])
 
     FCC: dict[str, dict[str, list | dict]] = field(default_factory=dict)
@@ -64,28 +100,23 @@ class Config:
 
 
 class PoscarKit:
-
     def __init__(self):
         self.config = self.read_config()
-        self._params_map = {
-            # "filepath": self._handle_filepath,
-            "factors": self._handle_supercell_factors,
-            "miller_index": self._handle_miller_index,
-            "structure": self._handle_structure,
-            "seeds": self._handle_seeds,
-            "shuffle": self._handle_shuffle,
-        }
         self._func_map = {
-            2: {"func": supercell2file, "args": ["factors"]},
-            3: {"func": slice2file, "args": ["miller_index"]},
-            4: {"func": shuffle2files, "args": ["structure", "seeds"]},
-            5: {"func": allocate2file, "args": ["structure", "factors", "shuffle"]},
-            6: {"func": self._workflow, "args": ["factors", "structure", "seeds", "shuffle"]},
-            7: {"func": countCN2files, "args": []},
+            1: self.show_help,
+            2: self.read_config,
+            3: self.handle_workflow,
+            4: self.handle_supercell,
+            5: self.handle_allocate,
+            6: self.handle_countCN,
+            7: self.handle_slice,
         }
 
-    def read_config(self) -> Config:
-        cfg_path = os.path.join(os.path.dirname(sys.argv[0]), "config.toml")
+    def show_help(self, **kwargs) -> None:
+        print(INFO_HELP)
+
+    def read_config(self, **kwargs) -> Config:
+        cfg_path = os.path.join(workdir, "config.toml")
         if not os.path.isfile(cfg_path):
             logging.warning("config.toml not found! Using default configuration.")
             self.config = Config()
@@ -94,81 +125,130 @@ class PoscarKit:
                 self.config = Config(**tomllib.load(tf))
         return self.config
 
-    def _handle_option(self, option: int = 0) -> int:
-        """Check option, passed option==1."""
-        option = option or int(input(f"{INFO_CHOICES}Enter choice >>> "))
-        if option == 1:
-            self.read_config()
-            logging.info("Configurations reloaded.")
-            return 0
+    def _handle_option(self, option: int = 0):
+        """Check option, passed option==2."""
+        while not option:
+            try:
+                option = int(input(f"{INFO_CHOICES}Enter choice >>> "))
+                if option not in CHOICES:
+                    raise ValueError("Invalid option")
+            except ValueError:
+                logging.error(f"Invalid option({option}). Please try again.")
+                option = 0
         return option
 
-    def _handle_filepath(self, filepath: str = "") -> list[str]:
+    def _handle_filepath(self, filepath: str = "", force: bool = True) -> str:
         """Check filepath."""
-        files = []
-        filepath = filepath or input("Enter filepath >>> ")
-        filepath = os.path.abspath(filepath)
-        if os.path.isfile(filepath):
-            files.append(filepath)
-        elif os.path.isdir(filepath):
-            patterns = ["*.vasp", "*POSCAR*", "*poscar*"]
-            for pattern in patterns:
-                files.extend(glob.glob(os.path.join(filepath, "**", pattern), recursive=True))
+        if force:
+            while not os.path.isfile(os.path.abspath(filepath)):
+                logging.error(f"No such file: {filepath}")
+                filepath = input("Enter Filepath >>> ")
         else:
-            logging.warning(f"No (*.vasp, *POSCAR*, *poscar*) files found in {filepath}")
-        return files
+            prompt = "Enter Filepath or NONE to use StructureInfo >>> "
+            filepath = filepath or input(prompt)
+            if filepath:
+                filepath = self._handle_filepath(filepath=filepath, force=True)
+        return filepath
 
-    def _handle_supercell_factors(self) -> tuple[int, int, int]:
+    def _handle_outdir(self) -> str:
+        """Check output directory."""
+        outdir = self.config.Outdir
+        if not os.path.exists(outdir):
+            os.makedirs(outdir)
+        return outdir
+
+    def _handle_factors(self) -> tuple[int, int, int]:
         """Check supercell factors."""
+        prompt = "Enter SupercellFactors (x y z, default=3 3 3) >>> "
         factors = tuple(self.config.SupercellFactors)
         while True:
             try:
-                prompt = "Enter Supercell factors (x y z, default=3 3 3) >>> "
-                factors = factors or tuple(map(int, input(prompt).split()[:3])) or (3, 3, 3)
+                user_input = input(prompt).split()[:3]
+                factors = factors or tuple(map(int, user_input)) or (3, 3, 3)
                 if len(factors) != 3 or any(f <= 0 for f in factors):
-                    raise ValueError("Input must be 3 positive integers")
+                    raise ValueError(f"Needs 3 positive integers. Got {factors}")
                 return factors
             except ValueError as e:
                 logging.warning(f"{e}. Please try again.")
                 factors = ()
 
-    def _handle_miller_index(self) -> tuple[int, int, int]:
+    def _handle_miller(self) -> tuple[int, int, int]:
         """Check slice direction."""
-        miller_index = tuple(self.config.SliceDirection)
+        prompt = "Enter SliceDirection (x y z, default=0 0 1) >>> "
+        miller = tuple(self.config.SliceDirection)
         while True:
             try:
-                prompt = "Enter slice direction (x y z, default=0 0 1) >>> "
-                miller_index = miller_index or tuple(map(int, input(prompt).split()[:3])) or (0, 0, 1)
-
-                if len(miller_index) != 3 or any(not isinstance(i, int) for i in miller_index):
-                    raise ValueError("Input must be a tuple of three integers.")
-                return miller_index
+                user_input = input(prompt).split()[:3]
+                miller = miller or tuple(map(int, user_input)) or (0, 0, 1)
+                if len(miller) != 3 or any(not isinstance(i, int) for i in miller):
+                    raise ValueError(f"Needs 3 integers. Got {miller}.")
+                return miller
             except ValueError as e:
                 logging.warning(f"{e}. Please try again.")
-                miller_index = ()
+                miller = ()
 
-    def _handle_structure(self) -> dict[str, dict]:
+    def _handle_structure(self, force: bool = True) -> dict[str, dict] | None:
         """return a structure (FCC, BCC, HCP) information from the configuration."""
         structure = self.config.Structure.upper()
-        while True:
-            structure = structure or input("Enter Structure (fcc, bcc, hcp) >>> ").upper()
-            if structure in self.config.__dict__:
-                return deepcopy(self.config.__dict__[structure])
-            else:
-                logging.warning(f"{structure} not found. Please try again.")
+        if force:
+            prompt = "To build Unitcell, Enter Structure (fcc, bcc, hcp, ...) >>> "
+            structure = structure or input(prompt).upper()
+            while structure not in self.config.__dict__:
+                logging.warning(f"Structure({structure}) not found in config. Please try again.")
+                structure = input(prompt).upper()
+        else:
+            prompt = "To load SOFs data, Enter Structure (fcc, bcc, hcp, ...) or NONE to shuffle only >>> "
+            structure = structure or input(prompt).upper()
+            if structure not in self.config.__dict__:
+                logging.warning(f"Structure({structure}) not found in config. Shuffle only.")
+        return deepcopy(self.config.__dict__.get(structure))
 
     def _handle_seeds(self) -> list[int | None]:
-        return self.config.ShuffleSeeds
+        """Check shuffle seeds."""
+        seeds = self.config.ShuffleSeeds
+        for seed in seeds:
+            if not (isinstance(seed, int) or seed is None):
+                seed = ord(seed)
+        return seeds
 
-    def _handle_shuffle(self) -> bool:
-        return self.config.Shuffle
+    def handle_supercell(self, filepath: str) -> str:
+        filepath = self._handle_filepath(filepath=filepath, force=False)
+        outdir = self._handle_outdir()
+        if not filepath:
+            logging.warning("No filepath provided. Using struture info instead.")
+            struct_info = self._handle_structure(force=True)
+            filepath = unitcell2file(struct_info=struct_info, outdir=outdir)
+        else:
+            filepath = self._handle_filepath(filepath)
+        factors = self._handle_factors()
+        supercell = supercell2file(filepath=filepath, outdir=outdir, factors=factors)
+        return supercell
 
-    def _workflow(self, filepath: str, factors: tuple[int, int, int],
-                  structure: dict[str, dict], seeds: list[int | None], shuffle: bool):
-        supercell = supercell2file(filepath, factors)
-        shuffleds = shuffle2files(supercell, structure, seeds)
-        fs = [allocate2file(f, structure, factors, shuffle) for f in shuffleds]
-        return fs
+    def handle_allocate(self, filepath: str) -> list[str]:
+        filepath = self._handle_filepath(filepath=filepath)
+        outdir = self._handle_outdir()
+        factors = self._handle_factors()
+        struct_info = self._handle_structure(force=False)
+        seeds = self._handle_seeds()
+        allocateds = allocate2files(filepath=filepath, outdir=outdir, factors=factors,
+                                    struct_info=struct_info, seeds=seeds)
+        return allocateds
+
+    def handle_countCN(self, filepath: str) -> str:
+        filepath = self._handle_filepath(filepath)
+        outdir = self._handle_outdir()
+        return countCN2files(filepath=filepath, outdir=outdir)
+
+    def handle_slice(self, filepath: str) -> str:
+        filepath = self._handle_filepath(filepath)
+        outdir = self._handle_outdir()
+        miller_index = self._handle_miller()
+        return slice2file(filepath=filepath, outdir=outdir, miller_index=miller_index)
+
+    def handle_workflow(self, filepath: str):
+        supercell = self.handle_supercell(filepath)
+        allocateds = self.handle_allocate(supercell)
+        return allocateds
 
     def run(self, filepath: str = "", option: int = 0):
         """Main function."""
@@ -177,15 +257,10 @@ class PoscarKit:
         while True:
             try:
                 option = self._handle_option(option)
-                if option not in CHOICES:
+                if option not in self._func_map:
                     continue
-
-                func: function = self._func_map[option]["func"]
-                args: list[str] = self._func_map[option]["args"]
-                kwargs = {k: v() for k, v in self._params_map.items() if k in args}
-                filepath = filepath or self.config.Filepath
-                outputs = [func(file, **kwargs) for file in self._handle_filepath(filepath)]
-
+                func = self._func_map[option]
+                result = func(**{"filepath": filepath})
                 # Reset
                 option = 0
 

@@ -3,15 +3,16 @@
 import logging
 import os
 import random
+import re
 from collections import defaultdict
 
 import numpy as np
 from tqdm import tqdm
 
-from .SimplePoscar import Atoms, read_poscar, write_poscar
+from .SimplePoscar import Atoms, SimplePoscar
 
 
-def _integer_fractions(fracts: dict[str, float], factors: tuple[int, int, int], multi: int) -> dict:
+def _integer_fracts(fracts: dict[str, float], factors: tuple[int, int, int], multi: int) -> dict:
     """Convert decimal fractions to integer fractions .
 
     Args:
@@ -47,84 +48,110 @@ def _integer_fractions(fracts: dict[str, float], factors: tuple[int, int, int], 
     return rounded_fracts
 
 
-def allocate_atoms(atoms: Atoms, vac_sites: dict[str, str], site_fracts: dict[str, dict[str, int]],
-                   shuffle: bool = False) -> Atoms:
-    """Allocate atoms according to the integer site fractions.
+def allocate_atoms(atoms: Atoms, site_fracts: dict[str, dict[str, int]] | None = None,
+                   seed: int | None = None) -> dict[str, Atoms]:
+    """Allocate atoms according to site of fractions.
 
     Args:
-        atoms (Atoms): Atoms template.
-        vac_sites (dict[str, str]): Dictionary mapping vacancy symbol to sublattice site.
-        site_fracts (dict[str, dict[str, int]]): Dictionary mapping symbol to site fractions.
-        shuffle (bool, optional): Whether to shuffle atoms. Defaults to False.
+        atoms (Atoms): Atoms to allocated.
+        site_fracts (dict[str, dict[str, int]]): Dict {site: {symbol: fractions}.
+        seed (int | None): Random seed to shuffle for reproducibility.
     Returns:
-        Atoms: Allocated atoms.
+        dict[str, Atoms]: Dict {site: Allocated subatoms}.
     """
+    if seed is not None:
+        random.seed(seed)
 
-    pbar = tqdm(total=len(atoms), ncols=80, desc="Allocating atoms")
+    site_subatoms = {}
+    pbar = tqdm(total=len(atoms), ncols=80, desc="shuffling and Allocating atoms")
+    for note, subatoms in atoms.group_atoms(key="note"):
+        match = re.search(r"(\d+[a-z])-([A-Za-z]+)", note)
+        if not match:
+            raise ValueError(f"Unknown note({note}) to recognize the site.")
+        site, symbol = match.groups()
+        for i, atom in enumerate(subatoms):
+            atom.index = i
 
-    new_atoms = atoms.copy(clean=True)
-    for vac, vac_atoms in atoms.group_atoms:
-        site = vac_sites[vac]
+        # Shuffle atoms within the same site
+        sub_list = subatoms.atom_list
+        random.shuffle(sub_list)
 
-        # Optional: Shuffle atoms
-        if shuffle:
-            random.shuffle(vac_atoms)
+        if site_fracts is None:
+            symbols = [atom.symbol for atom in sub_list]
+        elif site in site_fracts:
+            symbols = [s for s, f in site_fracts[site].items() for i in range(f)]
+        else:
+            raise ValueError(f"Site({site}) not found in site_fracts({site_fracts}).")
 
-        # Assign symbols and comments
-        l = len(str(len(vac_atoms)))
-        symbol_iter = (s for s, c in site_fracts[site].items() for i in range(c))
-        for idx, (symbol, atom) in enumerate(zip(symbol_iter, vac_atoms), start=1):
+        # Assign symbols and meta
+        slsl = len(str(len(sub_list)))
+        for idx, (symbol, atom) in enumerate(zip(symbols, sub_list), start=1):
             atom.symbol = symbol
-            atom.comment = f"{site}-{vac}-#{atom.index+1:0{l}d} {idx:0{l}d} {symbol}"
+            atom.meta = f"{idx:0{slsl}d}"
             pbar.update(1)
 
-        new_atoms.extend(vac_atoms)
+        subatoms = subatoms.copy(atom_list=sub_list)
+        site_subatoms.update({site: subatoms})
     pbar.close()
-    return new_atoms
+    return site_subatoms
 
 
-def allocate2file(filepath: str, structure: dict[str, dict], factors: tuple[int, int, int],
-                  shuffle: bool = False) -> str:
-    """Allocate atoms according to the site fractions."""
+def allocate2files(filepath: str, outdir: str, factors: tuple[int, int, int],
+                   struct_info: dict[str, dict] | None = None,
+                   seeds: list[int | None] = [None]) -> list[str]:
+    """Allocate atoms according to the site of fractions.
+
+    Args:
+        filepath (str): POSCAR file path.
+        outdir (str): Output directory.
+        factors (tuple[int, int, int]): Supercell factors.
+        struct_info (dict[str, dict], optional): Structure information.
+        seeds (list[int | None], optional): Seeds for shuffling. Defaults to [None].
+
+    Returns:
+        list[str]: Output file paths.
+    """
     # Read POSCAR
-    atoms = read_poscar(filepath)
+    atoms = SimplePoscar.read_poscar(filepath)
     logging.debug(f"Atoms: {atoms}")
 
-    # Generate vacancy sites and site fractions
-    info = structure.copy()
-    info.pop("cell")
-    vac_sites = {}  # e.g. {'Ag': '1a', 'Cu': '3c'}
-    site_fracts = defaultdict(dict)  # template symbol to sofs
-    for site, value in info.items():
-        vac, coords = value["atoms"]
-        vac_sites[vac] = site
+    # Generate integer site of fractions
+    if struct_info is None:
+        site_fracts = None
+    else:
+        struct_info = struct_info.copy()
+        struct_info.pop("cell", None)
+        site_fracts = defaultdict(dict)
+        for site, data in struct_info.items():
+            if "sofs" not in data:
+                raise ValueError(f"SOFs data not found for site({site})")
+            fracts: dict = data["sofs"]
+            if abs(sum(fracts.values()) - 1) > 1e-6:
+                raise ValueError(f"The sum of fractions for site({site}) not close to 1. Check config.")
+            site_fracts[site] = _integer_fracts(fracts=fracts, factors=factors, multi=int(site[0]))
+        logging.info(f"Site of fractions: {dict(site_fracts)}")
 
-        fracts: dict = value["sofs"]
-        if abs(sum(fracts.values()) - 1) > 1e-6:
-            logging.error("The sum of fractions must be 1.0!")
-            return ""
-        site_fracts[site] = _integer_fractions(fracts, factors, int(site[0]))
-    logging.debug(f"Vacancy sites: {vac_sites}")
-    logging.info(f"Site fractions: {dict(site_fracts)}")
+    outputs = []
+    sl = len(seeds)
+    ssl = len(str(sl))
+    for t, seed in enumerate(seeds, start=1):
+        logging.info(f"Allocating {t}/{sl}")
+        new_atoms = atoms.copy(clean=True)
+        site_subatoms = allocate_atoms(atoms=atoms, site_fracts=site_fracts, seed=seed)
+        for site, subatoms in site_subatoms.items():
+            new_atoms.extend(subatoms)
+            symbol_str = "".join(s for s, c in subatoms.symbol_count)
+            output = os.path.join(outdir, f"POSCAR-allocate{t:0{ssl}d}-{site}-{symbol_str}.vasp")
+            comment = f"Allocated-seed={seed}-{site}-{symbol_str}"
+            SimplePoscar.write_poscar(filepath=output, atoms=subatoms, comment=comment)
 
-    # Check if vacancy sites are defined
-    for s, c in atoms.symbol_count:
-        if s not in vac_sites:
-            logging.error(f"Unknown site for {s}", )
-            logging.error(f"Vacancy sites: {vac_sites}")
-            return ""
+        # Save to file
+        logging.debug(f"Allocated: {new_atoms}")
+        symbol_str = "".join(s for s, c in new_atoms.symbol_count)
+        output = os.path.join(outdir, f"POSCAR-allocate{t:0{ssl}d}-{symbol_str}.vasp")
+        comment = f"Allocate-seed={seed}-{symbol_str}"
+        SimplePoscar.write_poscar(filepath=output, atoms=new_atoms, comment=comment)
+        outputs.append(output)
+        logging.info(f"POSCAR Saved to {output}")
 
-    # Allocate atoms
-    if shuffle:
-        logging.info("Would shuffle before allocating atoms.")
-
-    new_atoms = allocate_atoms(atoms.copy(), vac_sites, site_fracts, shuffle)
-    logging.debug(f"Allocated: {new_atoms}")
-
-    # Save to file
-    symbol_str = "".join(s for s, c in new_atoms.symbol_count)
-    output = f"{os.path.splitext(filepath)[0]}-{symbol_str}.vasp"
-    write_poscar(output, new_atoms)
-    logging.info(f"Allocated atoms saved to {output}")
-
-    return output
+    return outputs

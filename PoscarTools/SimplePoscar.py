@@ -1,14 +1,25 @@
 # SimplePoscar.py
 
+from itertools import groupby
 import logging
+import os
 import re
-from collections import defaultdict, Counter
-from collections.abc import Generator, Iterable
-from copy import deepcopy
+from collections import Counter
+from collections.abc import Iterable
+from copy import copy, deepcopy
 from dataclasses import dataclass
+from typing import Any
 
 import numpy as np
 from ase import Atoms as ASEAtoms
+
+
+key_funcs = {"symbol": lambda atom: atom.symbol,
+             "coord": lambda atom: tuple(atom.coord),
+             "x": lambda atom: atom.coord[0],
+             "y": lambda atom: atom.coord[1],
+             "z": lambda atom: atom.coord[2],
+             "note": lambda atom: atom.note}
 
 
 @dataclass
@@ -17,8 +28,8 @@ class Atom:
     symbol: str
     coord: np.ndarray
     constr: list[str] | None = None
-    comment: str = ""
-    # meta: Any
+    note: str = ""
+    meta: Any = None
 
     def __eq__(self, other):
         if isinstance(other, Atom):
@@ -76,42 +87,29 @@ class Atoms:
     def clear(self):
         self.atom_list.clear()
 
-    def copy(self, clean: bool = False) -> "Atoms":
-        atom_list = [] if clean else self.atom_list
-        return Atoms(cell=self.cell,
-                     is_direct=self.is_direct,
-                     atom_list=atom_list)
+    def copy(self, clean: bool = False, atom_list: list[Atom] | None = None) -> "Atoms":
+        if clean:
+            atom_list = []
+        elif atom_list is None:
+            atom_list = self.atom_list
+        return Atoms(cell=self.cell, is_direct=self.is_direct, atom_list=deepcopy(atom_list))
 
-    def rebuild(self, atom_list: list[Atom] = []) -> "Atoms":
-        return Atoms(cell=self.cell,
-                     is_direct=self.is_direct,
-                     atom_list=atom_list)
+    def sort(self, key: str = "symbol", reverse: bool = False) -> "Atoms":
+        if key not in key_funcs:
+            raise ValueError(f"Invalid key: {key}. Valid keys are {list(key_funcs.keys())}")
+        return self.copy(atom_list=sorted(self.atom_list, key=key_funcs[key], reverse=reverse))
 
-    def sort(self, key="symbol", reverse: bool = False):
-        key_funcs = {"symbol": lambda atom: atom.symbol,
-                     "coord": lambda atom: tuple(atom.coord),
-                     "x": lambda atom: atom.coord[0],
-                     "y": lambda atom: atom.coord[1],
-                     "z": lambda atom: atom.coord[2],
-                     "comment": lambda atom: atom.comment}
-        key_func = key_funcs[key]if key in key_funcs else lambda key: key
-
-        self.atom_list.sort(key=key_func, reverse=reverse)
+    def group_atoms(self, key: str = "symbol", reverse: bool = False) -> list[tuple[str, "Atoms"]]:
+        """Returns: list: [(key, Atoms), ...]."""
+        sort_atoms = self.sort(key=key, reverse=reverse)
+        return [(str(k), self.copy(atom_list=list(v)))
+                for k, v in groupby(sort_atoms, key=key_funcs[key])]
 
     @property
     def symbol_count(self) -> list[tuple[str, int]]:
         """Returns list: [(symbol, count), ...]."""
-        # self.sort(key="symbol")
         symbol_count = list(Counter(atom.symbol for atom in self.atom_list).items())
         return sorted(symbol_count, key=lambda x: x[0])
-
-    @property
-    def group_atoms(self) -> Generator[tuple[str, list[Atom]], None, None]:
-        """Yields tuple: (symbol, [atoms])."""
-        grouped_atoms = defaultdict(list)
-        for atom in self.atom_list:
-            grouped_atoms[atom.symbol].append(atom)
-        yield from ((symbol, atoms) for symbol, atoms in grouped_atoms.items())
 
     @property
     def direct_coords(self) -> np.ndarray:
@@ -134,35 +132,26 @@ class Atoms:
         self.is_direct = direct
 
     @property
-    def coord_map(self) -> dict[tuple, list[Atom]]:
-        """Return a map of coordinates to atoms."""
-        coord_map = defaultdict(list)
-        for atom in self.atom_list:
-            coord_map[tuple(atom.coord.tolist())].append(atom)
-        return coord_map
-
-    @property
     def duplicates(self) -> str:
         """Return a list of atoms with duplicate coordinates."""
         results = []
-        for coord, atom_list in self.coord_map.items():
-            if len(atom_list) <= 1:
+        for coord, subatoms in self.group_atoms(key="coord"):
+            if len(subatoms) <= 1:
                 continue
-            symbol_count = "".join(
-                f"{s}{c}" for s, c in Atoms(self.cell, atom_list=atom_list).symbol_count)
-            results.append(f"in {coord} {len(atom_list)} atoms {symbol_count}")
+            symbol_count = "".join(f"{s}{c}" for s, c in subatoms.symbol_count)
+            results.append(f"in {coord} {len(subatoms)} atoms {symbol_count}")
         return "\n".join(results)
 
-    def remove_duplicates(self, reserve_old: bool = False):
+    def remove_duplicates(self, keep_old: bool = False):
         """Remove duplicate atoms."""
         atom_list = []
-        for al in self.coord_map.values():
-            reserve_idx = 0 if reserve_old else -1
-            atom_list.append(al[reserve_idx])
+        for coord, subatoms in self.group_atoms(key="coord"):
+            keep_idx = 0 if keep_old else -1
+            atom_list.append(subatoms[keep_idx])
         self.atom_list = atom_list
 
     def compare(self, atoms2: "Atoms") -> tuple[bool, str]:
-        """Compare two Atoms objects."""
+        """Compare two Atoms objects. Return tuple(flag, msg)."""
         atoms1 = self
 
         # Check cell
@@ -180,197 +169,199 @@ class Atoms:
         # Check atoms
         atoms1.switch_coords(direct=True)
         atoms2.switch_coords(direct=True)
-        total_atoms = atoms1.copy(clean=False)
+        total_atoms = atoms1.copy()
         total_atoms.extend(atoms2)
         msg = []
-        for coord, atom_list in total_atoms.coord_map.items():
-            if len(atom_list) != 2 or atom_list[0].symbol != atom_list[1].symbol:
-                msg.append(f"{coord} has atoms {''.join(a.symbol for a in atom_list)}\n")
-            else:
+        for coord, subatoms in total_atoms.group_atoms(key="coord"):
+            if len(subatoms) <= 1 and subatoms[0].symbol != subatoms[1].symbol:
                 continue
+            msg.append(f"{coord} has atoms {''.join(a.symbol for a in subatoms)}\n")
 
         return (False, "".join(msg)) if msg \
             else (True, f"{atoms1} equals {atoms2}")
 
 
-def _parse_comment(line: str) -> tuple[int, str]:
-    result = (-1, "")
-    if not line or "#" not in line:
-        return result
+class SimplePoscar:
 
-    comment_part = line.split("#", 1)[1].strip()
-    if not comment_part:
-        return result
-
-    match = re.search(r"([^#]+)-#(\d+)", comment_part)
-    if match:
-        try:
-            comment = match.group(1) + "-#" + match.group(2)
-            return (int(match.group(2)) - 1, comment)
-        except (ValueError, AttributeError):
+    @staticmethod
+    def _parse_comment(line: str) -> tuple[str, int, Any]:
+        """Try to return note, index, meta of a line."""
+        result = ("", -1, None)
+        if not line or "#" not in line:
             return result
-    return result
 
+        comment_str = line.split("#", 1)[1].strip()
+        if not comment_str:
+            return result
 
-def read_poscar(filepath: str) -> Atoms:
-    """Read POSCAR file.
+        match = re.search(r"(\d+[a-z]-[A-Za-z]+)-#(\d+)(.)?", comment_str)
+        if match:
+            try:
+                return (match.group(1), int(match.group(2)) - 1, match.group(3))
+            except (ValueError, AttributeError):
+                return result
+        return result
 
-    Args:
-        filepath (str): Path to POSCAR file.
+    @staticmethod
+    def read_poscar(filepath: str) -> Atoms:
+        """Read POSCAR file.
 
-    Returns:
-        Atoms: Atoms from POSCAR.
-    """
-    with open(filepath, "r") as f:
-        lines = f.readlines()
+        Args:
+            filepath (str): Path to POSCAR file.
 
-    # Read comment line
-    comment_line = lines[0].strip()
+        Returns:
+            Atoms: Atoms from POSCAR.
+        """
+        with open(filepath, "r") as f:
+            lines = f.readlines()
 
-    # Read scale factor
-    scale = np.array(list(map(float, lines[1].strip().split())))
+        # Read comment line
+        comment = lines[0].strip()
 
-    # Read cell vectors
-    cell = np.array([list(map(float, line.split())) for line in lines[2:5]])
+        # Read scale factor
+        scale = np.array(list(map(float, lines[1].strip().split())))
 
-    # Apply scale factor to cell vectors
-    scale = scale if scale[0] >= 0.0 else \
-        np.cbrt(-1.0 * scale / np.linalg.det(cell))
-    cell *= scale  # Working for both one and three scale factors
+        # Read cell vectors
+        cell = np.array([list(map(float, line.split())) for line in lines[2:5]])
 
-    # Read symbols and counts
-    symbols = lines[5].split()
-    counts = list(map(int, lines[6].split()))
+        # Apply scale factor to cell vectors
+        scale = scale if scale[0] >= 0.0 else \
+            np.cbrt(-1.0 * scale / np.linalg.det(cell))
+        cell *= scale  # Working for both one and three scale factors
 
-    # Check if selective dynamics is present
-    constrainted = "selective" in lines[7].lower()
+        # Read symbols and counts
+        symbols = lines[5].split()
+        counts = list(map(int, lines[6].split()))
 
-    # Check coordinate type (Direct or Cartesian)
-    coord_type = lines[7 + constrainted].strip().lower()[0]
-    is_direct = coord_type == "d"
+        # Check if selective dynamics is present
+        constrainted = "selective" in lines[7].lower()
 
-    # Read atoms (coordinates, constraints, comment)
-    atoms = Atoms(cell=cell, is_direct=is_direct)
-    start_idx = 8 + constrainted
-    for symbol, count in zip(symbols, counts):
-        for i, line in enumerate(lines[start_idx:start_idx + count]):
-            idx, comment = _parse_comment(line)
-            idx = idx if idx != -1 else i
-            parts = line.split()
-            coord = np.array(list(map(float, parts[:3])))
-            constr = parts[3:6] if constrainted else []
-            comment = comment if comment else \
-                f"{symbol}-#{idx + 1:0{len(str(count))}d}"
-            # Apply scale factor to Cartesian coordinates
-            if not is_direct:
-                coord *= scale
-            atoms.append(Atom(index=idx,
-                              symbol=symbol,
-                              coord=coord,
-                              constr=constr,
-                              comment=comment))
-        start_idx += count
+        # Check coordinate type (Direct or Cartesian)
+        coord_type = lines[7 + constrainted].strip().lower()[0]
+        is_direct = coord_type == "d"
 
-    # Check for duplicates
-    if duplicates := atoms.duplicates:
-        logging.warning(f"Duplicate atoms found: {duplicates}")
-        atoms.remove_duplicates()
+        # Read atoms (coordinates, constraints, note)
+        atoms = Atoms(cell=cell, is_direct=is_direct)
+        start_idx = 8 + constrainted
+        for symbol, count in zip(symbols, counts):
+            for i, line in enumerate(lines[start_idx:start_idx + count]):
+                parts = line.split()
+                note, idx, meta = SimplePoscar._parse_comment(line)
+                idx = idx if idx != -1 else i
+                coord = np.array(list(map(float, parts[:3])))
+                constr = parts[3:6] if constrainted else []
+                note = note if note else symbol
+                # f"{symbol}-#{idx + 1:0{len(str(count))}d}"
+                # Apply scale factor to Cartesian coordinates
+                if not is_direct:
+                    coord *= scale
+                atoms.append(Atom(index=idx, symbol=symbol, coord=coord,
+                                  constr=constr, note=note, meta=meta))
+            start_idx += count
 
-    # Switch to direct coordinates
-    is_direct = True
-    atoms.switch_coords(is_direct)
+        # Check for duplicates
+        if duplicates := atoms.duplicates:
+            logging.warning(f"Duplicate atoms found: {duplicates}")
+            atoms.remove_duplicates()
 
-    return atoms
+        # Switch to direct coordinates
+        is_direct = True
+        atoms.switch_coords(is_direct)
 
+        return atoms
 
-def write_poscar(filepath: str, atoms: Atoms, comment_line: str = "",
-                 is_direct: bool = True, constrainted: bool = True):
-    """Write POSCAR file.
+    @staticmethod
+    def write_poscar(filepath: str, atoms: Atoms, comment: str = "",
+                     is_direct: bool = True, constrainted: bool = True):
+        """Write POSCAR file.
 
-    Args:
-        filepath (str): POSCAR file path to write to.
-        atoms (Atoms): Atoms to write to POSCAR file.
-        comment_line (str, optional): Comment line to write to POSCAR file.
-    """
-    # Check for duplicates
-    if duplicates := atoms.duplicates:
-        logging.warning(f"Duplicate atoms found: {duplicates}")
-        atoms.remove_duplicates()
+        Args:
+            filepath (str): POSCAR file path to write to.
+            atoms (Atoms): Atoms to write to POSCAR file.
+            comment (str, optional): Comment line to write to POSCAR file.
+            is_direct (bool, optional): Whether to write in direct coordinates. Defaults to True.
+            constrainted (bool, optional): Whether to write constrainted POSCAR file. Defaults to True.
+        """
+        # Check for duplicates
+        if duplicates := atoms.duplicates:
+            logging.warning(f"Duplicate atoms found: {duplicates}")
+            atoms.remove_duplicates()
 
-    lines = []
+        lines = []
 
-    # Write comment line
-    lines.append(comment_line)
+        # Write comment line
+        lines.append(comment.split("\n")[0])
 
-    # Write scale factor as 1.0
-    lines.append(f"{1.0:19.16f}")
+        # Write scale factor as 1.0
+        lines.append(f"{1.0:19.16f}")
 
-    # Write cell vectors
-    for vec in atoms.cell:
-        lines.append(" " + " ".join(f"{v:21.16f}" for v in vec))
+        # Write cell vectors
+        for vec in atoms.cell:
+            lines.append(" " + " ".join(f"{v:21.16f}" for v in vec))
 
-    # Write symbol count
-    if len(atoms) == 0:
-        symbols = []
-        counts = []
-    else:
-        symbols, counts = zip(*atoms.symbol_count)
+        # Write symbol count
+        symbols, counts = zip(*atoms.symbol_count) if len(atoms) > 0 else ([], [])
+        lines.append(" " + " ".join(f"{s:>3s}" for s in symbols))
+        lines.append(" " + " ".join(f"{c:>3d}" for c in counts))
 
-    lines.append(" " + " ".join(f"{s:>3s}" for s in symbols))
-    lines.append(" " + " ".join(f"{c:>3d}" for c in counts))
+        # Write if selective dynamics are present
+        if constrainted:
+            lines.append("Selective dynamics")
 
-    # Write if selective dynamics are present
-    if constrainted:
-        lines.append("Selective dynamics")
+        # Write direct or cartesian coordinates
+        lines.append("Direct" if is_direct else "Cartesian")
+        atoms.switch_coords(is_direct)
 
-    # Write direct or cartesian coordinates
-    lines.append("Direct" if is_direct else "Cartesian")
-    atoms.switch_coords(is_direct)
+        # Write atoms (coordinates, constraint, note)
+        for atom in atoms.sort():
+            coord_str = " " + " ".join(f"{c:19.16f}" for c in atom.coord)
+            constr_str = " " + " ".join(c for c in atom.constr) \
+                if constrainted and atom.constr is not None else ""
+            meta = atom.meta if atom.meta is not None else ""
+            comment_str = f" # {atom.note}-#{atom.index + 1:0{len(str(len(atoms)))}d} {meta}"
+            lines.append(f" {coord_str}{constr_str}{comment_str}")
 
-    # Write atoms (coordinates, constraint, comment)
-    atoms.sort()
-    for atom in atoms:
-        coord_str = " " + " ".join(f"{c:19.16f}" for c in atom.coord)
-        constr_str = " " + " ".join(c for c in atom.constr) \
-            if constrainted and atom.constr is not None else ""
-        comment_str = " # " + atom.comment
-        lines.append(f" {coord_str}{constr_str}{comment_str}")
+        with open(filepath, "w") as f:
+            f.write("\n".join(lines) + "\n")
 
-    with open(filepath, "w") as f:
-        f.write("\n".join(lines) + "\n")
+    @staticmethod
+    def to_ase_atoms(atoms: Atoms) -> ASEAtoms:
+        """Convert Atoms to ASEAtoms."""
+        symbols = [atom.symbol for atom in atoms]
+        cell = atoms.cell
+        positions = atoms.cartesian_coords
+        return ASEAtoms(symbols=symbols, cell=cell, positions=positions, pbc=True)
 
+    @staticmethod
+    def from_ase_atoms(ase_atoms: ASEAtoms) -> Atoms:
+        """Convert ASEAtoms to Atoms."""
+        cell = np.array(ase_atoms.get_cell().copy())
+        atom_list = []
+        for idx, (symbol, position) in enumerate(
+                zip(ase_atoms.get_chemical_symbols(), ase_atoms.get_positions())):
+            atom_list.append(Atom(index=idx, symbol=symbol, coord=copy(position)))
+        atoms = Atoms(cell=cell, is_direct=False, atom_list=atom_list)
+        return atoms
 
-def to_ase_atoms(atoms: Atoms) -> ASEAtoms:
-    """Convert Atoms to ASEAtoms."""
-    symbols = [atom.symbol for atom in atoms]
-    cell = atoms.cell
-    positions = atoms.cartesian_coords
-    return ASEAtoms(symbols=symbols, cell=cell, positions=positions, pbc=True)
+    @staticmethod
+    def compare_poscar(filepath1: str, filepath2: str):
+        atoms1 = SimplePoscar.read_poscar(filepath1)
+        atoms2 = SimplePoscar.read_poscar(filepath2)
 
+        flag, msg = atoms1.compare(atoms2)
+        logging.info(f"{flag}, {msg}")
 
-def from_ase_atoms(ase_atoms: ASEAtoms, direct: bool = True) -> Atoms:
-    """Convert ASEAtoms to Atoms."""
-    cell = np.array(ase_atoms.get_cell().copy())
-    atom_list = []
-    for idx, (symbol, position) in enumerate(
-            zip(ase_atoms.get_chemical_symbols(), ase_atoms.get_positions())):
-        atom_list.append(Atom(index=idx, symbol=symbol, coord=position.copy()))
-    atoms = Atoms(cell=cell, is_direct=False, atom_list=atom_list)
-    if direct:
-        atoms.switch_coords(direct)
-    return atoms
+    @staticmethod
+    def merge_poscar(filepath1: str, filepath2: str, outdir: str):
+        atoms1 = SimplePoscar.read_poscar(filepath1)
+        atoms2 = SimplePoscar.read_poscar(filepath2)
+        atoms = atoms1.copy(atom_list=atoms1.atom_list.extend(atoms2.atom_list))
+        output = os.path.join(outdir, f"POSCAR-merged.vasp")
+        SimplePoscar.write_poscar(filepath=output, atoms=atoms, comment="Merged")
 
-
-def merge_poscar(filepath1: str, filepath2: str, filepath: str):
-    atoms1 = read_poscar(filepath1)
-    atoms2 = read_poscar(filepath2)
-    atoms = atoms1.rebuild(atoms1.atom_list.extend(atoms2.atom_list))
-    write_poscar(filepath, atoms)
-
-
-def compare_poscar(filepath1: str, filepath2: str):
-    atoms1 = read_poscar(filepath1)
-    atoms2 = read_poscar(filepath2)
-
-    flag, msg = atoms1.compare(atoms2)
-    logging.info(f"{flag}, {msg}")
+    @staticmethod
+    def separate_poscar(filepath: str, outdir: str, key: str = "note"):
+        atoms = SimplePoscar.read_poscar(filepath)
+        for key, subatoms in atoms.group_atoms(key=key):
+            output = os.path.join(outdir, f"POSCAR-group-{key}.vasp")
+            SimplePoscar.write_poscar(filepath=output, atoms=subatoms, comment=f"Group-{key}")

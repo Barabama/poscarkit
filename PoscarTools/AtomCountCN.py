@@ -2,7 +2,7 @@
 
 import logging
 import os
-import re
+import shutil
 from collections import defaultdict
 from typing import TypedDict
 
@@ -12,7 +12,7 @@ import pandas as pd
 from scipy.spatial import KDTree
 from tqdm import tqdm
 
-from .SimplePoscar import Atom, Atoms, read_poscar, write_poscar
+from .SimplePoscar import Atom, Atoms, SimplePoscar
 from .Utils import color_map
 
 
@@ -20,34 +20,6 @@ class CNData(TypedDict):
     center: Atom
     neighbors: list[Atom]
     cn: int
-
-
-def group_by_sites(atoms: Atoms):
-    """Group atoms by their site names."""
-    grouped_atoms = defaultdict(list)
-    for atom in atoms:
-        match = re.search(r"([^#-]+)", atom.comment)
-        if match:
-            site = match.group(1)
-            grouped_atoms[site].append(atom)
-
-    return grouped_atoms
-
-
-def separate2files(filepath: str) -> list[str]:
-    """Separate atoms by their site names and save to separate files."""
-    atoms = read_poscar(filepath)
-
-    logging.info(f"Separating {filepath}...")
-    outputs = []
-    for site, atom_list in group_by_sites(atoms).items():
-        new_atoms = atoms.rebuild(atom_list)
-        output = f"{os.path.splitext(filepath)[0]}-{site}.vasp"
-        write_poscar(output, new_atoms)
-        logging.info(f"POSCAR saved to {output}")
-        outputs.append(output)
-
-    return outputs
 
 
 def calculate_nearest_neighbors(atoms: Atoms, cut_off: float):
@@ -58,7 +30,7 @@ def calculate_nearest_neighbors(atoms: Atoms, cut_off: float):
     """
     nn_map = defaultdict(list)
     pair_count = 0
-    
+
     # Get cartesian coordinates
     coords = atoms.cartesian_coords
     # Make KDTree
@@ -87,23 +59,25 @@ def calculate_nearest_neighbors(atoms: Atoms, cut_off: float):
     return nn_map, pair_count
 
 
-def countCN2files(filepath: str):
+def countCN2files(filepath: str, outdir: str):
     cut_off = float(input("Please input the cut-off distance (A): "))
 
-    atoms = read_poscar(filepath)
+    # Make output directory
+    outdir = os.path.join(outdir, f"{os.path.splitext(os.path.basename(filepath))[0]}-cn")
+    if os.path.exists(outdir):
+        shutil.rmtree(outdir)
+    os.makedirs(outdir, exist_ok=True)
+
+    # Read POSCAR
+    atoms = SimplePoscar.read_poscar(filepath)
     logging.debug(f"Atoms: {atoms}")
 
-    output = os.path.splitext(filepath)[0]
-    if not os.path.exists(output):
-        os.makedirs(output)
-
+    # Count nearest neighbors and coordinate number
     symbol_df = defaultdict(pd.DataFrame)
     symbol_cn_freq = defaultdict(list)
-    for symbol, atom_list in atoms.group_atoms:
-        symbol_atoms = Atoms(atoms.cell, is_direct=atoms.is_direct, atom_list=atom_list)
-        del atom_list
+    for symbol, subatoms in atoms.group_atoms():
         # Get nearest neighbors
-        nn_map, pair_count = calculate_nearest_neighbors(symbol_atoms, cut_off)
+        nn_map, pair_count = calculate_nearest_neighbors(subatoms, cut_off)
         logging.info(f"{symbol}-{symbol} pair count: {pair_count}")
 
         # Collect CN data map
@@ -112,25 +86,31 @@ def countCN2files(filepath: str):
             cn = len(neighbors)
             cn_data_map[cn].append(CNData(center=center, neighbors=neighbors, cn=cn))
 
-        # Save nearest neighbor atoms to POSCAR file
-        nn_atoms = set()
+        # Get each coordinate number atoms
+        nn_atoms_set = set()
         for cn, cn_data_list in cn_data_map.items():
-            atom_sets = set()
+            cn_atom_sets = set()
             for cn_data in cn_data_list:
                 sets = {cn_data["center"], *cn_data["neighbors"]}
-                atom_sets.update(sets)
+                cn_atom_sets.update(sets)
 
-            filename = os.path.join(output, f"POSCAR-nn-{symbol}-{cn}.vasp")
-            comment = f"Coordination number of {symbol}={cn}"
-            write_poscar(filename, atoms.rebuild(list(atom_sets)), comment)
+            nn_atoms_set.update(cn_atom_sets)
+            cn_atoms = atoms.copy(atom_list=list(cn_atom_sets))
+            logging.debug(f"{symbol} {cn} atoms: {cn_atoms}")
 
-            nn_atoms.update(atom_sets)
+            # Save to file
+            output = os.path.join(outdir, f"POSCAR-d1nn-{symbol}*-{cn}{symbol}.vasp")
+            comment = f"CoordinationNumber-{symbol}={cn}"
+            SimplePoscar.write_poscar(filepath=output, atoms=cn_atoms, comment=comment)
 
-        new_atoms = atoms.rebuild(list(nn_atoms))
-        logging.debug(f"NN atoms: {new_atoms}")
-        comment = f"Nearest Neighbors of {symbol} pair count={pair_count}"
-        filename = os.path.join(output, f"POSCAR-nn-{symbol}.vasp")
-        write_poscar(filename, new_atoms, comment)
+        # Get nearest neighbors atoms
+        nn_atoms = atoms.copy(atom_list=list(nn_atoms_set))
+        logging.debug(f"NN atoms: {nn_atoms}")
+
+        # Save to file
+        output = os.path.join(outdir, f"POSCAR-d1nn-{symbol}.vasp")
+        comment = f"NearestNeighbors-{symbol}-pair_count={pair_count}"
+        SimplePoscar.write_poscar(filepath=output, atoms=nn_atoms, comment=comment)
 
         # Collect CN data to df
         cn_counts = [[f"{symbol}*-{cn}{symbol}", len(d)] for cn, d in cn_data_map.items()]
@@ -143,8 +123,8 @@ def countCN2files(filepath: str):
 
     # Write CN data to CSV
     all_df = pd.concat(symbol_df.values(), ignore_index=True)
-    filename = os.path.join(output, "CN_Counts.csv")
-    all_df.to_csv(filename, index=False)
+    output = os.path.join(outdir, "CN_Counts.csv")
+    all_df.to_csv(output, index=False)
     logging.info(f"Coordination Number counts saved to {output}")
 
     # Plot the histogram of Coordinate Numbers
@@ -158,7 +138,8 @@ def countCN2files(filepath: str):
     plt.ylabel("Frequency")
     plt.xticks(range(0, 12))  # Define ticks
     plt.grid(True, linestyle='--', alpha=0.7)
-    plt.savefig(os.path.join(output, "CN-Histogram.png"))
+    output = os.path.join(outdir, "CN-Histogram.png")
+    plt.savefig(output)
     plt.close()
     logging.info(f"Coordination Number histogram saved to {output}")
 

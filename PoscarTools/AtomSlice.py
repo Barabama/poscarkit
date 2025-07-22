@@ -2,6 +2,7 @@
 
 import logging
 import os
+import shutil
 from collections import defaultdict
 from itertools import groupby
 
@@ -9,20 +10,21 @@ import numpy as np
 from matplotlib import pyplot as plt
 from tqdm import tqdm
 
-from .SimplePoscar import Atoms, read_poscar, write_poscar, to_ase_atoms, from_ase_atoms
+from .SimplePoscar import Atoms, SimplePoscar
 from .Utils import color_map
 
 basis_map = {
     (0, 0, 1): [(1, 0, 0), (0, 1, 0), (0, 0, 1)],
-    (1, 1, 0): [(1, -1, 0), (0, 0, -1), (1, 1, 0)],
-    (1, 1, 1): [(1, -1, 0), (1, 1, -2), (1, 1, 1)], }
+    (1, 1, 0): [(0, 0, -1), (-1, 1, 0), (1, 1, 0)],
+    (1, 1, 1): [(1, 1, -2), (-1, 1, 0), (1, 1, 1)],
+}
 
 
 def _normalize(vector: np.ndarray) -> np.ndarray:
     return vector / np.linalg.norm(vector)
 
 
-def _get_basis(miller_index: tuple[int, int, int]) -> np.ndarray:
+def _get_basis(miller_index: tuple[int, int, int]) -> list[np.ndarray]:
     """Find the base vectors by the miller_index of the plane.
 
     Args:
@@ -31,56 +33,51 @@ def _get_basis(miller_index: tuple[int, int, int]) -> np.ndarray:
         ndarray: 3 base vectors.
     """
     if miller_index in basis_map:
-        basis = np.array(basis_map[miller_index])
+        basis = [np.array(v) for v in basis_map[miller_index]]
     else:
         n = np.array(miller_index)
         # Find two base vectors to the miller index
         t0 = np.array([1, 0, 0]) if abs(n[0]) < abs(n[1]) else np.array([0, 1, 0])
         b1 = np.cross(n, t0)
         b2 = np.cross(n, b1)
-        basis = np.column_stack([_normalize(v) for v in [b1, b2, n]])
+        basis = [b1, b2, n]
     return basis
 
 
 def _convert(atoms: Atoms, basis: np.ndarray) -> Atoms:
-    from ase.atoms import Atoms as ASEAtoms
+    from .AtomSupercell import make_supercell
     from ase.build.tools import cut
-    ase_atoms: ASEAtoms = to_ase_atoms(atoms)
+    ase_atoms = SimplePoscar.to_ase_atoms(atoms)
     a, b, c = basis
-    converted = cut(ase_atoms, a, b, c, maxatoms=len(atoms))
-    # from ase.io.vasp import write_vasp
-    # from ase.visualize import view
-    # view(ase_atoms)
-    # view(converted)
-    # write_vasp("original.vasp", ase_atoms, direct=True, sort=True, vasp5=True)
-    # write_vasp("converted.vasp", converted, direct=True, sort=True, vasp5=True)
-    return from_ase_atoms(converted)
+    converted = cut(ase_atoms, a, b, c, maxatoms=len(ase_atoms))
+    new_atoms = SimplePoscar.from_ase_atoms(converted)
+    new_atoms = make_supercell(atoms=new_atoms, factors=(1, 1, 1))
+    return new_atoms
 
 
-def group_by_normal(atoms: Atoms, precision: int = 2):
+def group_by_normal(atoms: Atoms, basis: np.ndarray, precision: int = 2):
     """Group atoms by projection distance along the normal of base vectors.
 
     Args:
         atoms (Atoms): Atoms object.
+        basis (ndarray): Base vectors.
         precision (int, optional): Number of decimal places to round to. Defaults to 6.
     Yields:
         tuple[float, Atoms]: Projection, layer.
     """
-    basis = np.array([(1, 0, 0), (0, 1, 0), (0, 0, 1)])
     # Calculate and Round projections
-    # coords = atoms.cartesian_coords
-    coords = atoms.direct_coords
-    projs = np.dot(coords, basis[-1])  # Projections onto the normal
+    coords = atoms.cartesian_coords
+    projs = np.dot(coords, basis[2])  # Projections onto the normal
     projs = np.round(projs, precision)
 
     # Sort atoms based on rounded projections
     sorted_indices = np.argsort(projs)
     for proj, group in groupby(sorted_indices, key=lambda x: projs[x]):
-        layer = atoms.rebuild([atoms[i] for i in group])
+        layer = atoms.copy(atom_list=[atoms[i] for i in group])
         yield proj, layer
 
 
-def plot_layer(layer: Atoms, basis: np.ndarray, title: str, filepath: str):
+def plot_layer(layer: Atoms, basis: list[np.ndarray], title: str, filepath: str):
     """Plot layer by base vectors.
 
     Args:
@@ -90,8 +87,9 @@ def plot_layer(layer: Atoms, basis: np.ndarray, title: str, filepath: str):
         filepath (str): File path to save plot.
     """
     # Calculate projections onto the normal to get projected coordinates
-    b1, b2, n = basis
+    layer = layer.sort()
     coords = layer.cartesian_coords
+    b1, b2, n = [_normalize(v) for v in layer.cell]
     n_projs = np.dot(coords, n)  # Projections onto the normal
     p_projs = coords - np.outer(n_projs, n)  # Projections onto plane
     # xs = np.dot(p_projs, b1)  # Components of on b1
@@ -103,6 +101,12 @@ def plot_layer(layer: Atoms, basis: np.ndarray, title: str, filepath: str):
     for atom, coord in zip(layer, proj_coords):
         symbol_coords[atom.symbol].append(coord)
 
+    # Get the range of the basis vectors
+    x_min, x_max = 0.0, np.linalg.norm(layer.cell[0])
+    y_min, y_max = 0.0, np.linalg.norm(layer.cell[1])
+    x_margin = (x_max - x_min) * 0.1
+    y_margin = (y_max - y_min) * 0.1
+
     # Plot layer with projected coordinates
     plt.figure(figsize=(6, 6))
     for symbol, coords in symbol_coords.items():
@@ -113,37 +117,46 @@ def plot_layer(layer: Atoms, basis: np.ndarray, title: str, filepath: str):
     plt.title(title)
     plt.xlabel(f"[{' '.join(str(v) for v in basis[0])}] Coordinate (Å)")
     plt.ylabel(f"[{' '.join(str(v) for v in basis[1])}] Coordinate (Å)")
-    plt.axis("equal")
+    # plt.axis("equal")
     plt.grid()
     plt.legend(title="Symbols", bbox_to_anchor=(1, 1), loc="upper left")
+    plt.xlim(-x_margin, x_max + x_margin)
+    plt.ylim(-y_margin, y_max + y_margin)
     # plt.tight_layout(rect=[0, 0, 1, 0])
     plt.savefig(filepath, bbox_inches="tight")
     plt.close()
 
 
-def slice2file(filepath: str, miller_index: tuple[int, int, int]) -> str:
+def slice2file(filepath: str, outdir: str, miller_index: tuple[int, int, int]) -> str:
     """Slice POSCAR by the miller index."""
     miller_index_str = "".join(str(d) for d in miller_index)
-    output = f"{os.path.splitext(os.path.abspath(filepath))[0]}-({miller_index_str})-sliced"
-    os.makedirs(output, exist_ok=True)  # Force directory creation
 
-    # Read POSCAR to get atoms
-    atoms = read_poscar(filepath)
+    # Make output directory
+    dirname = f"{os.path.splitext(os.path.basename(filepath))[0]}"
+    outdir = os.path.join(outdir, f"{dirname}-({miller_index_str})-sliced")
+    if os.path.exists(outdir):
+        shutil.rmtree(outdir)
+    os.makedirs(outdir, exist_ok=True)
+
+    # Read POSCAR
+    atoms = SimplePoscar.read_poscar(filepath)
     symbols_str = "".join(s for s, c in atoms.symbol_count)
     logging.debug(atoms)
 
     # Get_basis, Regarding miller index as the normal
-    basis = _get_basis(miller_index)  # ndarray([b1, b2, n])
-    logging.debug(f"Basis: {basis}")
+    basis = _get_basis(miller_index)
+    logging.info(f"Basis: {basis}")
 
     # Convert atoms alone with basis
-    converted = _convert(atoms, basis)
-    comment = f"{symbols_str}-({miller_index_str})-converted"
-    filename = os.path.join(output, f"POSCAR-{comment}.vasp")
-    write_poscar(filename, converted, comment)
+    basis_n = np.array([_normalize(v) for v in basis])
+    new_atoms = _convert(atoms, basis_n)
+    output = os.path.join(outdir, f"POSCAR-convert({miller_index_str})-{symbols_str}.vasp")
+    comment = f"Convert({miller_index_str})-{symbols_str}"
+    SimplePoscar.write_poscar(filepath=output, atoms=new_atoms, comment=comment)
 
     # Group atoms by the normal
-    layers = [ls for ls in group_by_normal(converted)]
+    # basis = np.array([(1, 0, 0), (0, 1, 0), (0, 0, 1)])
+    layers = [ls for ls in group_by_normal(atoms=new_atoms, basis=basis_n)]
     num_layers = len(layers)
     logging.info(f"Found {num_layers} layers")
 
@@ -155,14 +168,14 @@ def slice2file(filepath: str, miller_index: tuple[int, int, int]) -> str:
         logging.debug(f"layer: {layer}")
 
         # Save layer to POSCAR file
-        comment = f"{symbols_str}-({miller_index_str})-Layer{i:0{l}d}"
-        filename = os.path.join(output, f"POSCAR-{comment}.vasp")
-        write_poscar(filename, layer, comment)
+        output = os.path.join(outdir, f"POSCAR-convert({miller_index_str})-layer{i:0{l}d}.vasp")
+        comment = f"Convert({miller_index_str})-Layer{i:0{l}d}"
+        SimplePoscar.write_poscar(filepath=output, atoms=layer, comment=comment)
 
         # Plot layer by base vectors
-        imgname = os.path.join(output, f"{comment}.png")
-        plot_layer(layer, basis, comment, imgname)
+        imgname = os.path.join(outdir, f"{comment}.png")
+        plot_layer(layer=layer, basis=basis, title=comment, filepath=imgname)
         # break  # for test
 
-    logging.info(f"Results saved in {output}")
-    return output
+    logging.info(f"Results saved in {outdir}")
+    return outdir
