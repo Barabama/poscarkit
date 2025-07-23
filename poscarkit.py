@@ -1,7 +1,6 @@
 # poscarkit.py
 
 import argparse
-import glob
 import logging
 import os
 import sys
@@ -10,6 +9,7 @@ import traceback
 from copy import deepcopy
 from dataclasses import dataclass, field
 
+import PoscarTools.Utils
 from PoscarTools.AtomSupercell import unitcell2file, supercell2file
 from PoscarTools.AtomAllocate import allocate2files
 from PoscarTools.AtomCountCN import countCN2files
@@ -120,7 +120,9 @@ class PoscarKit:
         cfg_path = os.path.join(workdir, "config.toml")
         if not os.path.isfile(cfg_path):
             logging.warning("config.toml not found! Using default configuration.")
-            self.config = Config()
+            with open(cfg_path, "w", encoding="utf-8") as tf:
+                tf.write(PoscarTools.Utils.default_config)
+            self.config = self.read_config(**kwargs)
         else:
             with open(cfg_path, "rb") as tf:
                 self.config = Config(**tomllib.load(tf))

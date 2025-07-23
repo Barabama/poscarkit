@@ -1,3 +1,4 @@
+
 # config.toml
 
 # P.S. No need to configure everything. Just write down SOFs data and
@@ -47,7 +48,7 @@ V = 0.1112
 # ====== ! Unit cell structure parameters, be cautious when modifying ! ======
 # ====== ! 原型单胞的晶体结构参数, 从这里生成对应结构的单胞, 修改时请小心 ! ======
 # It is wise to give the Volume relaxed lattice parameter
-# when finished the R7 step (ISIF =7, NSW =10) in INCAR to run VASP
+# when finished the R7 step (ISIF=7, NSW=10) in INCAR to run VASP
 # when the HEA-POSCAR established based on SOFs and small supercell.
 # Then we can give considerable reliable ruler tag.
 [FCC]

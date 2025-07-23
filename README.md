@@ -46,3 +46,34 @@ config.toml 文件用于配置工具行为，包括超胞生成、原子分配�
     （例如, `FCC.1a.sofs`：FCC 结构中亚晶格位置 'a' 的原子分数；
            `BCC.1b.sofs`：BCC 结构中亚晶格位置 'b' 的原子分数。）
   - 单胞结构信息，这些信息用于生成不同结构类型的单胞 POSCAR 文件。
+
+## 安装
+
+```shell
+git clone https://gitee.com/wubo-movers/poscarkit.git  # 克隆仓库
+cd poscarkit
+# 选择一个python虚拟环境
+python -m pip install -r requirements.txt  # 安装依赖
+python -m poscarkit.py  # 运行程序
+```
+
+## 编译
+
+- 用Nuitka和UPX打包为exe文件
+
+```Shell
+# 安装UPX
+curl -O https://github.com/upx/upx/releases/download/v5.0.0-win64/upx-5.0.0-win64.zip
+unzip upx-5.0.0-win64.zip
+cd upx-5.0.0-win64
+setx PATH "%PATH%;$PWD.Path"
+upx --version
+
+# 安装Nuitka
+cd poscarkit
+pip install nuitka
+nuitka poscarkit-win-0.8.0.py --standalone --onefile --output-dir=dist --remove-output `
+--windows-icon-from-ico="icon.ico" `
+--lto=yes --enable-plugin=upx --upx-binary="upx.exe" `
+--follow-imports `
+```
