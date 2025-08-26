@@ -99,7 +99,7 @@ def countCN2files(filepath: str, outdir: str):
             logging.debug(f"{symbol} {cn} atoms: {cn_atoms}")
 
             # Save to file
-            output = os.path.join(outdir, f"POSCAR-d1nn-{symbol}*-{cn}{symbol}.vasp")
+            output = os.path.join(outdir, f"POSCAR-d1nn-{cn}{symbol}.vasp")
             comment = f"CoordinationNumber-{symbol}={cn}"
             SimplePoscar.write_poscar(filepath=output, atoms=cn_atoms, comment=comment)
 

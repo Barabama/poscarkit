@@ -126,6 +126,7 @@ class PoscarKit:
         else:
             with open(cfg_path, "rb") as tf:
                 self.config = Config(**tomllib.load(tf))
+                logging.info(f"Loaded configuration from {cfg_path}")
         return self.config
 
     def _handle_option(self, option: int = 0):
@@ -143,9 +144,11 @@ class PoscarKit:
     def _handle_filepath(self, filepath: str = "", force: bool = True) -> str:
         """Check filepath."""
         if force:
+            prompt = "Enter Filepath >>> "
+            filepath = filepath or input(prompt)
             while not os.path.isfile(os.path.abspath(filepath)):
                 logging.error(f"No such file: {filepath}")
-                filepath = input("Enter Filepath >>> ")
+                filepath = input(prompt)
         else:
             prompt = "Enter Filepath or NONE to use StructureInfo >>> "
             filepath = filepath or input(prompt)

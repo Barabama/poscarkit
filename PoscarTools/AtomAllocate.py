@@ -63,7 +63,7 @@ def allocate_atoms(atoms: Atoms, site_fracts: dict[str, dict[str, int]] | None =
         random.seed(seed)
 
     site_subatoms = {}
-    pbar = tqdm(total=len(atoms), ncols=80, desc="shuffling and Allocating atoms")
+    pbar = tqdm(total=len(atoms), ncols=80, desc="Allocating atoms")
     for note, subatoms in atoms.group_atoms(key="note"):
         match = re.search(r"(\d+[a-z])-([A-Za-z]+)", note)
         if not match:

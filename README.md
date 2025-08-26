@@ -59,7 +59,7 @@ python -m poscarkit.py  # 运行程序
 
 ## 编译
 
-- 用Nuitka和UPX打包为exe文件
+- 用Nuitka和UPX打包
 
 ```Shell
 # 安装UPX
@@ -72,8 +72,9 @@ upx --version
 # 安装Nuitka
 cd poscarkit
 pip install nuitka
-nuitka poscarkit-win-0.8.0.py --standalone --onefile --output-dir=dist --remove-output `
+nuitka poscarkit.py --standalone --onefile --output-dir=dist --remove-output `
 --windows-icon-from-ico="icon.ico" `
---lto=yes --enable-plugin=upx --upx-binary="upx.exe" `
+--enable-plugin=upx --upx-binary="D:\Programs\upx-5.0.2-win64\upx.exe" `
+--enable-plugin=tk-inter `
 --follow-imports `
 ```

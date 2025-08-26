@@ -42,10 +42,10 @@ default_config = """# config.toml
 # Used for 'Supercell', 'Allocation'  # 指定超胞因子, 沿晶格矢量方向的倍数
 # SupercellFactors = [30, 30, 30]
 
-# Used for 'Shuffle', 'Allocation'  # 指定晶体结构类型, 不区分大小写
+# Used for 'Allocation'  # 指定晶体结构类型, 不区分大小写
 # Structure = "fcc"
 
-# Used for 'Shuffle'  # 乱序亚晶格位置的随机种子列表
+# Used for 'Allocation'  # 乱序亚晶格位置的随机种子列表
 # ShuffleSeeds = [7, 42, 83]
 
 # Used for 'Slice'  # 指定切片操作的方向，基于晶格矢量方向, 如 [001] z 轴

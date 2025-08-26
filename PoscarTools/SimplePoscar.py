@@ -7,7 +7,7 @@ import re
 from collections import Counter
 from collections.abc import Iterable
 from copy import copy, deepcopy
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 import numpy as np
@@ -27,7 +27,7 @@ class Atom:
     index: int
     symbol: str
     coord: np.ndarray
-    constr: list[str] | None = None
+    constr: list[str] = field(default_factory=lambda: [])
     note: str = ""
     meta: Any = None
 
@@ -305,7 +305,7 @@ class SimplePoscar:
         lines.append(" " + " ".join(f"{c:>3d}" for c in counts))
 
         # Write if selective dynamics are present
-        if constrainted and any(a.constr is not None for a in atoms):
+        if constrainted and any(a.constr for a in atoms):
             lines.append("Selective dynamics")
 
         # Write direct or cartesian coordinates
@@ -318,7 +318,8 @@ class SimplePoscar:
             constr_str = " " + " ".join(c for c in atom.constr) \
                 if constrainted and atom.constr is not None else ""
             meta = atom.meta if atom.meta is not None else ""
-            comment_str = f" # {atom.note}-#{atom.index + 1:0{len(str(len(atoms)))}d} {meta}"
+            note_str = f"# {atom.note}-" if atom.note is not None else ""
+            comment_str = f" {note_str}#{atom.index + 1:0{len(str(len(atoms)))}d} {meta}"
             lines.append(f" {coord_str}{constr_str}{comment_str}")
 
         with open(filepath, "w") as f:
