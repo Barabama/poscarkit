@@ -49,10 +49,9 @@ def _convert(atoms: Atoms, basis: np.ndarray) -> Atoms:
     from ase.build.tools import cut
     ase_atoms = SimplePoscar.to_ase_atoms(atoms)
     a, b, c = basis
-    converted = cut(ase_atoms, a, b, c, maxatoms=len(ase_atoms))
-    from ase.visualize import view
+    converted = cut(ase_atoms, a, b, c)
     new_atoms = SimplePoscar.from_ase_atoms(converted)
-    new_atoms = make_supercell(atoms=new_atoms, factors=(1, 1, 1))
+    new_atoms = make_supercell(atoms=new_atoms, factors=(1, 1, 1))  # normalize
     return new_atoms
 
 
