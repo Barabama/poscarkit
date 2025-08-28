@@ -71,7 +71,7 @@ INFO_HELP = f"""
 """
 CHOICES = (1, 2, 3, 4, 5, 6, 7)
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
+logging.basicConfig(level=logging.INFO, format="%(asctime)s[%(levelname)s]%(message)s")
 workdir = os.path.dirname(sys.argv[0])
 
 

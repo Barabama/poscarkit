@@ -13,34 +13,34 @@ from .SimplePoscar import Atoms, SimplePoscar
 
 
 def _integer_fracts(fracts: dict[str, float], factors: tuple[int, int, int], multi: int) -> dict:
-    """Convert decimal fractions to integer fractions .
+    """将小数形式的分数转换为整数形式的分数
 
     Args:
-        fracts (dict): Dictionary of symbol and decimal fractions.
-        factors (tuple[int, int, int]): Factors for supercell.
-        multi (int): Multiplicity of sublattice.
+        fracts: 元素和小数形式分数的字典
+        factors: 超胞因子
+        multi: 亚晶格的多重性
 
     Returns:
-        dict: Dictionary of symbol and integer fractions.
+        dict: 元素和整数形式分数的字典
     """
     factor = np.prod(factors)
-    # Super_fracts is every fract * multi * factor
+    # Super_fracts 是每个 fract * multi * factor
     super_fracts = {s: f * multi * factor for s, f in fracts.items()}
-    # Round the values to get integers
+    # 四舍五入得到整数
     rounded_fracts = {s: round(f) for s, f in super_fracts.items()}
     total_rounded = sum(rounded_fracts.values())
     target_total = multi * factor
 
-    # Adjusting rounding errors
+    # 调整四舍五入误差
     if total_rounded != target_total:
-        # Calculate differences and adjust based on closeness to the next integer
+        # 计算差异并根据接近下一个整数的程度进行调整
         diffs = [(s, float(abs(f - round(f))), 1 if f - round(f) > 0 else -1)
                  for s, f in super_fracts.items()]
         diffs.sort(key=lambda x: x[1], reverse=True)
-        # Determine the adjustment needed
+        # 确定需要的调整量
         adjustment = target_total - total_rounded
 
-        # Apply adjustments
+        # 应用调整
         for i in range(abs(adjustment)):
             symbol, decimal, direction = diffs[i]
             rounded_fracts[symbol] += direction
@@ -50,29 +50,29 @@ def _integer_fracts(fracts: dict[str, float], factors: tuple[int, int, int], mul
 
 def allocate_atoms(atoms: Atoms, site_fracts: dict[str, dict[str, int]] | None = None,
                    seed: int | None = None) -> dict[str, Atoms]:
-    """Allocate atoms according to site of fractions.
+    """根据亚点阵的分数分配原子
 
     Args:
-        atoms (Atoms): Atoms to allocated.
-        site_fracts (dict[str, dict[str, int]]): Dict {site: {symbol: fractions}.
-        seed (int | None): Random seed to shuffle for reproducibility.
+        atoms: 待分配的原子
+        site_fracts: 字典 {site: {symbol: fractions}
+        seed: 用于洗牌的随机种子, 以确保可重现性
     Returns:
-        dict[str, Atoms]: Dict {site: Allocated subatoms}.
+        dict: 字典 {site: 已分配的原子}
     """
     if seed is not None:
         random.seed(seed)
 
     site_subatoms = {}
-    pbar = tqdm(total=len(atoms), ncols=80, desc="Allocating atoms")
+    pbar = tqdm(total=len(atoms), ncols=80, desc="分配原子")
     for note, subatoms in atoms.group_atoms(key="note"):
         match = re.search(r"(\d+[a-z])-([A-Za-z]+)", note)
         if not match:
-            raise ValueError(f"Unknown note({note}) to recognize the site.")
+            raise ValueError(f"无法识别注释 {note} 来确定亚点阵, 位于({subatoms})")
         site, symbol = match.groups()
         for i, atom in enumerate(subatoms):
             atom.index = i
 
-        # Shuffle atoms within the same site
+        # 在同一位点内打乱原子顺序
         sub_list = subatoms.atom_list
         random.shuffle(sub_list)
 
@@ -81,9 +81,9 @@ def allocate_atoms(atoms: Atoms, site_fracts: dict[str, dict[str, int]] | None =
         elif site in site_fracts:
             symbols = [s for s, f in site_fracts[site].items() for i in range(f)]
         else:
-            raise ValueError(f"Site({site}) not found in site_fracts({site_fracts}).")
+            raise ValueError(f"占位分数 {site_fracts} 中未找到亚点阵 {site}")
 
-        # Assign symbols and meta
+        # 分配元素和元数据
         slsl = len(str(len(sub_list)))
         for idx, (symbol, atom) in enumerate(zip(symbols, sub_list), start=1):
             atom.symbol = symbol
@@ -99,23 +99,23 @@ def allocate_atoms(atoms: Atoms, site_fracts: dict[str, dict[str, int]] | None =
 def allocate2files(filepath: str, outdir: str, factors: tuple[int, int, int],
                    struct_info: dict[str, dict] | None = None,
                    seeds: list[int | None] = [None]) -> list[str]:
-    """Allocate atoms according to the site of fractions.
+    """根据亚点阵的分数分配原子
 
     Args:
-        filepath (str): POSCAR file path.
-        outdir (str): Output directory.
-        factors (tuple[int, int, int]): Supercell factors.
-        struct_info (dict[str, dict], optional): Structure information.
-        seeds (list[int | None], optional): Seeds for shuffling. Defaults to [None].
+        filepath: POSCAR文件路径
+        outdir: 输出目录
+        factors: 超胞因子
+        struct_info: 结构信息
+        seeds: 用于洗牌的种子, 默认为[None]
 
     Returns:
-        list[str]: Output file paths.
+        list: 输出文件路径列表
     """
-    # Read POSCAR
+    # 读取POSCAR
     atoms = SimplePoscar.read_poscar(filepath)
-    logging.debug(f"Atoms: {atoms}")
+    logging.debug(f"原子: {atoms}")
 
-    # Generate integer site of fractions
+    # 生成整数形式的位点分数
     if struct_info is None:
         site_fracts = None
     else:
@@ -124,18 +124,18 @@ def allocate2files(filepath: str, outdir: str, factors: tuple[int, int, int],
         site_fracts = defaultdict(dict)
         for site, data in struct_info.items():
             if "sofs" not in data:
-                raise ValueError(f"SOFs data not found for site({site})")
+                raise ValueError(f"亚点阵 {site} 没有sofs数据")
             fracts: dict = data["sofs"]
             if abs(sum(fracts.values()) - 1) > 1e-6:
-                raise ValueError(f"The sum of fractions for site({site}) not close to 1. Check config.")
+                raise ValueError(f"亚点阵 {site} 的分数之和不接近于1, 请检查配置")
             site_fracts[site] = _integer_fracts(fracts=fracts, factors=factors, multi=int(site[0]))
-        logging.info(f"Site of fractions: {dict(site_fracts)}")
+        logging.info(f"占位分数 {dict(site_fracts)}")
 
     outputs = []
     sl = len(seeds)
     ssl = len(str(sl))
     for t, seed in enumerate(seeds, start=1):
-        logging.info(f"Allocating {t}/{sl}")
+        logging.info(f"分配 {t}/{sl}")
         new_atoms = atoms.copy(clean=True)
         site_subatoms = allocate_atoms(atoms=atoms, site_fracts=site_fracts, seed=seed)
         for site, subatoms in site_subatoms.items():
@@ -145,13 +145,13 @@ def allocate2files(filepath: str, outdir: str, factors: tuple[int, int, int],
             comment = f"Allocated-seed={seed}-{site}-{symbol_str}"
             SimplePoscar.write_poscar(filepath=output, atoms=subatoms, comment=comment)
 
-        # Save to file
-        logging.debug(f"Allocated: {new_atoms}")
+        # 保存到文件
+        logging.debug(f"已分配原子 {new_atoms}")
         symbol_str = "".join(s for s, c in new_atoms.symbol_count)
         output = os.path.join(outdir, f"POSCAR-allocate{t:0{ssl}d}-{symbol_str}.vasp")
-        comment = f"Allocate-seed={seed}-{symbol_str}"
+        comment = f"Allocated-seed={seed}-{symbol_str}"
         SimplePoscar.write_poscar(filepath=output, atoms=new_atoms, comment=comment)
         outputs.append(output)
-        logging.info(f"POSCAR Saved to {output}")
+        logging.info(f"POSCAR已保存到 {output}")
 
     return outputs

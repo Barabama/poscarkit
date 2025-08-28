@@ -96,18 +96,18 @@ class Atoms:
 
     def sort(self, key: str = "symbol", reverse: bool = False) -> "Atoms":
         if key not in key_funcs:
-            raise ValueError(f"Invalid key: {key}. Valid keys are {list(key_funcs.keys())}")
+            raise ValueError(f"非法键 {key} 不在合法范围 {list(key_funcs.keys())}")
         return self.copy(atom_list=sorted(self.atom_list, key=key_funcs[key], reverse=reverse))
 
     def group_atoms(self, key: str = "symbol", reverse: bool = False) -> list[tuple[str, "Atoms"]]:
-        """Returns: list: [(key, Atoms), ...]."""
+        """返回: list[(键, Atoms), ...]"""
         sort_atoms = self.sort(key=key, reverse=reverse)
         return [(str(k), self.copy(atom_list=list(v)))
                 for k, v in groupby(sort_atoms, key=key_funcs[key])]
 
     @property
     def symbol_count(self) -> list[tuple[str, int]]:
-        """Returns list: [(symbol, count), ...]."""
+        """返回: list[(符号, 数量), ...]"""
         symbol_count = list(Counter(atom.symbol for atom in self.atom_list).items())
         return sorted(symbol_count, key=lambda x: x[0])
 
@@ -122,9 +122,9 @@ class Atoms:
         return np.dot(self.direct_coords, self.cell)
 
     def switch_coords(self, direct: bool = True):
-        """Switch coordinates to wanted format."""
+        """切换坐标到所需格式"""
         if direct == self.is_direct:
-            return  # Already in correct format
+            return  # 已经是正确格式
         inv_cell = np.linalg.inv(self.cell)
         for atom in self.atom_list:
             atom.coord = np.dot(atom.coord, inv_cell) % 1.0 if direct \
@@ -133,17 +133,17 @@ class Atoms:
 
     @property
     def duplicates(self) -> str:
-        """Return a list of atoms with duplicate coordinates."""
+        """返回具有重复坐标的原子列表"""
         results = []
         for coord, subatoms in self.group_atoms(key="coord"):
             if len(subatoms) <= 1:
                 continue
             symbol_count = "".join(f"{s}{c}" for s, c in subatoms.symbol_count)
-            results.append(f"in {coord} {len(subatoms)} atoms {symbol_count}")
+            results.append(f" {coord} 处有{len(subatoms)}个原子 {symbol_count}")
         return "\n".join(results)
 
     def remove_duplicates(self, keep_old: bool = False):
-        """Remove duplicate atoms."""
+        """移除重复原子"""
         atom_list = []
         for coord, subatoms in self.group_atoms(key="coord"):
             keep_idx = 0 if keep_old else -1
@@ -151,22 +151,22 @@ class Atoms:
         self.atom_list = atom_list
 
     def compare(self, atoms2: "Atoms") -> tuple[bool, str]:
-        """Compare two Atoms objects. Return tuple(flag, msg)."""
+        """比较另一个Atoms对象, 返回 tuple(标志, 消息)"""
         atoms1 = self
 
-        # Check cell
+        # 检查晶胞
         cell1 = atoms1.cell
         cell2 = atoms2.cell
         if not np.array_equal(cell1, cell2):
             return False, f"{cell1} != {cell2}"
 
-        # Check symbols counts
+        # 检查符号计数
         sc1 = atoms1.symbol_count
         sc2 = atoms2.symbol_count
         if sc1 != sc2:
             return False, f"{sc1} != {sc2}"
 
-        # Check atoms
+        # 检查原子
         atoms1.switch_coords(direct=True)
         atoms2.switch_coords(direct=True)
         total_atoms = atoms1.copy()
@@ -175,17 +175,17 @@ class Atoms:
         for coord, subatoms in total_atoms.group_atoms(key="coord"):
             if len(subatoms) <= 1 and subatoms[0].symbol != subatoms[1].symbol:
                 continue
-            msg.append(f"{coord} has atoms {''.join(a.symbol for a in subatoms)}\n")
+            msg.append(f"{coord} 处有原子 {''.join(a.symbol for a in subatoms)}\n")
 
         return (False, "".join(msg)) if msg \
-            else (True, f"{atoms1} equals {atoms2}")
+            else (True, f"{atoms1} 等于 {atoms2}")
 
 
 class SimplePoscar:
 
     @staticmethod
     def _parse_comment(line: str) -> tuple[str, int, Any]:
-        """Try to return note, index, meta of a line."""
+        """尝试解析注释行的亚点阵、索引、元数据"""
         result = ("", -1, None)
         if not line or "#" not in line:
             return result
@@ -204,43 +204,43 @@ class SimplePoscar:
 
     @staticmethod
     def read_poscar(filepath: str) -> Atoms:
-        """Read POSCAR file.
+        """读取POSCAR文件
 
         Args:
-            filepath (str): Path to POSCAR file.
+            filepath: POSCAR文件路径
 
         Returns:
-            Atoms: Atoms from POSCAR.
+            Atoms: 来自POSCAR的Atoms对象
         """
         with open(filepath, "r") as f:
             lines = f.readlines()
 
-        # Read comment line
+        # 读取注释行
         comment = lines[0].strip()
 
-        # Read scale factor
+        # 读取缩放因子
         scale = np.array(list(map(float, lines[1].strip().split())))
 
-        # Read cell vectors
+        # 读取晶胞向量
         cell = np.array([list(map(float, line.split())) for line in lines[2:5]])
 
-        # Apply scale factor to cell vectors
+        # 缩放因子应用于晶胞向量
         scale = scale if scale[0] >= 0.0 else \
             np.cbrt(-1.0 * scale / np.linalg.det(cell))
-        cell *= scale  # Working for both one and three scale factors
+        cell *= scale  # 适用于一个或三个缩放因子
 
-        # Read symbols and counts
+        # 读取符号和数量
         symbols = lines[5].split()
         counts = list(map(int, lines[6].split()))
 
-        # Check if selective dynamics is present
+        # 检查是否存在选择性动力学
         constrainted = "selective" in lines[7].lower()
 
-        # Check coordinate type (Direct or Cartesian)
+        # 检查坐标类型（直接或笛卡尔）
         coord_type = lines[7 + constrainted].strip().lower()[0]
         is_direct = coord_type == "d"
 
-        # Read atoms (coordinates, constraints, note)
+        # 读取原子（坐标、约束、注释）
         atoms = Atoms(cell=cell, is_direct=is_direct)
         start_idx = 8 + constrainted
         for symbol, count in zip(symbols, counts):
@@ -252,19 +252,19 @@ class SimplePoscar:
                 constr = parts[3:6] if constrainted else []
                 note = note if note else symbol
                 # f"{symbol}-#{idx + 1:0{len(str(count))}d}"
-                # Apply scale factor to Cartesian coordinates
+                # 缩放因子应用于笛卡尔坐标
                 if not is_direct:
                     coord *= scale
                 atoms.append(Atom(index=idx, symbol=symbol, coord=coord,
                                   constr=constr, note=note, meta=meta))
             start_idx += count
 
-        # Check for duplicates
+        # 检查重复项
         if duplicates := atoms.duplicates:
-            logging.warning(f"Duplicate atoms found: {duplicates}")
+            logging.warning(f"发现重复原子 {duplicates}")
             atoms.remove_duplicates()
 
-        # Switch to direct coordinates
+        # 切换到直接坐标
         is_direct = True
         atoms.switch_coords(is_direct)
 
@@ -273,46 +273,46 @@ class SimplePoscar:
     @staticmethod
     def write_poscar(filepath: str, atoms: Atoms, comment: str = "",
                      is_direct: bool = True, constrainted: bool = True):
-        """Write POSCAR file.
+        """写入POSCAR文件
 
         Args:
-            filepath (str): POSCAR file path to write to.
-            atoms (Atoms): Atoms to write to POSCAR file.
-            comment (str, optional): Comment line to write to POSCAR file.
-            is_direct (bool, optional): Whether to write in direct coordinates. Defaults to True.
-            constrainted (bool, optional): Whether to write constrainted POSCAR file. Defaults to True.
+            filepath: 要写入的POSCAR文件路径
+            atoms: 要写入POSCAR文件的Atoms对象
+            comment: 要写入POSCAR文件的注释行
+            is_direct: 是否以直接坐标写入, 默认为True
+            constrainted: 是否写入约束POSCAR文件, 默认为True
         """
-        # Check for duplicates
+        # 检查重复项
         if duplicates := atoms.duplicates:
-            logging.warning(f"Duplicate atoms found: {duplicates}")
+            logging.warning(f"发现重复原子 {duplicates}")
             atoms.remove_duplicates()
 
         lines = []
 
-        # Write comment line
+        # 写入注释行
         lines.append(comment.split("\n")[0])
 
-        # Write scale factor as 1.0
+        # 写入缩放因子为1.0
         lines.append(f"{1.0:19.16f}")
 
-        # Write cell vectors
+        # 写入晶胞向量
         for vec in atoms.cell:
             lines.append(" " + " ".join(f"{v:21.16f}" for v in vec))
 
-        # Write symbol count
+        # 写入符号计数
         symbols, counts = zip(*atoms.symbol_count) if len(atoms) > 0 else ([], [])
         lines.append(" " + " ".join(f"{s:>3s}" for s in symbols))
         lines.append(" " + " ".join(f"{c:>3d}" for c in counts))
 
-        # Write if selective dynamics are present
+        # 写入是否存在选择性动力学
         if constrainted and any(a.constr for a in atoms):
             lines.append("Selective dynamics")
 
-        # Write direct or cartesian coordinates
+        # 写入直接或笛卡尔坐标
         lines.append("Direct" if is_direct else "Cartesian")
         atoms.switch_coords(is_direct)
 
-        # Write atoms (coordinates, constraint, note)
+        # 写入原子（坐标、约束、注释）
         for atom in atoms.sort():
             coord_str = " " + " ".join(f"{c:19.16f}" for c in atom.coord)
             constr_str = " " + " ".join(c for c in atom.constr) \
@@ -327,7 +327,7 @@ class SimplePoscar:
 
     @staticmethod
     def to_ase_atoms(atoms: Atoms) -> ASEAtoms:
-        """Convert Atoms to ASEAtoms."""
+        """Atoms转换为ASEAtoms"""
         symbols = [atom.symbol for atom in atoms]
         cell = atoms.cell
         positions = atoms.cartesian_coords
@@ -335,7 +335,7 @@ class SimplePoscar:
 
     @staticmethod
     def from_ase_atoms(ase_atoms: ASEAtoms) -> Atoms:
-        """Convert ASEAtoms to Atoms."""
+        """ASEAtoms转换为Atoms"""
         cell = np.array(ase_atoms.get_cell().copy())
         atom_list = []
         for idx, (symbol, position) in enumerate(
@@ -358,11 +358,13 @@ class SimplePoscar:
         atoms2 = SimplePoscar.read_poscar(filepath2)
         atoms = atoms1.copy(atom_list=atoms1.atom_list.extend(atoms2.atom_list))
         output = os.path.join(outdir, f"POSCAR-merged.vasp")
-        SimplePoscar.write_poscar(filepath=output, atoms=atoms, comment="Merged")
+        comment = "Merged"
+        SimplePoscar.write_poscar(filepath=output, atoms=atoms, comment=comment)
 
     @staticmethod
     def separate_poscar(filepath: str, outdir: str, key: str = "note"):
         atoms = SimplePoscar.read_poscar(filepath)
         for key, subatoms in atoms.group_atoms(key=key):
             output = os.path.join(outdir, f"POSCAR-group-{key}.vasp")
-            SimplePoscar.write_poscar(filepath=output, atoms=subatoms, comment=f"Group-{key}")
+            comment = f"Group-{key}"
+            SimplePoscar.write_poscar(filepath=output, atoms=subatoms, comment=comment)
