@@ -17,7 +17,7 @@ from PoscarTools.AtomSlice import slice2file
 
 
 INFO_EXEC = f"""
-============================= POSCARKIT (v0.8.0) ==============================
+============================= POSCARKIT (v0.8.1) ==============================
 This toolkit has many Functions such as Making Supercell, Allocating atoms
 based on SOFs, Counting Coordinate Numbers between same type atoms, Slicng,
 developed by FZU-MCMF, main developers: Gao Min-Liang, Wu Bo*, Qiao Yang,
@@ -34,6 +34,7 @@ INFO_CHOICES = """
   5) Allocate Atoms  : based on <SupercellFactors> <Structure> <ShuffleSeeds>.
   6) Count CN        : CN(Coordinate Numbers) and NN(Nearest Neighbors).
   7) Slice to layers : normal to <SliceDirection> also known as Miller Index.
+  8) Slice and Count CN : Slice to layers and count CN for each layer.
 """
 INFO_HELP = f"""
 ============================ How to use POSCARKIT =============================
@@ -54,7 +55,7 @@ INFO_HELP = f"""
 
   4) Make Supercell  : Choose a POSCAR or the unitcell of prescribed prototype
     built by config, and then expand it to a supercell based on
-    <SupercellFactors> (such as (3x3x3), (30x30x30) for Cube; (2x2x3) for Hex).
+    <SupercellFactors> (such as (3x3x3), (30x30x30) for Cube; (2x2x2) for Hex).
 
   5) Allocate Atoms  : Shuffle based on <ShuffleSeeds> and Allocate atoms based
     on <SupercellFactors> and SOFs data of <Structure>. These works will be
@@ -68,8 +69,11 @@ INFO_HELP = f"""
 
   7) Slice to layers : Slice atoms to get all the single layers normal to
     <SliceDirections> (such as [001], [110], [111]) and plot the layers.
+    
+  8) Slice and Count CN : First slice atoms to layers, then count coordination
+    numbers for each layer separately. This combines functions 7 and 6.
 """
-CHOICES = (1, 2, 3, 4, 5, 6, 7)
+CHOICES = (1, 2, 3, 4, 5, 6, 7, 8)
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s[%(levelname)s]%(message)s")
 workdir = os.path.dirname(sys.argv[0])
@@ -111,6 +115,7 @@ class PoscarKit:
             5: self.handle_allocate,
             6: self.handle_countCN,
             7: self.handle_slice,
+            8: self.handle_slice_and_count_cn,
         }
 
     def show_help(self, **kwargs) -> None:
@@ -250,6 +255,29 @@ class PoscarKit:
         outdir = self._handle_outdir()
         miller_index = self._handle_miller()
         return slice2file(filepath=filepath, outdir=outdir, miller_index=miller_index)
+
+    def handle_slice_and_count_cn(self, filepath: str) -> list[str]:
+        """
+        处理切片和配位数统计工作流
+        
+        Args:
+            filepath: 输入POSCAR文件路径
+            
+        Returns:
+            list[str]: 各层配位数统计结果目录路径列表
+        """
+        filepath = self._handle_filepath(filepath)
+        outdir = self._handle_outdir()
+        miller_index = self._handle_miller()
+        
+        # 导入工作流模块
+        try:
+            from workflows.sliceandcountcn import slice_and_count_cn
+            result_dirs = slice_and_count_cn(filepath=filepath, outdir=outdir, miller_index=miller_index)
+            return result_dirs
+        except ImportError as e:
+            logging.error(f"Failed to import workflow module: {e}")
+            raise
 
     def handle_workflow(self, filepath: str):
         supercell = self.handle_supercell(filepath)
