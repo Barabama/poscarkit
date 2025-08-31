@@ -192,9 +192,6 @@ def generate_poscar_map(atoms: Atoms, cut_off: float, outdir: str
         # comment = f"最近邻-{symbol}-对数={pair_count}"
         # SimplePoscar.write_poscar(filepath=output, atoms=nn_atoms, comment=comment)
         
-        # 收集原子对数据
-        
-        
         # 收集CN数据到df
         cn_counts = [[f"{symbol}*-{cn}{symbol}", len(d)] for cn, d in cn_data_map.items()]
         cn_df = pd.DataFrame(data=cn_counts, columns=["CN", "Count"])

@@ -110,7 +110,7 @@ def plot_layer(layer: Atoms, basis: list[np.ndarray], title: str, filepath: str)
     # 使用投影坐标绘制层
     plt.figure(figsize=(6, 6))
     for symbol, coords in symbol_coords.items():
-        color = color_map.get(symbol, "magenta")
+        color = color_map.get(symbol, "#FF00FF")
         x, y = zip(*coords)
         plt.scatter(x, y, marker="o", s=10, color=color, alpha=1.0, label=symbol)
 

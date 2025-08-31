@@ -127,7 +127,7 @@ class Atoms:
             return  # 已经是正确格式
         inv_cell = np.linalg.inv(self.cell)
         for atom in self.atom_list:
-            atom.coord = np.dot(atom.coord, inv_cell) % 1.0 if direct \
+            atom.coord = np.dot(atom.coord, inv_cell) if direct \
                 else np.dot(atom.coord, self.cell)
         self.is_direct = direct
 
@@ -337,9 +337,11 @@ class SimplePoscar:
     def from_ase_atoms(ase_atoms: ASEAtoms) -> Atoms:
         """ASEAtoms转换为Atoms"""
         cell = np.array(ase_atoms.get_cell().copy())
+        symbols = ase_atoms.get_chemical_symbols()
+        positions = ase_atoms.get_positions()
+
         atom_list = []
-        for idx, (symbol, position) in enumerate(
-                zip(ase_atoms.get_chemical_symbols(), ase_atoms.get_positions())):
+        for idx, (symbol, position) in enumerate(zip(symbols, positions)):
             atom_list.append(Atom(index=idx, symbol=symbol, coord=copy(position)))
         atoms = Atoms(cell=cell, is_direct=False, atom_list=atom_list)
         return atoms
