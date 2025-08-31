@@ -45,13 +45,13 @@ def _get_basis(miller_index: tuple[int, int, int]) -> list[np.ndarray]:
 
 
 def _convert(atoms: Atoms, basis: np.ndarray) -> Atoms:
-    from .AtomSupercell import make_supercell
+    # from .AtomSupercell import make_supercell
     from ase.build.tools import cut
     ase_atoms = SimplePoscar.to_ase_atoms(atoms)
     a, b, c = basis
     converted = cut(ase_atoms, a, b, c)
     new_atoms = SimplePoscar.from_ase_atoms(converted)
-    new_atoms = make_supercell(atoms=new_atoms, factors=(1, 1, 1))  # 标准化
+    # new_atoms = make_supercell(atoms=new_atoms, factors=(1, 1, 1))  # 标准化
     return new_atoms
 
 
@@ -77,7 +77,8 @@ def group_by_normal(atoms: Atoms, basis: np.ndarray, precision: int = 2):
         yield proj, layer
 
 
-def plot_layer(layer: Atoms, basis: list[np.ndarray], title: str, filepath: str):
+def plot_layer(layer: Atoms, basis: list[np.ndarray], title: str, filepath: str,
+               pair_counts: dict[str, int] | None = None):
     """按基向量绘制层
 
     Args:
@@ -112,7 +113,10 @@ def plot_layer(layer: Atoms, basis: list[np.ndarray], title: str, filepath: str)
     for symbol, coords in symbol_coords.items():
         color = color_map.get(symbol, "#FF00FF")
         x, y = zip(*coords)
-        plt.scatter(x, y, marker="o", s=10, color=color, alpha=1.0, label=symbol)
+        # 准备图例标签，如果提供了pair_counts则包含在内
+        label = symbol if not (pair_counts and symbol in pair_counts) else \
+            f"{symbol}-{symbol} pairs: {pair_counts[symbol]}"
+        plt.scatter(x, y, marker="o", s=10, color=color, alpha=1.0, label=label)
 
     plt.title(title)
     plt.xlabel(f"[{' '.join(str(v) for v in basis[0])}] Coordinate (Å)")

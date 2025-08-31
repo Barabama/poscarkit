@@ -259,21 +259,21 @@ class PoscarKit:
     def handle_slice_and_count_cn(self, filepath: str) -> list[str]:
         """
         处理切片和配位数统计工作流
-        
+
         Args:
             filepath: 输入POSCAR文件路径
-            
+
         Returns:
             list[str]: 各层配位数统计结果目录路径列表
         """
         filepath = self._handle_filepath(filepath)
         outdir = self._handle_outdir()
         miller_index = self._handle_miller()
-        
+
         # 导入工作流模块
         try:
-            from workflows.sliceandcountcn import slice_and_count_cn
-            result_dirs = slice_and_count_cn(filepath=filepath, outdir=outdir, miller_index=miller_index)
+            from workflows.sliceandcountcn import slice2file_with_cn
+            result_dirs = slice2file_with_cn(filepath=filepath, outdir=outdir, miller_index=miller_index)
             return result_dirs
         except ImportError as e:
             logging.error(f"Failed to import workflow module: {e}")

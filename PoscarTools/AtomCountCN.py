@@ -4,7 +4,7 @@ import logging
 import os
 import shutil
 from collections import defaultdict
-from typing import TypedDict, Dict, List, Set, Tuple, Any, Optional
+from typing import Any, TypedDict
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -87,7 +87,7 @@ def detect_cutoff_distance(atoms: Atoms, sample_size: int = 1000) -> float:
     return float(cutoff_distance)
 
 
-def calculate_nearest_neighbors(atoms: Atoms, cut_off: float) -> Tuple[Dict[Atom, List[Atom]], int]:
+def calculate_nearest_neighbors(atoms: Atoms, cut_off: float) -> tuple[dict[Atom, list[Atom]], int]:
     """
     给定的截断距离内计算每个原子的最近邻及其配位数, 使用KDTree提高效率并减少内存使用
 
@@ -98,7 +98,7 @@ def calculate_nearest_neighbors(atoms: Atoms, cut_off: float) -> Tuple[Dict[Atom
     Returns:
         tuple: 包含原子到其邻居映射和对数的元组
     """
-    nn_map: Dict[Atom, List[Atom]] = defaultdict(list)
+    nn_map: dict[Atom, list[Atom]] = defaultdict(list)
     pair_count = 0
 
     # 获取笛卡尔坐标
@@ -130,7 +130,10 @@ def calculate_nearest_neighbors(atoms: Atoms, cut_off: float) -> Tuple[Dict[Atom
 
 
 def generate_poscar_map(atoms: Atoms, cut_off: float, outdir: str
-                        ) -> Tuple[Dict[Tuple[str, int], str], Dict[str, Any], Dict[str, List[int]], Dict[str, int]]:
+                        ) -> tuple[dict[tuple[str, int], str],
+                                   dict[str, Any],
+                                   dict[str, list[int]],
+                                   dict[str, int]]:
     """
     生成POSCAR文件映射关系
 
@@ -166,7 +169,7 @@ def generate_poscar_map(atoms: Atoms, cut_off: float, outdir: str
         # 获取每个配位数的原子并生成POSCAR文件
         # nn_atoms_set: Set[Atom] = set()
         for cn, cn_data_list in cn_data_map.items():
-            cn_atom_sets: Set[Atom] = set()
+            cn_atom_sets: set[Atom] = set()
             for cn_data in cn_data_list:
                 sets = {cn_data["center"], *cn_data["neighbors"]}
                 cn_atom_sets.update(sets)
@@ -191,7 +194,7 @@ def generate_poscar_map(atoms: Atoms, cut_off: float, outdir: str
         # output = os.path.join(outdir, f"POSCAR-d1nn-{symbol}.vasp")
         # comment = f"最近邻-{symbol}-对数={pair_count}"
         # SimplePoscar.write_poscar(filepath=output, atoms=nn_atoms, comment=comment)
-        
+
         # 收集CN数据到df
         cn_counts = [[f"{symbol}*-{cn}{symbol}", len(d)] for cn, d in cn_data_map.items()]
         cn_df = pd.DataFrame(data=cn_counts, columns=["CN", "Count"])
@@ -204,7 +207,7 @@ def generate_poscar_map(atoms: Atoms, cut_off: float, outdir: str
     return cn_file_map, symbol_df, symbol_cn_freq, symbol_pair_counts
 
 
-def merge_by_symbol(cn_file_map: Dict[Tuple[str, int], str], outdir: str):
+def merge_by_symbol(cn_file_map: dict[tuple[str, int], str], outdir: str):
     """
     按元素合并POSCAR文件
 
@@ -223,7 +226,7 @@ def merge_by_symbol(cn_file_map: Dict[Tuple[str, int], str], outdir: str):
             continue
 
         # 合并该元素的所有CN文件
-        merged_atoms: Optional[Atoms] = None
+        merged_atoms: Atoms | None = None
         for filepath in filepaths:
             add_atoms = SimplePoscar.read_poscar(filepath)
             if merged_atoms is None:
@@ -238,7 +241,7 @@ def merge_by_symbol(cn_file_map: Dict[Tuple[str, int], str], outdir: str):
             SimplePoscar.write_poscar(filepath=output, atoms=merged_atoms, comment=comment)
 
 
-def merge_by_cn(cn_file_map: Dict[Tuple[str, int], str], outdir: str):
+def merge_by_cn(cn_file_map: dict[tuple[str, int], str], outdir: str):
     """
     按配位数合并POSCAR文件
 
@@ -257,7 +260,7 @@ def merge_by_cn(cn_file_map: Dict[Tuple[str, int], str], outdir: str):
             continue
 
         # 合并该配位数的所有CN文件
-        merged_atoms: Optional[Atoms] = None
+        merged_atoms: Atoms | None = None
         for filpath in filepaths:
             add_atoms = SimplePoscar.read_poscar(filpath)
             if merged_atoms is None:
@@ -272,7 +275,8 @@ def merge_by_cn(cn_file_map: Dict[Tuple[str, int], str], outdir: str):
             SimplePoscar.write_poscar(filepath=output, atoms=merged_atoms, comment=comment)
 
 
-def plot_histogram(symbol_cn_freq: Dict[str, List[int]], outdir: str, symbol_pair_counts: Optional[Dict[str, int]] = None):
+def plot_histogram(symbol_cn_freq: dict[str, list[int]], outdir: str,
+                   pair_counts: dict[str, int] | None = None):
     """
     绘制配位数直方图
 
@@ -284,15 +288,15 @@ def plot_histogram(symbol_cn_freq: Dict[str, List[int]], outdir: str, symbol_pai
     # 绘制配位数直方图
     symbols, cn_freqs = zip(*symbol_cn_freq.items())
     colors = [color_map[s] for s in symbols]
-    
+
     # 准备图例标签，如果提供了pair_counts则包含在内
-    if symbol_pair_counts:
-        labels = [f"{symbol} (pairs: {symbol_pair_counts.get(symbol, 0)})" for symbol in symbols]
-    else:
-        labels = list(symbols)
-    
+    labels = list(symbols) if not pair_counts else \
+        [f"{s}-{s} pairs: {c}" for s, c in pair_counts.items() if s in symbols]
+
     plt.figure(figsize=(10, 6))
-    plt.hist(cn_freqs, bins=list(range(0, 12)), alpha=0.5, label=labels, color=colors, edgecolor="black")
+    # 使用align='left'使柱状图紧靠横坐标轴刻度的左侧绘制
+    plt.hist(cn_freqs, bins=list(range(0, 12)), alpha=0.5, label=labels,
+             color=colors, edgecolor="black", align='left')
     plt.legend()
     plt.title("Histogram of Coordination Numbers")
     plt.xlabel("Coordinate Number")
@@ -331,7 +335,7 @@ def countCN2files(filepath: str, outdir: str) -> str:
     os.makedirs(outdir, exist_ok=True)
 
     # 生成POSCAR映射
-    cn_file_map, symbol_df, symbol_cn_freq, symbol_pair_counts = generate_poscar_map(
+    cn_file_map, symbol_df, symbol_cn_freq, pair_counts = generate_poscar_map(
         atoms=atoms, cut_off=cut_off, outdir=outdir)
 
     # 按元素合并文件
@@ -347,6 +351,6 @@ def countCN2files(filepath: str, outdir: str) -> str:
     logging.info(f"配位数计数已保存到 {output}")
 
     # 绘制直方图
-    plot_histogram(symbol_cn_freq, outdir, symbol_pair_counts)
+    plot_histogram(symbol_cn_freq, outdir, pair_counts)
 
     return outdir
