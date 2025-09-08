@@ -51,7 +51,8 @@ class Atoms:
 
     def __str__(self) -> str:
         symbol_count = "".join(f"{s}{c}" for s, c in self.symbol_count)
-        return f"Atoms(cell={self.cell}, is_direct={self.is_direct}, atoms={symbol_count})"
+        cell_str = "".join(f"{c:.5f} " for c in self.cell.flatten())
+        return f"Atoms(cell={cell_str}, is_direct={self.is_direct}, atoms={symbol_count})"
 
     def __iter__(self):
         yield from self.atom_list
@@ -100,14 +101,14 @@ class Atoms:
         return self.copy(atom_list=sorted(self.atom_list, key=key_funcs[key], reverse=reverse))
 
     def group_atoms(self, key: str = "symbol", reverse: bool = False) -> list[tuple[str, "Atoms"]]:
-        """返回: list[(键, Atoms), ...]"""
+        """Returns: list[(键, Atoms), ...]"""
         sort_atoms = self.sort(key=key, reverse=reverse)
         return [(str(k), self.copy(atom_list=list(v)))
                 for k, v in groupby(sort_atoms, key=key_funcs[key])]
 
     @property
     def symbol_count(self) -> list[tuple[str, int]]:
-        """返回: list[(符号, 数量), ...]"""
+        """Returns: list[(符号, 数量), ...]"""
         symbol_count = list(Counter(atom.symbol for atom in self.atom_list).items())
         return sorted(symbol_count, key=lambda x: x[0])
 
@@ -139,7 +140,8 @@ class Atoms:
             if len(subatoms) <= 1:
                 continue
             symbol_count = "".join(f"{s}{c}" for s, c in subatoms.symbol_count)
-            results.append(f" {coord} 处有{len(subatoms)}个原子 {symbol_count}")
+            coord_str = "".join(f"{c:.5f}" for c in coord)
+            results.append(f"{coord_str} 处有{len(subatoms)}个原子 {symbol_count}")
         return "\n".join(results)
 
     def remove_duplicates(self, keep_old: bool = False):
@@ -213,6 +215,7 @@ class SimplePoscar:
             Atoms: 来自POSCAR的Atoms对象
         """
         with open(filepath, "r") as f:
+            logging.info(f"读取文件 {filepath}...")
             lines = f.readlines()
 
         # 读取注释行
@@ -282,11 +285,6 @@ class SimplePoscar:
             is_direct: 是否以直接坐标写入, 默认为True
             constrainted: 是否写入约束POSCAR文件, 默认为True
         """
-        # 检查重复项
-        if duplicates := atoms.duplicates:
-            logging.warning(f"发现重复原子 {duplicates}")
-            atoms.remove_duplicates()
-
         lines = []
 
         # 写入注释行
@@ -298,6 +296,11 @@ class SimplePoscar:
         # 写入晶胞向量
         for vec in atoms.cell:
             lines.append(" " + " ".join(f"{v:21.16f}" for v in vec))
+
+        # 检查重复项
+        if duplicates := atoms.duplicates:
+            logging.warning(f"发现重复原子 {duplicates}")
+            atoms.remove_duplicates()
 
         # 写入符号计数
         symbols, counts = zip(*atoms.symbol_count) if len(atoms) > 0 else ([], [])
@@ -323,6 +326,7 @@ class SimplePoscar:
             lines.append(f" {coord_str}{constr_str}{comment_str}")
 
         with open(filepath, "w") as f:
+            logging.info(f"写入文件 {filepath}...")
             f.write("\n".join(lines) + "\n")
 
     @staticmethod

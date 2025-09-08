@@ -4,11 +4,13 @@ import logging
 import os
 import shutil
 from collections import defaultdict
+from dataclasses import dataclass
 from typing import Any, TypedDict
 
 import numpy as np
 import matplotlib.pyplot as plt
 import pandas as pd
+import seaborn as sns
 from scipy.spatial import KDTree
 from scipy.spatial.distance import pdist, squareform
 from tqdm import tqdm
@@ -17,10 +19,12 @@ from .SimplePoscar import Atom, Atoms, SimplePoscar
 from .Utils import color_map
 
 
-class CNData(TypedDict):
+@dataclass
+class CNData:
+    symbols: tuple[str, str]  # 中心元素, 邻居元素
     center: Atom
     neighbors: list[Atom]
-    cn: int
+    cn: int     # 配位数
 
 
 def detect_cutoff_distance(atoms: Atoms, sample_size: int = 1000) -> float:
@@ -87,7 +91,9 @@ def detect_cutoff_distance(atoms: Atoms, sample_size: int = 1000) -> float:
     return float(cutoff_distance)
 
 
-def calculate_nearest_neighbors(atoms: Atoms, cut_off: float) -> tuple[dict[Atom, list[Atom]], int]:
+def calculate_nearest_neighbors(atoms: Atoms, cut_off: float
+                                ) -> tuple[dict[str, list[CNData]],
+                                           dict[str, dict[str, int]]]:
     """
     给定的截断距离内计算每个原子的最近邻及其配位数, 使用KDTree提高效率并减少内存使用
 
@@ -96,217 +102,244 @@ def calculate_nearest_neighbors(atoms: Atoms, cut_off: float) -> tuple[dict[Atom
         cut_off: 用于确定最近邻的截断距离
 
     Returns:
-        tuple: 包含原子到其邻居映射和对数的元组
+        tuple: 
+            - cndata_list: list[CNData], 配位数据列表
+            - pair_counts: {pair: count}, 每种原子对的数量
     """
-    nn_map: dict[Atom, list[Atom]] = defaultdict(list)
-    pair_count = 0
+    nn_map: dict[Atom, dict[str, list[Atom]]] = defaultdict(lambda: defaultdict(list))
+    pair_counts: dict[frozenset, int] = defaultdict(int)
 
-    # 获取笛卡尔坐标
-    coords = atoms.cartesian_coords
-    # 构建KDTree
-    tree = KDTree(coords)
+    coords = atoms.cartesian_coords  # 获取笛卡尔坐标
+    tree = KDTree(coords)  # 构建KDTree
+    tolerance = 0.1 * cut_off
+
     for i, coord in enumerate(tqdm(coords, desc="搜索最近邻", ncols=80)):
-        # 在rqstd + 容差范围内搜索邻居
-        neighbor_indices = tree.query_ball_point(coord, r=1.2 * cut_off)
-
-        # 计算距离
-        distances = np.linalg.norm(coords[neighbor_indices] - coord, axis=1)
-
-        # 过滤邻居
         atom_i = atoms[i]
-        tolerance = 0.1 * cut_off
-        for j, dist in zip(neighbor_indices, distances):
-            if dist < tolerance:
+        symbol_i = atom_i.symbol
+
+        # 在 cut_off + tolerance 范围内搜索邻居
+        neighbor_indices = tree.query_ball_point(coord, r=1.2 * cut_off)
+        for j in neighbor_indices:
+            if i == j:  # 跳过自己
                 continue
-            if (dist - cut_off) > tolerance:
+
+            dist = np.linalg.norm(coords[j] - coord)
+            if dist < tolerance or dist > (cut_off + tolerance):
+                # 跳过超出范围的邻居
                 continue
 
             atom_j = atoms[j]
-            nn_map[atom_i].append(atom_j)
-            if atom_j not in nn_map:
-                pair_count += 1
+            symbol_j = atom_j.symbol
 
-    return nn_map, pair_count
+            # 邻居j添加到中心i的邻居列表中
+            nn_map[atom_i][symbol_j].append(atom_j)
+
+            # 更新对数统计
+            pair_key = frozenset([symbol_i, symbol_j])
+            pair_counts[pair_key] += 1
+
+    # defaultdict转换为dict
+    cndata_list = []
+    for atom_ct, nn_data in nn_map.items():
+        s_ct = atom_ct.symbol
+        for s_nb, nn_list in nn_data.items():
+            if len(nn_list) <= 0:
+                continue
+            cndata_list.append(CNData(symbols=(s_ct, s_nb),
+                                      center=atom_ct,
+                                      neighbors=nn_list,
+                                      cn=len(nn_list)))
+    pair_counts = dict(pair_counts)
+
+    return cndata_list, pair_counts
 
 
-def generate_poscar_map(atoms: Atoms, cut_off: float, outdir: str
-                        ) -> tuple[dict[tuple[str, int], str],
-                                   dict[str, Any],
-                                   dict[str, list[int]],
-                                   dict[str, int]]:
+def generate_poscar(atoms: Atoms, cndata_list: list[CNData], outdir: str) -> dict[tuple[str, str, int], str]:
     """
-    生成POSCAR文件映射关系
+    生成每个(中心, 邻居, 配位数)的POSCAR文件
 
     Args:
-        atoms: 包含原子位置的Atoms对象
-        cut_off: 用于确定最近邻的截断距离
-        outdir: 生成文件的输出目录
+        atoms: Atoms对象
+        cndata_list: list[CNData] CNData对象列表
+        outdir: 输出目录
 
     Returns:
-        tuple: 包含以下内容的元组：
-        - (元素, 配位数) 到文件路径的映射
-        - 用于生成CSV的元素数据字典
-        - 用于直方图的元素配位数频率
-        - 元素到对数的映射
+        dict: {(symbol_ct, symbol_nb, cn): filepath, ...} 文件路径字典
     """
-    cn_file_map = {}  # map {(symbol, cn): filepath}
-    symbol_df = {}
-    symbol_cn_freq = {}
-    symbol_pair_counts = {}  # 新增：存储每个元素的pair_count
+    # 收集相关原子, 中心和邻居
+    cndata_dict = defaultdict(set)
+    for cndata in cndata_list:
+        s_ct, s_nb = cndata.symbols
+        cn = cndata.cn
+        cndata_dict[(s_ct, s_nb, cn)].add(cndata.center)
+        cndata_dict[(s_ct, s_nb, cn)].update(cndata.neighbors)
 
-    for symbol, subatoms in atoms.group_atoms():
-        # 获取最近邻
-        nn_map, pair_count = calculate_nearest_neighbors(subatoms, cut_off)
-        logging.info(f"{symbol}-{symbol} 对数 {pair_count}")
-        symbol_pair_counts[symbol] = pair_count  # 保存pair_count
+    cn_file_map = {}
+    for (s_ct, s_nb, cn), subatom_set in cndata_dict.items():
+        # 创建子结构
+        subatoms = atoms.copy(atom_list=list(subatom_set))
+        logging.info(f"{s_ct}*-{cn}{s_nb} 配位原子 {subatoms}")
 
-        # 收集CN数据映射
-        cn_data_map = defaultdict(list)
-        for center, neighbors in nn_map.items():
-            cn = len(neighbors)
-            cn_data_map[cn].append(CNData(center=center, neighbors=neighbors, cn=cn))
+        # 保存POSCAR文件
+        output = os.path.join(outdir, f"POSCAR-d1nn-{s_ct}-{s_nb}-cn{cn}.vasp")
+        comment = f"CoordinationNumber-{s_ct}-{s_nb}-{cn}"
+        SimplePoscar.write_poscar(filepath=output, atoms=subatoms, comment=comment)
+        cn_file_map[(s_ct, s_nb, cn)] = output
 
-        # 获取每个配位数的原子并生成POSCAR文件
-        # nn_atoms_set: Set[Atom] = set()
-        for cn, cn_data_list in cn_data_map.items():
-            cn_atom_sets: set[Atom] = set()
-            for cn_data in cn_data_list:
-                sets = {cn_data["center"], *cn_data["neighbors"]}
-                cn_atom_sets.update(sets)
-
-            # nn_atoms_set.update(cn_atom_sets)
-            cn_atoms = atoms.copy(atom_list=list(cn_atom_sets))
-            logging.debug(f"{symbol}*-{cn}{symbol} 配位原子 {cn_atoms}")
-
-            # 保存到文件
-            output = os.path.join(outdir, f"POSCAR-d1nn-{symbol}-{cn}.vasp")
-            comment = f"CoordinationNumber-{symbol}-{cn}"
-            SimplePoscar.write_poscar(filepath=output, atoms=cn_atoms, comment=comment)
-
-            # 添加到映射
-            cn_file_map[(symbol, cn)] = output
-
-        # # 获取最近邻原子
-        # nn_atoms = atoms.copy(atom_list=list(nn_atoms_set))
-        # logging.debug(f"最近邻原子: {nn_atoms}")
-
-        # # 保存到文件
-        # output = os.path.join(outdir, f"POSCAR-d1nn-{symbol}.vasp")
-        # comment = f"最近邻-{symbol}-对数={pair_count}"
-        # SimplePoscar.write_poscar(filepath=output, atoms=nn_atoms, comment=comment)
-
-        # 收集CN数据到df
-        cn_counts = [[f"{symbol}*-{cn}{symbol}", len(d)] for cn, d in cn_data_map.items()]
-        cn_df = pd.DataFrame(data=cn_counts, columns=["CN", "Count"])
-        symbol_df[symbol] = cn_df
-
-        # 收集CN数据到列表
-        cn_freq = [d["cn"] for ds in cn_data_map.values() for d in ds]
-        symbol_cn_freq[symbol] = cn_freq
-
-    return cn_file_map, symbol_df, symbol_cn_freq, symbol_pair_counts
+    return cn_file_map
 
 
-def merge_by_symbol(cn_file_map: dict[tuple[str, int], str], outdir: str):
-    """
-    按元素合并POSCAR文件
+def merge_by_cn(cn_file_map: dict[tuple[str, str, int], str], outdir: str):
 
-    Args:
-        cn_file_map: (元素, 配位数) 到文件路径的映射
-        outdir: 生成文件的输出目录
-    """
-    symbol_files = defaultdict(list)
-    for (symbol, cn), filepaths in cn_file_map.items():
-        symbol_files[symbol].append(filepaths)
-
-    # 为每个元素合并CN文件
-    for symbol, filepaths in symbol_files.items():
-        if len(filepaths) == 1:
-            # 如果只有一个文件, 则无需合并
-            continue
-
-        # 合并该元素的所有CN文件
-        merged_atoms: Atoms | None = None
-        for filepath in filepaths:
-            add_atoms = SimplePoscar.read_poscar(filepath)
-            if merged_atoms is None:
-                merged_atoms = add_atoms.copy()
-            else:
-                merged_atoms.extend(add_atoms)
-
-        # 将合并的原子保存到文件
-        output = os.path.join(outdir, f"POSCAR-d1nn-{symbol}.vasp")
-        comment = f"All coordination numbers for symbol {symbol}"
-        if merged_atoms is not None:
-            SimplePoscar.write_poscar(filepath=output, atoms=merged_atoms, comment=comment)
-
-
-def merge_by_cn(cn_file_map: dict[tuple[str, int], str], outdir: str):
-    """
-    按配位数合并POSCAR文件
-
-    Args:
-        cn_file_map: (元素, 配位数) 到文件路径的映射
-        outdir: 生成文件的输出目录
-    """
     cn_files = defaultdict(list)
-    for (symbol, cn), filepaths in cn_file_map.items():
-        cn_files[cn].append(filepaths)
+    for (s_ct, s_nb, cn), filepath in cn_file_map.items():
+        cn_files[cn].append(filepath)
 
-    # 为每个配位数合并POSCAR文件
     for cn, filepaths in cn_files.items():
         if len(filepaths) == 1:
-            # 如果只有一个文件, 则无需合并
+            # 单个文件无需合并
             continue
 
-        # 合并该配位数的所有CN文件
-        merged_atoms: Atoms | None = None
-        for filpath in filepaths:
-            add_atoms = SimplePoscar.read_poscar(filpath)
-            if merged_atoms is None:
-                merged_atoms = add_atoms.copy()
+        atoms_merged: Atoms | None = None
+        for filepath in filepaths:
+            atoms_add = SimplePoscar.read_poscar(filepath)
+            if atoms_merged is None:
+                atoms_merged = atoms_add
             else:
-                merged_atoms.extend(add_atoms)
-
-        # 将合并的原子保存到文件
-        output = os.path.join(outdir, f"POSCAR-d1nn-all-{cn}.vasp")
+                atoms_merged.extend(atoms_add)
+        # 保存合并后的POSCAR文件
+        output = os.path.join(outdir, f"POSCAR-d1nn-all-cn{cn}.vasp")
         comment = f"All atoms with coordination number {cn}"
-        if merged_atoms is not None:
-            SimplePoscar.write_poscar(filepath=output, atoms=merged_atoms, comment=comment)
+        if atoms_merged is not None:
+            SimplePoscar.write_poscar(filepath=output, atoms=atoms_merged, comment=comment)
 
 
-def plot_histogram(symbol_cn_freq: dict[str, list[int]], outdir: str,
-                   pair_counts: dict[str, int] | None = None):
-    """
-    绘制配位数直方图
+def save_dataframe(cndata_list: list[CNData], outdir: str):
 
-    Args:
-        symbol_cn_freq: 将元素映射到其配位数频率的字典
-        outdir: 生成文件的输出目录
-        symbol_pair_counts: 可选，将元素映射到其原子对数的字典
-    """
-    # 绘制配位数直方图
-    symbols, cn_freqs = zip(*symbol_cn_freq.items())
-    colors = [color_map[s] for s in symbols]
+    # 分组配位数据
+    cndata_dict = defaultdict(list)
+    for cndata in cndata_list:
+        s_ct, s_nb = cndata.symbols
+        cn = cndata.cn
+        cndata_dict[(s_ct, s_nb, cn)].append(cndata)
 
-    # 准备图例标签，如果提供了pair_counts则包含在内
-    labels = list(symbols) if not pair_counts else \
-        [f"{s}-{s} pairs: {c}" for s, c in pair_counts.items() if s in symbols]
+    # 配位数据保存CSV文件
+    data = defaultdict(list)
+    for (s_ct, s_nb, cn), cndata_list in cndata_dict.items():
+        data["CN"].append(f"{s_ct}*-{cn}{s_nb}")
+        data["Count"].append(len(cndata_list))
 
-    plt.figure(figsize=(10, 6))
-    # 使用align='left'使柱状图紧靠横坐标轴刻度的左侧绘制
-    plt.hist(cn_freqs, bins=list(range(0, 12)), alpha=0.5, label=labels,
-             color=colors, edgecolor="black", align='left')
-    plt.legend()
-    plt.title("Histogram of Coordination Numbers")
-    plt.xlabel("Coordinate Number")
-    plt.ylabel("Frequency")
-    plt.xticks(range(0, 12))  # Define ticks
-    plt.grid(True, linestyle='--', alpha=0.7)
-    output = os.path.join(outdir, "cn-histogram.png")
+    output = os.path.join(outdir, "cn-count.csv")
+    df = pd.DataFrame(data)
+    df.to_csv(output, index=False)
+    logging.info(f"配位数据已保存到 {output}")
+
+
+def plot_histogram_faceted(cndata_list: list[CNData], pair_counts: dict[frozenset, int], outdir: str):
+
+    symbols = sorted(list(set(d.symbols[0] for d in cndata_list)))
+    n = len(symbols)
+
+    # 分组配位数据
+    cn_stats = defaultdict(list)
+    for cndata in cndata_list:
+        cn_stats[cndata.symbols].append(cndata.cn)
+
+    hatch_patterns = ["/", "\\", "|", "-", "+", "x", "o", "O", ".", "*"]
+    symbol2hatch = {symbol: hatch_patterns[i % len(hatch_patterns)] for i, symbol in enumerate(symbols)}
+
+    # n x n 子图网格
+    fig, axes = plt.subplots(n, n, figsize=(4*n, 4*n), sharex=True, sharey=True)
+    if n == 1:
+        axes = np.array([axes])  # 兼容单图
+
+    for i, s_ct in enumerate(symbols):
+        for j, s_nb in enumerate(symbols):
+            ax = axes[i, j]
+            key = (s_ct, s_nb)
+            data = cn_stats.get(key, [])
+            if len(data) <= 0:
+                continue
+
+            ax.hist(data, bins=range(0, max(data) + 1), alpha=0.7,
+                    edgecolor="black", hatch=symbol2hatch[s_nb], align="left")
+            pairs = pair_counts.get(frozenset([s_ct, s_nb]), 0)
+            ax.text(0.95, 0.95, f"{s_ct}-{s_nb} pairs: {pairs}", transform=ax.transAxes,
+                    ha="right", va="top", bbox=dict(boxstyle="round", facecolor="white", alpha=0.8))
+
+            if i == 0:  # 第一行设置列标题
+                ax.set_title(f"Neighbor: {s_nb}")
+            if j == 0:  # 第一列设置行标题
+                ax.set_ylabel(f"Center: {s_ct}")
+
+            ax.set_xlim(0, 12)  # 最大配位数 12
+            ax.grid(True, alpha=0.3)
+
+    # 调整布局并保存
+    fig.suptitle("Coordination Number Distribution", fontsize=16)
+    plt.tight_layout()
+    output = os.path.join(outdir, "cn-histogram-faceted.png")
     plt.savefig(output)
     plt.close()
-    logging.info(f"配位数直方图已保存到 {output}")
+    logging.info(f"配位数分面直方图已保存到 {output}")
+
+
+def plot_histogram_stacked(cndata_list: list[CNData], pair_counts: dict[frozenset, int], outdir: str):
+    # 统计配位数据
+    cn_stats = defaultdict(lambda: defaultdict(list))
+    for cndata in cndata_list:
+        s_ct, s_nb = cndata.symbols
+        cn_stats[s_ct][s_nb].append(cndata.cn)
+
+    # 每个中心绘制堆叠图
+    for s_ct, data_nb in cn_stats.items():
+        s_nb_list = list(data_nb.keys())
+        data = [data_nb[s_nb] for s_nb in s_nb_list]
+        cn_max = max(max(d) for d in data) if data else 12
+        pairs = [f"{s_ct}-{s_nb} pairs: {pair_counts.get(frozenset([s_ct, s_nb]), 0)}"
+                 for s_nb in s_nb_list]
+        hatch_patterns = ["/", "\\", "|", "-", "+", "x", "o", "O", ".", "*"]
+        hatches = [hatch_patterns[i % len(hatch_patterns)] for i in range(len(s_nb_list))]
+
+        plt.figure(figsize=(10, 6))
+        plt.hist(data, bins=range(0, cn_max + 1), label=pairs, alpha=0.7,
+                 edgecolor="black", hatch=hatches, stacked=True, align="left")
+        plt.title(f"Coordination Number of Center {s_ct}")
+        plt.xlabel("Coordination Number")
+        plt.ylabel("Frequency")
+        plt.legend(title="Neighbor")
+        plt.grid(True, alpha=0.3)
+        plt.xticks(range(0, cn_max + 1))
+
+        output = os.path.join(outdir, f"cn-histogram-{s_ct}.png")
+        plt.savefig(output, dpi=300, bbox_inches='tight')
+        plt.close()
+        logging.info(f"配位数堆叠直方图已保存到 {output}")
+
+
+def plot_heatmap(cndata_list: list[CNData], outdir: str):
+
+    # 分组配位数据
+    cndata_dict = defaultdict(list)
+    for cndata in cndata_list:
+        cndata_dict[cndata.symbols].append(cndata)
+
+    cn_avg = defaultdict(dict)
+    for (s_ct, s_nb), cndata_list in cndata_dict.items():
+        cn_avg[s_ct][s_nb] = np.mean([d.cn for d in cndata_list])
+
+    df = pd.DataFrame(cn_avg).fillna(0)  # center 为行, neighbor 为列
+
+    plt.figure(figsize=(8, 8))
+    sns.heatmap(df, annot=True, fmt=".1f", cmap="YlGnBu", cbar_kws={"label": "Average CN"})
+    plt.title("Average Coordination Number Heatmap")
+    plt.xlabel("Center Atom")
+    plt.ylabel("Neighbor Atom")
+    plt.tight_layout()
+    output = os.path.join(outdir, "cn-heatmap.png")
+    plt.savefig(output, dpi=300, bbox_inches='tight')
+    plt.close()
+    logging.info(f"配位热力图已保存到 {output}")
 
 
 def countCN2files(filepath: str, outdir: str) -> str:
@@ -320,6 +353,12 @@ def countCN2files(filepath: str, outdir: str) -> str:
     Returns:
         包含输出文件的目录路径
     """
+    # 创建输出目录
+    outdir = os.path.join(outdir, f"{os.path.splitext(os.path.basename(filepath))[0]}-cn")
+    if os.path.exists(outdir):
+        shutil.rmtree(outdir)
+    os.makedirs(outdir, exist_ok=True)
+
     # 读取POSCAR
     atoms = SimplePoscar.read_poscar(filepath)
     logging.debug(f"原子 {atoms}")
@@ -328,29 +367,19 @@ def countCN2files(filepath: str, outdir: str) -> str:
     cut_off = detect_cutoff_distance(atoms)
     logging.info(f"自动检测到的截断距离 {cut_off:.3f} Å")
 
-    # 创建输出目录
-    outdir = os.path.join(outdir, f"{os.path.splitext(os.path.basename(filepath))[0]}-cn")
-    if os.path.exists(outdir):
-        shutil.rmtree(outdir)
-    os.makedirs(outdir, exist_ok=True)
+    # 搜索最近邻
+    cndata_list, pair_counts = calculate_nearest_neighbors(atoms=atoms, cut_off=cut_off)
 
-    # 生成POSCAR映射
-    cn_file_map, symbol_df, symbol_cn_freq, pair_counts = generate_poscar_map(
-        atoms=atoms, cut_off=cut_off, outdir=outdir)
-
-    # 按元素合并文件
-    merge_by_symbol(cn_file_map=cn_file_map, outdir=outdir)
-
-    # 按配位数合并文件
+    # 生成POSCAR
+    cn_file_map = generate_poscar(atoms=atoms, cndata_list=cndata_list, outdir=outdir)
     merge_by_cn(cn_file_map=cn_file_map, outdir=outdir)
 
     # 将CN数据写入CSV
-    all_df = pd.concat(symbol_df.values(), ignore_index=True)
-    output = os.path.join(outdir, "cn-counts.csv")
-    all_df.to_csv(output, index=False)
-    logging.info(f"配位数计数已保存到 {output}")
+    save_dataframe(cndata_list=cndata_list, outdir=outdir)
 
     # 绘制直方图
-    plot_histogram(symbol_cn_freq, outdir, pair_counts)
+    plot_histogram_faceted(cndata_list=cndata_list, pair_counts=pair_counts, outdir=outdir)
+    plot_histogram_stacked(cndata_list=cndata_list, pair_counts=pair_counts, outdir=outdir)
+    plot_heatmap(cndata_list=cndata_list, outdir=outdir)
 
     return outdir
