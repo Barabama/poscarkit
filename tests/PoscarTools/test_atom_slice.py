@@ -3,7 +3,7 @@ import numpy as np
 import os
 import tempfile
 import shutil
-from PoscarTools.AtomSlice import _normalize, _get_basis, group_by_normal, slice2file
+from PoscarTools.AtomSlice import normalize, get_basis, group_by_normal, slice2file
 from PoscarTools.SimplePoscar import Atom, Atoms
 
 
@@ -52,7 +52,7 @@ Direct
     def test_normalize(self):
         """测试向量归一化函数"""
         vector = np.array([3.0, 4.0, 0.0])
-        normalized = _normalize(vector)
+        normalized = normalize(vector)
         
         # 检查归一化后的长度是否为1
         self.assertAlmostEqual(np.linalg.norm(normalized), 1.0)
@@ -64,29 +64,29 @@ Direct
     def test_get_basis_standard_miller(self):
         """测试标准晶面指数的基向量获取"""
         # 测试 (0,0,1) 晶面
-        basis = _get_basis((0, 0, 1))
+        basis = get_basis((0, 0, 1))
         self.assertEqual(len(basis), 3)
         np.testing.assert_array_equal(basis[2], np.array([0, 0, 1]))
         
         # 测试 (1,1,0) 晶面
-        basis = _get_basis((1, 1, 0))
+        basis = get_basis((1, 1, 0))
         self.assertEqual(len(basis), 3)
         np.testing.assert_array_equal(basis[2], np.array([1, 1, 0]))
         
         # 测试 (1,1,1) 晶面
-        basis = _get_basis((1, 1, 1))
+        basis = get_basis((1, 1, 1))
         self.assertEqual(len(basis), 3)
         np.testing.assert_array_equal(basis[2], np.array([1, 1, 1]))
 
     def test_get_basis_custom_miller(self):
         """测试自定义晶面指数的基向量获取"""
         # 测试 (1,0,0) 晶面
-        basis = _get_basis((1, 0, 0))
+        basis = get_basis((1, 0, 0))
         self.assertEqual(len(basis), 3)
         np.testing.assert_array_equal(basis[2], np.array([1, 0, 0]))
         
         # 测试 (2,1,0) 晶面
-        basis = _get_basis((2, 1, 0))
+        basis = get_basis((2, 1, 0))
         self.assertEqual(len(basis), 3)
         np.testing.assert_array_equal(basis[2], np.array([2, 1, 0]))
 

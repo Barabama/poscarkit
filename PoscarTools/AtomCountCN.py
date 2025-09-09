@@ -18,6 +18,8 @@ from tqdm import tqdm
 from .SimplePoscar import Atom, Atoms, SimplePoscar
 from .Utils import color_map
 
+_hatch_patterns = ["//", "\\\\", "||", "--", "++", "xx", "oo", "O)", "..", "**"]
+
 
 @dataclass
 class CNData:
@@ -245,8 +247,7 @@ def plot_histogram_faceted(cndata_list: list[CNData], pair_counts: dict[frozense
     for cndata in cndata_list:
         cn_stats[cndata.symbols].append(cndata.cn)
 
-    hatch_patterns = ["/", "\\", "|", "-", "+", "x", "o", "O", ".", "*"]
-    symbol2hatch = {symbol: hatch_patterns[i % len(hatch_patterns)] for i, symbol in enumerate(symbols)}
+    symbol2hatch = {symbol: _hatch_patterns[i % len(_hatch_patterns)] for i, symbol in enumerate(symbols)}
 
     # n x n 子图网格
     fig, axes = plt.subplots(n, n, figsize=(4*n, 4*n), sharex=True, sharey=True)
@@ -298,8 +299,8 @@ def plot_histogram_stacked(cndata_list: list[CNData], pair_counts: dict[frozense
         cn_max = max(max(d) for d in data) if data else 12
         pairs = [f"{s_ct}-{s_nb} pairs: {pair_counts.get(frozenset([s_ct, s_nb]), 0)}"
                  for s_nb in s_nb_list]
-        hatch_patterns = ["/", "\\", "|", "-", "+", "x", "o", "O", ".", "*"]
-        hatches = [hatch_patterns[i % len(hatch_patterns)] for i in range(len(s_nb_list))]
+
+        hatches = [_hatch_patterns[i % len(_hatch_patterns)] for i in range(len(s_nb_list))]
 
         plt.figure(figsize=(10, 6))
         plt.hist(data, bins=range(0, cn_max + 1), label=pairs, alpha=0.7,

@@ -20,11 +20,11 @@ basis_map = {
 }
 
 
-def _normalize(vector: np.ndarray) -> np.ndarray:
+def normalize(vector: np.ndarray) -> np.ndarray:
     return vector / np.linalg.norm(vector)
 
 
-def _get_basis(miller_index: tuple[int, int, int]) -> list[np.ndarray]:
+def get_basis(miller_index: tuple[int, int, int]) -> list[np.ndarray]:
     """通过晶面指数找到基向量
 
     Args:
@@ -44,7 +44,7 @@ def _get_basis(miller_index: tuple[int, int, int]) -> list[np.ndarray]:
     return basis
 
 
-def _convert(atoms: Atoms, basis: np.ndarray) -> Atoms:
+def convert(atoms: Atoms, basis: np.ndarray) -> Atoms:
     # from .AtomSupercell import make_supercell
     from ase.build.tools import cut
     ase_atoms = SimplePoscar.to_ase_atoms(atoms)
@@ -90,7 +90,7 @@ def plot_layer(layer: Atoms, basis: list[np.ndarray], title: str, filepath: str,
     # 计算在法线上的投影以获得投影坐标
     layer = layer.sort()
     coords = layer.cartesian_coords
-    b1, b2, n = [_normalize(v) for v in layer.cell]
+    b1, b2, n = [normalize(v) for v in layer.cell]
     n_projs = np.dot(coords, n)  # 在法线上的投影
     p_projs = coords - np.outer(n_projs, n)  # 在平面上的投影
     # xs = np.dot(p_projs, b1)  # 在b1上的分量
@@ -148,12 +148,12 @@ def slice2file(filepath: str, outdir: str, miller_index: tuple[int, int, int]) -
     logging.debug(atoms)
 
     # 获取基向量, 将晶面指数视为法线
-    basis = _get_basis(miller_index)
+    basis = get_basis(miller_index)
     logging.info(f"基向量: {basis}")
 
     # 沿基向量转换原子
-    basis_n = np.array([_normalize(v) for v in basis])
-    new_atoms = _convert(atoms, basis_n)
+    basis_n = np.array([normalize(v) for v in basis])
+    new_atoms = convert(atoms, basis_n)
     output = os.path.join(outdir, f"POSCAR-convert({miller_index_str})-{symbols_str}.vasp")
     comment = f"Convert({miller_index_str})-{symbols_str}"
     SimplePoscar.write_poscar(filepath=output, atoms=new_atoms, comment=comment)

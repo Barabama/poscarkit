@@ -42,12 +42,12 @@ def slice2file_with_cn(filepath: str, outdir: str, miller_index: tuple[int, int,
     logging.debug(atoms)
 
     # 获取基向量, 将晶面指数视为法线
-    basis = _get_basis(miller_index)
+    basis = get_basis(miller_index)
     logging.info(f"基向量: {basis}")
 
     # 沿基向量转换原子
-    basis_n = np.array([_normalize(v) for v in basis])
-    new_atoms = _convert(atoms, basis_n)
+    basis_n = np.array([normalize(v) for v in basis])
+    new_atoms = convert(atoms, basis_n)
     output = os.path.join(outdir, f"POSCAR-convert({miller_index_str})-{symbols_str}.vasp")
     comment = f"Convert({miller_index_str})-{symbols_str}"
     SimplePoscar.write_poscar(filepath=output, atoms=new_atoms, comment=comment)

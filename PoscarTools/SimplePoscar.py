@@ -140,8 +140,7 @@ class Atoms:
             if len(subatoms) <= 1:
                 continue
             symbol_count = "".join(f"{s}{c}" for s, c in subatoms.symbol_count)
-            coord_str = "".join(f"{c:.5f}" for c in coord)
-            results.append(f"{coord_str} 处有{len(subatoms)}个原子 {symbol_count}")
+            results.append(f"{coord} 处有{len(subatoms)}个原子 {symbol_count}")
         return "\n".join(results)
 
     def remove_duplicates(self, keep_old: bool = False):
