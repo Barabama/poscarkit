@@ -14,7 +14,8 @@ from PoscarTools.AtomSupercell import unitcell2file, supercell2file
 from PoscarTools.AtomAllocate import allocate2files
 from PoscarTools.AtomCountCN import countCN2files
 from PoscarTools.AtomSlice import slice2file
-
+from workflows.modeling import run_modeling
+from workflows.sliceandcountcn import slice2file_with_cn
 
 INFO_EXEC = f"""
 ============================= POSCARKIT (v0.8.1) ==============================
@@ -29,7 +30,7 @@ INFO_CHOICES = """
 ========================== Options with instructions ==========================
   1) Help            : Instructions of this toolkit.
   2) Read config     : from <config.toml> as changing <Structure> or <SOFs>.
-  3) Run Workflow    : First [Make Supercell] and then [Allocate Atoms].
+  3) Run Modeling    : First [Make Supercell] and then [Allocate Atoms].
   4) Make Supercell  : based on <SupercellFactors> along the basis vectors.
   5) Allocate Atoms  : based on <SupercellFactors> <Structure> <ShuffleSeeds>.
   6) Count CN        : CN(Coordinate Numbers) and NN(Nearest Neighbors).
@@ -50,7 +51,7 @@ INFO_HELP = f"""
     <SliceDirection> ---- Direction of slicing.
     <StructureInfo> ----- include Structure information and SOFs data.
 
-  3) Run Workflow    : Workflow is set to do First [Make Supercell] and then
+  3) Run Modeling    : Modeling is set to do First [Make Supercell] and then
     [Allocate Atoms]. See 4) and 5) for more details.
 
   4) Make Supercell  : Choose a POSCAR or the unitcell of prescribed prototype
@@ -110,7 +111,7 @@ class PoscarKit:
         self._func_map = {
             1: self.show_help,
             2: self.read_config,
-            3: self.handle_workflow,
+            3: self.handle_modeling,
             4: self.handle_supercell,
             5: self.handle_allocate,
             6: self.handle_countCN,
@@ -271,17 +272,22 @@ class PoscarKit:
         miller_index = self._handle_miller()
 
         # 导入工作流模块
-        try:
-            from workflows.sliceandcountcn import slice2file_with_cn
-            result_dirs = slice2file_with_cn(filepath=filepath, outdir=outdir, miller_index=miller_index)
-            return result_dirs
-        except ImportError as e:
-            logging.error(f"Failed to import workflow module: {e}")
-            raise
+        result_dirs = slice2file_with_cn(filepath=filepath, outdir=outdir, miller_index=miller_index)
+        return result_dirs
 
-    def handle_workflow(self, filepath: str):
-        supercell = self.handle_supercell(filepath)
-        allocateds = self.handle_allocate(supercell)
+    def handle_modeling(self, filepath: str):
+        """处理建模工作流：首先生成超胞，然后分配原子"""
+        filepath = self._handle_filepath(filepath=filepath, force=False)
+        outdir = self._handle_outdir()
+        factors = self._handle_factors()
+        struct_info = self._handle_structure(force=False)
+        seeds = self._handle_seeds()
+
+        # 导入建模工作流模块
+        allocateds = run_modeling(filepath=filepath, outdir=outdir,
+                                  supercell_factors=factors,
+                                  struct_info=struct_info,
+                                  shuffle_seeds=seeds)
         return allocateds
 
     def run(self, filepath: str = "", option: int = 0):

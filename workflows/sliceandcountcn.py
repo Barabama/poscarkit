@@ -9,9 +9,8 @@ import pandas as pd
 from matplotlib import pyplot as plt
 from tqdm import tqdm
 
-from PoscarTools.AtomSlice import _normalize, _convert, _get_basis, group_by_normal, plot_layer
-from PoscarTools.AtomCountCN import detect_cutoff_distance, generate_poscar_map, \
-    merge_by_cn, merge_by_symbol, plot_histogram
+from PoscarTools.AtomSlice import *
+from PoscarTools.AtomCountCN import *
 from PoscarTools.SimplePoscar import SimplePoscar
 
 
@@ -59,6 +58,8 @@ def slice2file_with_cn(filepath: str, outdir: str, miller_index: tuple[int, int,
     num_layers = len(layers)
     logging.info(f"找到层数 {num_layers}")
 
+    result_dirs = []
+
     # 将层保存为POSCAR并绘制层
     l = len(str(num_layers))
     for i, (proj, layer) in enumerate(tqdm(layers, desc="处理原子层",
@@ -78,36 +79,33 @@ def slice2file_with_cn(filepath: str, outdir: str, miller_index: tuple[int, int,
         if os.path.exists(outd):
             shutil.rmtree(outd)
         os.makedirs(outd, exist_ok=True)
+        result_dirs.append(outd)
 
         # 检测截断距离
-        cut_off = detect_cutoff_distance(new_atoms)
+        cut_off = detect_cutoff_distance(layer)
         logging.info(f"自动检测到的截断距离 {cut_off:.3f} Å")
 
-        # 生成POSCAR映射
-        cn_file_map, symbol_df, symbol_cn_freq, pair_counts = generate_poscar_map(
-            atoms=layer, cut_off=cut_off, outdir=outd)
+        # 搜索最近邻
+        cndata_list, pair_counts = calculate_nearest_neighbors(atoms=layer, cut_off=cut_off)
 
-        # 按元素合并文件
-        merge_by_symbol(cn_file_map=cn_file_map, outdir=outd)
-
-        # 按配位数合并文件
+        # 生成POSCAR
+        cn_file_map = generate_poscar(atoms=layer, cndata_list=cndata_list, outdir=outd)
         merge_by_cn(cn_file_map=cn_file_map, outdir=outd)
 
         # 将CN数据写入CSV
-        all_df = pd.concat(symbol_df.values(), ignore_index=True)
-        output = os.path.join(outd, "cn-counts.csv")
-        all_df.to_csv(output, index=False)
-        logging.info(f"配位数计数已保存到 {output}")
+        save_dataframe(cndata_list=cndata_list, outdir=outd)
 
         # 绘制直方图
-        plot_histogram(symbol_cn_freq=symbol_cn_freq, outdir=outd, pair_counts=pair_counts)
+        plot_histogram_faceted(cndata_list=cndata_list, pair_counts=pair_counts, outdir=outd)
+        plot_histogram_stacked(cndata_list=cndata_list, pair_counts=pair_counts, outdir=outd)
+        plot_heatmap(cndata_list=cndata_list, outdir=outd)
 
         # 按基向量绘制层
         imgname = os.path.join(outdir, f"{comment}.png")
         plot_layer(layer=layer, basis=basis, title=comment, filepath=imgname, pair_counts=pair_counts)
 
     logging.info(f"结果已保存在 {outdir}")
-    return outdir
+    return result_dirs
 
 
 def merge_layer_cn_results(slice_outdir: str, cn_result_dirs: list[str]) -> str:
