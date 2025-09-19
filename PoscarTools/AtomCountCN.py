@@ -94,8 +94,7 @@ def detect_cutoff_distance(atoms: Atoms, sample_size: int = 1000) -> float:
 
 
 def calculate_nearest_neighbors(atoms: Atoms, cut_off: float
-                                ) -> tuple[dict[str, list[CNData]],
-                                           dict[str, dict[str, int]]]:
+                                ) -> tuple[list[CNData], dict[frozenset, int]]:
     """
     给定的截断距离内计算每个原子的最近邻及其配位数, 使用KDTree提高效率并减少内存使用
 
