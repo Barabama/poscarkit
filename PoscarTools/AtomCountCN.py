@@ -223,6 +223,7 @@ def save_dataframe(cndata_list: list[CNData], outdir: str):
         s_ct, s_nb = cndata.symbols
         cn = cndata.cn
         cndata_dict[(s_ct, s_nb, cn)].append(cndata)
+    cndata_dict = {k: v for k, v in sorted(cndata_dict.items(), key=lambda x: x[0])}
 
     # 配位数据保存CSV文件
     data = defaultdict(list)
@@ -290,9 +291,11 @@ def plot_histogram_stacked(cndata_list: list[CNData], pair_counts: dict[frozense
     for cndata in cndata_list:
         s_ct, s_nb = cndata.symbols
         cn_stats[s_ct][s_nb].append(cndata.cn)
+    cn_stats = {k: v for k, v in sorted(cn_stats.items(), key=lambda x: x[0])}
 
     # 每个中心绘制堆叠图
     for s_ct, data_nb in cn_stats.items():
+        data_nb = {k: v for k, v in sorted(data_nb.items(), key=lambda x: x[0])}
         s_nb_list = list(data_nb.keys())
         data = [data_nb[s_nb] for s_nb in s_nb_list]
         cn_max = max(max(d) for d in data) if data else 12
@@ -323,6 +326,7 @@ def plot_heatmap(cndata_list: list[CNData], outdir: str):
     cndata_dict = defaultdict(list)
     for cndata in cndata_list:
         cndata_dict[cndata.symbols].append(cndata)
+    cndata_dict = {k: v for k, v in sorted(cndata_dict.items(), key=lambda x: x[0])}
 
     cn_avg = defaultdict(dict)
     for (s_ct, s_nb), cndata_list in cndata_dict.items():

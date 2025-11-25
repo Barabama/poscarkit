@@ -154,9 +154,12 @@ upx --version
 # 安装Nuitka
 cd poscarkit
 pip install nuitka
-nuitka poscarkit.py --standalone --onefile --output-dir=dist --remove-output `
---windows-icon-from-ico="icon.ico" `
---enable-plugin=upx --upx-binary="D:\Programs\upx-5.0.2-win64\upx.exe" `
---enable-plugin=tk-inter `
---follow-imports `
+
+nuitka --standalone --onefile --output-dir=dist --jobs=4 --lto=yes `
+--enable-plugin=tk-inter --enable-plugin=no-qt --windows-console-mode=disable `
+--windows-icon-from-ico="icon.ico" --onefile-no-compression `
+--enable-plugin=upx --upx-binary="D:\\Programs\\upx-5.0.2-win64\\upx.exe" `
+--nofollow-import-to=matplotlib.tests --nofollow-import-to=pandas.tests `
+--nofollow-import-to=pytest --nofollow-import-to=setuptools.tests `
+poscarkit.py
 ```

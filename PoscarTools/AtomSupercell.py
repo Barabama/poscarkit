@@ -63,9 +63,11 @@ def make_supercell(atoms: Atoms, factors: tuple[int, int, int]) -> Atoms:
     return new_atoms
 
 
-def unitcell2file(struct_info: dict[str, dict], outdir: str) -> str:
+def unitcell2file(struct_info: dict[str, dict] | None, outdir: str) -> str:
     """单胞结构信息保存到POSCAR文件"""
     # 获取晶胞信息
+    if struct_info is None:
+        raise ValueError("不存在的单胞结构信息")
     if "cell" not in struct_info:
         raise ValueError(f"cell不在结构信息 {struct_info}")
     cell = np.array(struct_info.pop("cell"))

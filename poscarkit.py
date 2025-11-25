@@ -18,7 +18,7 @@ from workflows.modeling import run_modeling
 from workflows.sliceandcountcn import slice2file_with_cn
 
 INFO_EXEC = f"""
-============================= POSCARKIT (v0.8.2) ==============================
+============================= POSCARKIT (v0.8.3) ==============================
 This toolkit has many Functions such as Making Supercell, Allocating atoms
 based on SOFs, Counting Coordinate Numbers between same type atoms, Slicng,
 developed by FZU-MCMF, main developers: Gao Min-Liang, Wu Bo*, Qiao Yang,
@@ -333,3 +333,16 @@ if __name__ == "__main__":
         traceback.print_exc()
         input("Press Enter to exit...")
         sys.exit(1)
+
+
+# 编译指令
+# nuitka --standalone --onefile --output-dir=dist --jobs=4 --lto=yes `
+# --enable-plugin=tk-inter --enable-plugin=no-qt --windows-console-mode=disable `
+# --windows-icon-from-ico="icon.ico" --onefile-no-compression `
+# --enable-plugin=upx --upx-binary="D:\\Programs\\upx-5.0.2-win64\\upx.exe" `
+# --nofollow-import-to=matplotlib.tests --nofollow-import-to=pandas.tests `
+# --nofollow-import-to=pytest --nofollow-import-to=setuptools.tests `
+# --output-filename=poscarkit-0.8.3.exe `
+# --file-version=0.8.3 `
+# --copyright="(C) 2025 MCMF, Fuzhou University" `
+# poscarkit.py
