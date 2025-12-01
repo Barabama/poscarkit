@@ -1,0 +1,16 @@
+{
+    "iterations": 1000000,
+    "sublattice_mode": "split",
+    "structure": {
+        "file": "3c-Cu.vasp",
+        "supercell": [2, 2, 2]
+    },
+    "composition": [
+        {
+            "sites": "Cu",
+            "Co": 10,
+            "Ni": 11,
+            "V": 3
+        }
+    ]
+}

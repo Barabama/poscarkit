@@ -137,8 +137,11 @@ dmypy.json
 # Cython debug symbols
 cython_debug/
 
+# IDEs
 .vscode/
 .idea/
+
+# Temporary files
 *temp*
 data/
 out*/

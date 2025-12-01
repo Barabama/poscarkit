@@ -1,12 +1,51 @@
 # POSCARKIT
 
-## 介绍
+## Introduction
 
 POSCARKIT 是一个用于处理 VASP POSCAR 文件的工具，主要用于基于原子占位的建模。
+POSCARKIT is a tool for modeling structure POSCAR files, based on Sublattice Occupied Fractions (SOFs).
 
-## 使用说明
+## Features
 
-以下是对于可执行文件的使用说明：
+- Structure modeling for ordered framework materials.
+- Supercell generation along the basis vectors.
+- Atomic allocation based on Sublattice occupied fractions (SOFs).
+- Count Coordinate Numbers (CN) of all pairs of atoms in the supercell and calculate the Nearest Neighbors (NN).
+- Slice structure to layers normal to a Miller Index.
+
+## Usage
+
+### Run executable
+
+```shell
+# Run it directly
+POSCARKIT.exe
+
+# Run it with a POSCAR file
+POSCARKIT.exe <POSCAR.vasp>
+
+# Run it with parameters
+POSCARKIT.exe -f <POSCAR.vasp> -c <choice> -i <input.toml>
+```
+
+### Run from source
+
+```shell
+# Clone the repository
+git clone https://gitee.com/wubo-movers/poscarkit.git
+# Build
+pip install -e .
+# Run
+python poscarkit.py
+```
+
+### Configuration
+
+
+
+======================
+
+
 
 ### 1. 打开方式
 
