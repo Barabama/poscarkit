@@ -7,7 +7,7 @@ import numpy as np
 from ase.build import make_supercell as ase_make_supercell
 
 from src.modeling.base import Atom, Struct, SimplePoscar
-
+from src.utils.progress import progress
 
 def _clean_matrix(matrix: np.ndarray, eps: float = 1e-12) -> np.ndarray:
     """Clean small values in a matrix by setting them to zero.
@@ -53,7 +53,7 @@ def make_supercell(struct: Struct, factors: tuple[int, int, int]) -> Struct:
     matrix = np.array([[n, 0, 0], [0, m, 0], [0, 0, p]])
     new_cell = _clean_matrix(np.dot(struct.cell, matrix))
     new_struct = Struct(cell=new_cell, is_direct=True)
-    for idx, coord in enumerate(super_coords):
+    for idx, coord in progress(enumerate(super_coords), total=len(super_coords)):
         atom = struct[idx // (n * m * p)]
         note = atom.note if atom.note else atom.symbol
         new_atom = Atom(

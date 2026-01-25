@@ -14,6 +14,8 @@ from typing import Any
 import numpy as np
 from ase import Atoms
 
+from src.utils.progress import progress
+
 
 @dataclass
 class Atom:
@@ -75,9 +77,7 @@ class Struct:
     def __str__(self) -> str:
         symbol_count = "".join(f"{s}{c}" for s, c in self.symbol_count)
         cell_str = "".join(f"{c:.5f} " for c in self.cell.flatten())
-        return (
-            f"Struct(cell={cell_str}, is_direct={self.is_direct}, atoms={symbol_count})"
-        )
+        return f"Struct(cell={cell_str}, is_direct={self.is_direct}, atoms={symbol_count})"
 
     def __iter__(self):
         yield from self.atom_list
@@ -125,9 +125,7 @@ class Struct:
 
     def sort(self, key: str = "symbol", reverse: bool = False) -> "Struct":
         if key not in self.key_funcs:
-            raise ValueError(
-                f"Invaild key: {key}. Valids are {list(self.key_funcs.keys())}."
-            )
+            raise ValueError(f"Invaild key: {key}. Valids are {list(self.key_funcs.keys())}.")
         # sorted_atoms = sorted(self.atom_list, key=self.key_funcs[key], reverse=reverse)
         # return self.copy(atom_list=sorted_atoms)
         self.atom_list.sort(key=self.key_funcs[key], reverse=reverse)
@@ -172,11 +170,11 @@ class Struct:
         self.is_direct = direct
         inv_cell = np.linalg.inv(self.cell)
         coords = np.dot(coords, inv_cell) if direct else np.dot(coords, self.cell)
-        for i, coord in enumerate(coords):
+        for i, coord in progress(enumerate(coords), len(coords), desc="Switching Coordinates"):
             self.atom_list[i].coord = coord
         return coords
 
-    def remove_duplicates(self, keep_new: bool = True):
+    def remove_duplicates(self, keep_new: bool = False):
         """Remove duplicate atoms."""
         coords = self.get_coords(direct=False)
         # Round coordinates to avoid floating point precision issues
@@ -185,7 +183,11 @@ class Struct:
         coords_unique, indices = np.unique(coords_rounded, axis=0, return_index=True)
         # Keep last occurrences instead of firse
         if keep_new:
-            for i, coord in enumerate(coords_unique):
+            for i, coord in progress(
+                enumerate(coords_unique),
+                len(coords_unique),
+                desc="Removing Duplicates",
+            ):
                 matches = np.all(coords_rounded == coord, axis=1)
                 indices[i] = np.where(matches)[0][-1]
         self.atom_list = [self.atom_list[i] for i in indices]
@@ -199,23 +201,27 @@ class Struct:
         if not np.array_equal(cell1, cell2):
             return False, f"cells are different: {cell1} != {cell2}"
 
-        # Compare symbol count
-        sc1, sc2 = struct1.symbol_count, struct2.symbol_count
-        if sc1 != sc2:
-            return False, f"symbol counts are different: {sc1} != {sc2}"
+        # Compare symbols
+        symbols1, symbols2 = struct1.symbols, struct2.symbols
+        if symbols1 != symbols2:
+            return False, f"symbols are different: {symbols1} != {symbols2}"
 
         # Compare atoms
-        struct1.get_coords(direct=True)
-        struct2.get_coords(direct=True)
-        total_struct = struct1.copy()
-        total_struct.extend(struct2)
-        msg = []
-        for coord, substruct in total_struct.group_structs(key="coord"):
-            if len(substruct) <= 1 and substruct[0].symbol != substruct[1].symbol:
-                continue
-            msg.append(f"{coord} has atoms {''.join(substruct.symbols)}\n")
+        coords1 = struct1.get_coords(direct=True)
+        coords2 = struct2.get_coords(direct=True)
 
-        return (False, "".join(msg)) if msg else (True, f"{struct1} equals {struct2}")
+        def coord2tuple(coord: np.ndarray) -> tuple[float, float, float]:
+            return tuple(round(x, 6) for x in coord)
+
+        atoms1 = set((s, coord2tuple(c)) for s, c in zip(symbols1, coords1))
+        atoms2 = set((s, coord2tuple(c)) for s, c in zip(symbols2, coords2))
+        missing1 = atoms1 - atoms2
+        if missing1:
+            return False, f"atoms are different, missing in struct2: {missing1}"
+        missing2 = atoms2 - atoms1
+        if missing2:
+            return False, f"atoms are different, missing in struct1: {missing2}"
+        return True, f"{struct1} equals {struct2}"
 
 
 class SimplePoscar:
@@ -249,11 +255,11 @@ class SimplePoscar:
         Returns:
             Struct: Struct from POSCAR
         """
-        if isinstance(poscar, Path): 
+        if isinstance(poscar, Path):
             with open(poscar, "r") as f:
                 logging.info(f"Reading POSCAR: {poscar}")
                 lines = f.readlines()
-        elif os.path.exists(poscar): 
+        elif os.path.exists(poscar):
             with open(poscar, "r") as f:
                 logging.info(f"Reading POSCAR: {poscar}")
                 lines = f.readlines()
@@ -271,15 +277,18 @@ class SimplePoscar:
         cell = np.array([list(map(float, line.split())) for line in lines[2:5]])
 
         # Apply scale factor to cell vectors
-        scale = (
-            scale if scale[0] >= 0.0 else np.cbrt(-1.0 * scale / np.linalg.det(cell))
-        )
+        scale = scale if scale[0] >= 0.0 else np.cbrt(-1.0 * scale / np.linalg.det(cell))
 
         cell *= scale  # Working for both one and three scale factors
 
         # Read symbols and counts
         symbols = lines[5].split()
         counts = list(map(int, lines[6].split()))
+        symbol_counts = []
+        for symbol, count in zip(symbols, counts):
+            symbol_counts.extend([symbol] * count)
+
+        counts_total = sum(counts)
 
         # Check if selective dynamics is present
         constrainted = "selective" in lines[7].lower()
@@ -291,36 +300,41 @@ class SimplePoscar:
         # Read atoms (coordinates, constraints, note)
         atom_list = []
         start_idx = 8 + constrainted
-        for symbol, count in zip(symbols, counts):
-            for i, line in enumerate(lines[start_idx : start_idx + count]):
-                parts = line.split()
-                note, idx, meta = SimplePoscar._parse_comment(line)
-                idx = idx if idx != -1 else i
-                coord = np.array(list(map(float, parts[:3])))
-                constr = parts[3:6] if constrainted else []
-                note = note if note else symbol
-                # f"{symbol}-#{idx + 1:0{len(str(count))}d}"
-                # Apply scale factor to Cartesian coordinates
-                if not is_direct:
-                    coord *= scale
-                atom_list.append(
-                    Atom(
-                        index=idx,
-                        symbol=symbol,
-                        coord=coord,
-                        constr=constr,
-                        note=note,
-                        meta=meta,
-                    )
-                )
-            start_idx += count
+        for i, line in progress(
+            enumerate(lines[start_idx : start_idx + counts_total]),
+            counts_total,
+            desc="Reading atoms",
+        ):
+            symbol = symbol_counts[i]
+            parts = line.split()
+            note, idx, meta = SimplePoscar._parse_comment(line)
 
+            idx = idx if idx != -1 else i
+            coord = np.array(list(map(float, parts[:3])))
+            constr = parts[3:6] if constrainted else []
+            note = note if note else symbol
+            # f"{symbol}-#{idx + 1:0{len(str(count))}d}"
+            # Apply scale factor to Cartesian coordinates
+            if not is_direct:
+                coord *= scale
+            atom_list.append(
+                Atom(
+                    index=idx,
+                    symbol=symbol,
+                    coord=coord,
+                    constr=constr,
+                    note=note,
+                    meta=meta,
+                )
+            )
         struct = Struct(cell=cell, is_direct=is_direct, atom_list=atom_list)
 
         # Check for duplicates
+        logging.info(f"Formatting struct: {struct}")
         struct.remove_duplicates()
 
         # Switch to direct coordinates
+        logging.info(f"Switching to direct coordinates: {struct}")
         is_direct = True
         struct.get_coords(is_direct)
 
@@ -344,6 +358,7 @@ class SimplePoscar:
             constrainted: Whether to write constrainted POSCAR file. Defaults to True
         """
         # Check for duplicates
+        logging.info(f"Formatting struct: {struct}")
         struct.remove_duplicates()
 
         lines = []
@@ -368,11 +383,13 @@ class SimplePoscar:
             lines.append("Selective dynamics")
 
         # Write direct or cartesian coordinates
-        lines.append("Direct" if is_direct else "Cartesian")
+        s = "Direct" if is_direct else "Cartesian"
+        logging.info(f"Switching to {s.lower()} coordinates")
+        lines.append(s)
         struct.get_coords(is_direct)
 
         # Write atoms (coordinates, constraint, note)
-        for atom in struct.sort():
+        for atom in progress(struct.sort(), len(struct), desc="Writing atoms"):
             coord_str = " " + " ".join(f"{c:19.16f}" for c in atom.coord)
             constr_str = (
                 " " + " ".join(c for c in atom.constr)
@@ -381,13 +398,12 @@ class SimplePoscar:
             )
             meta = atom.meta if atom.meta is not None else ""
             note_str = f"# {atom.note}-" if atom.note is not None else ""
-            comment_str = (
-                f" {note_str}#{atom.index + 1:0{len(str(len(struct)))}d} {meta}"
-            )
+            comment_str = f" {note_str}#{atom.index + 1:0{len(str(len(struct)))}d} {meta}"
             lines.append(f" {coord_str}{constr_str}{comment_str}")
 
+        # Write POSCAR file
+        logging.info(f"Writing POSCAR: {poscar}")
         with open(poscar, "w") as f:
-            logging.info(f"Writing POSCAR: {poscar}")
             f.write("\n".join(lines) + "\n")
 
     @staticmethod
@@ -411,23 +427,58 @@ class SimplePoscar:
         return struct
 
     @staticmethod
-    def compare_poscar(poscar1: Path, poscar2: Path):
+    def compare_poscar(poscar1: Path | str, poscar2: Path | str):
+        """Compare two POSCAR files. Return (flag, msg).
+
+        Args:
+            poscar1: First POSCAR file path
+            poscar2: Second POSCAR file path
+        """
+        logging.info(f"Comparing {poscar1} and {poscar2}")
         struct1 = SimplePoscar.read_poscar(poscar1)
         struct2 = SimplePoscar.read_poscar(poscar2)
         flag, msg = struct1.compare(struct2)
-        logging.info(f"{flag}, {msg}")
+        if flag:
+            logging.info(f"The two POSCAR files are the same.")
+        else:
+            logging.info(f"The two POSCAR files are different.")
+            logging.info(msg)
+
 
     @staticmethod
-    def merge_poscar(poscar1: Path, poscar2: Path, outdir: Path):
+    def merge_poscar(poscar1: Path | str, poscar2: Path | str, outdir: Path | str):
+        """Merge two POSCAR files.
+
+        Args:
+            poscar1: First POSCAR file path
+            poscar2: Second POSCAR file path
+            outdir: Output directory path
+        """
+        poscar1 = Path(poscar1) if isinstance(poscar1, str) else poscar1
+        poscar2 = Path(poscar2) if isinstance(poscar2, str) else poscar2
+        outdir = Path(outdir) if isinstance(outdir, str) else outdir
+        name1 = poscar1.stem
+        name2 = poscar2.stem
+        logging.info(f"Merging {poscar1} and {poscar2}")
         struct1 = SimplePoscar.read_poscar(poscar1)
         struct2 = SimplePoscar.read_poscar(poscar2)
         struct = struct1.copy(atom_list=struct1.atom_list + struct2.atom_list)
-        output = outdir.joinpath("POSCAR-merged.vasp")
-        comment = "Merged"
+        output = outdir.joinpath(f"POSCAR-merged-{name1}-{name2}.vasp")
+        comment = f"Merged {name1} and {name2}"
         SimplePoscar.write_poscar(poscar=output, struct=struct, comment=comment)
 
     @staticmethod
-    def separate_poscar(poscar: Path, outdir: Path, key: str = "note"):
+    def separate_poscar(poscar: Path | str, outdir: Path | str, key: str = "note"):
+        """Separate a POSCAR file by a key.
+
+        Args:
+            poscar: POSCAR file path
+            outdir: Output directory path
+            key: Key to separate by
+        """
+        poscar = Path(poscar) if isinstance(poscar, str) else poscar
+        outdir = Path(outdir) if isinstance(outdir, str) else outdir
+        logging.info(f"Separating {poscar} by {key}")
         struct = SimplePoscar.read_poscar(poscar)
         for key, substruct in struct.group_structs(key=key):
             output = outdir.joinpath(f"POSCAR-group-{key}.vasp")

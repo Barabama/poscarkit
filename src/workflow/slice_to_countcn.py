@@ -31,6 +31,6 @@ def slice2files_with_countcn(
     results = []
     for layer_file in layer_files:
         counter = CNCounter(name, layer_file)
-        results.append(counter.countCN2files_acc(outdir=layer_file.parent))
+        results.append(counter.countCN2files(outdir=layer_file.parent))
 
     return results

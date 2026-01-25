@@ -3,6 +3,7 @@
 import re
 import random
 import logging
+import multiprocessing
 from collections import defaultdict
 from pathlib import Path
 from typing import Any, Generator
@@ -13,6 +14,7 @@ from sqsgenerator.core import SqsConfiguration
 
 from src.modeling.base import SimplePoscar, Struct
 from src.modeling.supercell import make_supercell
+from src.utils.progress import progress
 
 
 def _integer_fractions(
@@ -199,9 +201,7 @@ class ModelStruct:
             elif site in site_integers:
                 symbols = [s for s, f in site_integers[site].items() for i in range(f)]
             else:
-                raise ValueError(
-                    f"Site {site} not found in site_integers {site_integers}."
-                )
+                raise ValueError(f"Site {site} not found in site_integers {site_integers}.")
 
             # Assign symbols and meta
             slsl = len(str(len(sub_list)))
@@ -214,9 +214,38 @@ class ModelStruct:
 
         return site_substruct
 
-    def model_by_shuffle(
-        self, seeds: list[int | None] = [None]
-    ) -> Generator[tuple[Path, Struct], None, None]:
+    def _model_batch(
+        self, args: tuple[str, Struct, dict, int, int, int]
+    ) -> list[tuple[Path, Struct]]:
+        """
+        Model a single batch in a separate process.
+
+        Args:
+            args: Tuple containing name, supercell, site_integers, seed, t, ssl
+
+        Returns:
+            List of tuples (filename, Struct)
+        """
+        name, supercell, site_integers, seed, t, ssl = args
+        logging.info(f"Modeling {name} by shuffle, batch {t}")
+
+        results = []
+        shuffled = supercell.copy(clean=True)
+        site_substruct = self._allocate_atoms(
+            supercell=supercell, site_integers=site_integers, seed=seed
+        )
+        for (site, elem), substruct in site_substruct.items():
+            # Get every site of substruct
+            filename = Path(f"{name}-shuffle{t:0{ssl}d}-{site}.vasp")
+            results.append((filename, substruct))
+            shuffled.extend(substruct)
+
+        # Get all sites of newstruct
+        filename = Path(f"{name}-shuffle{t:0{ssl}d}.vasp")
+        results.append((filename, shuffled))
+        return results
+
+    def model_by_shuffle(self, seeds: list[int | None] = [None]):
         """
         Model the structure by shuffling sublattices.
 
@@ -236,31 +265,86 @@ class ModelStruct:
         if len(seeds) < batch_size:
             seeds += [None] * (batch_size - len(seeds))
         ssl = len(str(len(seeds)))
-        for t, seed in enumerate(seeds, start=1):
-            logging.info(f"Modeling {name} by shuffle, batch {t}/{batch_size}")
 
-            shuffled = supercell.copy(clean=True)
-            site_substruct = self._allocate_atoms(
-                supercell=supercell, site_integers=site_integers, seed=seed
-            )
-            for (site, elem), substruct in site_substruct.items():
-                # Get every site of substruct
-                filename = Path(f"{name}-shuffle{t:0{ssl}d}-{site}.vasp")
-                yield filename, substruct
-                shuffled.extend(substruct)
+        # Prepare arguments for each batch
+        args_iter = (
+            (name, supercell, site_integers, seed, t, ssl)
+            for t, seed in progress(enumerate(seeds, start=1), total=len(seeds))
+        )
 
-            # Get all sites of newstruct
-            filename = Path(f"{name}-shuffle{t:0{ssl}d}.vasp")
-            yield filename, shuffled
+        # Use multiprocessing to parallelize the modeling
+        num_processes = min(batch_size, (multiprocessing.cpu_count() or 1))
+        logging.info(f"Using {num_processes} processes for modeling")
 
-    def model_by_sqsgen(
-        self, iterations: int = 10000000
-    ) -> Generator[tuple[Path, Struct], None, None]:
+        with multiprocessing.Pool(processes=num_processes) as pool:
+            results = pool.map(self._model_batch, args_iter)
+
+        # Yield the results
+        for batch_results in results:
+            for filename, struct in batch_results:
+                yield filename, struct
+
+    def _model_sqs_batch(
+        self, args: tuple[str, Struct, dict, tuple[int, int, int], int, int, int]
+    ) -> list[tuple[Path, Struct]]:
+        """
+        Model a single SQS batch in a separate process.
+
+        Args:
+            args: Tuple containing name, unitcell, site_integers, factors, iterations, seed, t, ssl
+
+        Returns:
+            List of tuples (filename, Struct)
+        """
+        name, unitcell, site_integers, factors, iterations, seed, t, ssl = args
+        logging.info(f"Modeling {name} by sqsgen, batch {t}")
+
+        results = []
+        sqsgen_list: list[Struct] = []
+        for (site, elem), comps in site_integers.items():
+            struct_site = unitcell.classify(elem)
+            json_info = {
+                "iterations": int(iterations),
+                "sublattice_mode": "split",
+                "structure": {
+                    "lattice": struct_site.cell.tolist(),
+                    "coords": struct_site.get_coords().tolist(),
+                    "species": struct_site.symbols,
+                    "supercell": list(factors),
+                },
+                "composition": [{**comps, "sites": elem}],
+            }
+            sqscfg = parse_config(dict(json_info))
+            if not isinstance(sqscfg, SqsConfiguration):
+                raise ValueError(f"Error parsed sqscfg {sqscfg}.")
+
+            logging.info(f"Sqs generating for site {site}...")
+            pack = optimize(sqscfg)
+            if len(pack) < 1:
+                raise ValueError("Sqs result empty.")
+
+            best = pack.best()
+            sqs_struct = best.structure()
+            subsqsgen = SimplePoscar.read_poscar(sqs_struct.dump(StructureFormat.poscar))
+            filename = Path(f"{name}-sqsgen{t:0{ssl}d}-{site}.vasp")
+            sqsgen_list.append(subsqsgen)
+            results.append((filename, subsqsgen))
+
+        if len(sqsgen_list) > 1:
+            merged = sqsgen_list[0]
+            for subsqsgen in sqsgen_list[1:]:
+                merged.extend(subsqsgen)
+            filename = Path(f"{name}-sqsgen{t:0{ssl}d}.vasp")
+            results.append((filename, merged))
+
+        return results
+
+    def model_by_sqsgen(self, iterations: int = 1e7):
         """
         Model the structure by sqsgenerator.
 
         Args:
-            Iterations
+            iterations: Number of iterations for sqsgenerator
         Yields:
             Tuple(filename, Struct)
 
@@ -275,47 +359,24 @@ class ModelStruct:
             logging.error("SQS modeling requires site_integers from structure_info")
             return
 
+        iterations = int(iterations)
         seeds = range(batch_size)
         ssl = len(str(len(seeds)))
-        for t, seed in enumerate(seeds, start=1):
-            logging.info(f"Modeling {name} by sqsgen, batch {t}/{batch_size}")
 
-            sqsgen_list: list[Struct] = []
-            for (site, elem), comps in site_integers.items():
-                struct_site = unitcell.classify(elem)
-                json_info = {
-                    "iterations": int(iterations),
-                    "sublattice_mode": "split",
-                    "structure": {
-                        "lattice": struct_site.cell.tolist(),
-                        "coords": struct_site.get_coords().tolist(),
-                        "species": struct_site.symbols,
-                        "supercell": list(factors),
-                    },
-                    "composition": [{**comps, "sites": elem}],
-                }
-                sqscfg = parse_config(dict(json_info))
-                if not isinstance(sqscfg, SqsConfiguration):
-                    raise ValueError(f"Error parsed sqscfg {sqscfg}.")
+        # Prepare arguments for each batch
+        args_list = [
+            (name, unitcell, site_integers, factors, iterations, seed, t, ssl)
+            for t, seed in progress(enumerate(seeds, start=1), total=len(seeds))
+        ]
 
-                logging.info(f"Sqs generating for site {site}...")
-                pack = optimize(sqscfg)
-                if len(pack) < 1:
-                    raise ValueError("Sqs result empty.")
+        # Use multiprocessing to parallelize the modeling
+        num_processes = min(multiprocessing.cpu_count(), batch_size)
+        logging.info(f"Using {num_processes} processes for SQS modeling")
 
-                best = pack.best()
-                sqs_struct = best.structure()
-                subsqsgen = SimplePoscar.read_poscar(
-                    sqs_struct.dump(StructureFormat.poscar)
-                )
-                filename = Path(f"{name}-sqsgen{t:0{ssl}d}-{site}.vasp")
-                sqsgen_list.append(subsqsgen)
-                yield filename, subsqsgen
+        with multiprocessing.Pool(processes=num_processes) as pool:
+            results = pool.map(self._model_sqs_batch, args_list)
 
-            if len(sqsgen_list) <= 1:
-                continue
-            merged = sqsgen_list[0]
-            for subsqsgen in sqsgen_list[1:]:
-                merged.extend(subsqsgen)
-            filename = Path(f"{name}-sqsgen{t:0{ssl}d}.vasp")
-            yield filename, merged
+        # Yield the results
+        for batch_results in results:
+            for filename, struct in batch_results:
+                yield filename, struct

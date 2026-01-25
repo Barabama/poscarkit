@@ -22,6 +22,7 @@ def run_modeling(
     shuffle_seeds: list[int | None] = [None],
     batch_size: int = 1,
     enable_sqs: bool = False,
+    iterations: int = 1e7,
 ) -> list[Path]:
     """
     Run modeling workflow, first generate supercell, then shuffle/sqs structures.
@@ -34,6 +35,7 @@ def run_modeling(
         structure_info: Structure info
         shuffle_seeds: Seeds just for shuffle
         batch_size: Batch size for modeling
+        iterations: Number of iterations for sqsgenerator (default: 1e7)
     Returns:
         List: List of output files
     """
@@ -60,7 +62,7 @@ def run_modeling(
 
     # Choose model engine
     generator = (
-        modeler.model_by_sqsgen()
+        modeler.model_by_sqsgen(iterations=iterations)
         if enable_sqs
         else modeler.model_by_shuffle(seeds=shuffle_seeds)
     )

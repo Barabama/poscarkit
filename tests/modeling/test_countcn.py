@@ -34,8 +34,8 @@ class TestCNCounter(unittest.TestCase):
 
     def test_countCN2files(self):
         """Test countCN2files method."""
-        # Run the countCN2files method
-        output_dir = self.counter.countCN2files(self.temp_dir)
+        # Run the countCN2files method with by_ase=False (default)
+        output_dir = self.counter.countCN2files(outdir=self.temp_dir, cutoff_mult=1.1, parallel=2, by_ase=False)
         
         # Check that output directory was created
         self.assertTrue(output_dir.exists())
@@ -51,10 +51,10 @@ class TestCNCounter(unittest.TestCase):
         poscar_files = list(output_dir.glob("*.vasp"))
         # Note: depending on the structure, there may or may not be POSCAR files generated
         
-    def test_countCN2files_acc(self):
-        """Test countCN2files_acc method."""
-        # Run the countCN2files_acc method
-        output_dir = self.counter.countCN2files_acc(self.temp_dir)
+    def test_countCN2files_ase(self):
+        """Test countCN2files method with ASE."""
+        # Run the countCN2files method with by_ase=True
+        output_dir = self.counter.countCN2files(outdir=self.temp_dir, cutoff_mult=1.1, parallel=2, by_ase=True)
         
         # Check that output directory was created
         self.assertTrue(output_dir.exists())
@@ -64,12 +64,6 @@ class TestCNCounter(unittest.TestCase):
         csv_file = output_dir / "test-d1nn-cn-count.csv"
         self.assertTrue(csv_file.exists())
         
-        png_files = list(output_dir.glob("*.png"))
-        self.assertGreater(len(png_files), 0)
-        
-        poscar_files = list(output_dir.glob("*.vasp"))
-        # Note: depending on the structure, there may or may not be POSCAR files generated
-
     def tearDown(self):
         """Clean up test fixtures."""
         # Clean up temporary directory

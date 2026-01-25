@@ -15,6 +15,7 @@ from ase.build.tools import cut
 
 from src.modeling import color_map
 from src.modeling.base import Struct, SimplePoscar
+from src.utils.progress import progress
 
 
 class Slicer:
@@ -94,7 +95,11 @@ class Slicer:
             yield proj, layer
 
     def plot_layer(
-        self, imgpath: Path, title: str, layer: Struct, pair_counts: dict[str, int] = {}
+        self,
+        imgpath: Path,
+        title: str,
+        layer: Struct,
+        pair_counts: dict[str, int] = {},
     ):
         """
         Plot layer structure based on basis.
@@ -151,7 +156,7 @@ class Slicer:
         plt.savefig(imgpath, bbox_inches="tight")
         plt.close()
 
-    def slice2files(self, outdir: Path) -> list[Path]:
+    def slice2files(self, outdir: Path | str) -> list[Path]:
         """
         Slice a structure and save to files.
 
@@ -169,6 +174,7 @@ class Slicer:
 
         # Output directory
         miller_index_str = "".join(str(d) for d in miller_index)
+        outdir = Path(outdir) if isinstance(outdir, str) else outdir
         outdir = outdir.joinpath(f"{name}-sliced({miller_index_str})")
         if outdir.exists():
             shutil.rmtree(outdir)
@@ -176,9 +182,7 @@ class Slicer:
 
         # Transform
         output = outdir.joinpath(f"Transformed({miller_index_str}).vasp")
-        SimplePoscar.write_poscar(
-            poscar=output, struct=transfd, comment=str(output.stem)
-        )
+        SimplePoscar.write_poscar(poscar=output, struct=transfd, comment=str(output.stem))
 
         # Group by normal
         layers = [ls for ls in self.group_by_normal()]
@@ -186,17 +190,17 @@ class Slicer:
         logging.info(f"Number of layers: {num_layers}")
         ll = len(str(num_layers))
         results = []
-        for i, (proj, layer) in enumerate(layers, start=1):
+        for i, (proj, layer) in progress(
+            enumerate(layers, start=1),
+            total=num_layers,
+            desc="Slicing layers",
+        ):
             logging.info(f"Layer {i}: {proj:.2f}")
             logging.info(f"Layer: {layer}")
 
             # Save layer
-            output = outdir.joinpath(
-                f"Transformed({miller_index_str})-layer{i:0{ll}d}.vasp"
-            )
-            SimplePoscar.write_poscar(
-                poscar=output, struct=layer, comment=str(output.stem)
-            )
+            output = outdir.joinpath(f"Transformed({miller_index_str})-layer{i:0{ll}d}.vasp")
+            SimplePoscar.write_poscar(poscar=output, struct=layer, comment=str(output.stem))
             results.append(output)
             # Plot layer
             imgpath = output.with_suffix(".png")

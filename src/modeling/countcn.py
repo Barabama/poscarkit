@@ -3,9 +3,10 @@
 import os
 import logging
 import shutil
+from pathlib import Path
 from collections import defaultdict
 from dataclasses import dataclass
-from pathlib import Path
+from concurrent.futures import ThreadPoolExecutor
 
 import numpy as np
 import matplotlib
@@ -16,9 +17,11 @@ import pandas as pd
 import seaborn as sns
 from scipy.spatial import KDTree
 from scipy.spatial.distance import pdist
+from ase.neighborlist import NeighborList, natural_cutoffs
 
 from src.modeling import color_map
 from src.modeling.base import Atom, Struct, SimplePoscar
+from src.utils.progress import progress
 
 
 @dataclass
@@ -30,24 +33,8 @@ class CNData:
 
 
 class CNCounter:
-
-    def __init__(
-        self,
-        name: str,
-        poscar: Path,
-    ):
-        self._hatch_patterns = [
-            "//",
-            "\\\\",
-            "||",
-            "--",
-            "++",
-            "xx",
-            "oo",
-            "O)",
-            "..",
-            "**",
-        ]
+    def __init__(self, name: str, poscar: Path):
+        self._hatch_patterns = ["//", "\\\\", "||", "--", "++", "xx", "oo", "O)", "..", "**"]
         self.name = name
         self.poscar = poscar
 
@@ -96,7 +83,7 @@ class CNCounter:
         threshold = np.mean(diffs) + np.std(diffs)
 
         # Find the first where the gap is larger than the further
-        # index_cutoff = 0
+        index_cutoff = 0
         for i, diff in enumerate(diffs):
             if diff > threshold:
                 index_cutoff = i
@@ -104,20 +91,21 @@ class CNCounter:
 
         # If no significant change is found, use a statistical approach
         dist_cutoff = (
-            np.percentile(dists_subset, 5)
-            if index_cutoff == 0
-            else dists_subset[index_cutoff]
+            np.percentile(dists_subset, 5) if index_cutoff == 0 else dists_subset[index_cutoff]
         )
 
         return float(dist_cutoff)
 
-    def calculate_cn(self, cutoff: float) -> tuple[list[CNData], dict[frozenset, int]]:
+    def calculate_cn(
+        self, cutoff: float, cutoff_mult: float = 1.1
+    ) -> tuple[list[CNData], dict[frozenset, int]]:
         """
         Calculate each atom's coordination number within a given cutoff distance.
         Use KDTree to improve performance and reduce memory usage.
 
         Args:
             cutoff: Cutoff distance for coordination number counting
+            cutoff_mult: Multiplier for cutoff radius
         Returns:
             Tuple[List[CNData], Dict[frozenset, int]]: List of CNData and pair counts
         """
@@ -125,45 +113,37 @@ class CNCounter:
         struct = self.struct
         coords = struct.get_coords(direct=False)
 
-        nn_map: dict[Atom, dict[str, list[Atom]]] = defaultdict(
-            lambda: defaultdict(list)
-        )
+        cndata_list: list[CNData] = []
         pair_counts: dict[frozenset, int] = defaultdict(int)
+
+        # Apply cutoff multiplier
+        cutoff = cutoff * cutoff_mult
 
         # Make a KDTree
         tree = KDTree(coords)
-        tolerance = cutoff * 0.2
-        for i, coord in enumerate(coords):
-            atom_i = struct[i]
-            symbol_i = atom_i.symbol
-
+        tolerance = cutoff * 0.1
+        for i, coord in progress(enumerate(coords), len(coords), desc="Calculating CN"):
             # Search for neighbors within the cutoff + tolerance
             indices = tree.query_ball_point(coord, cutoff + tolerance)
+            if len(indices) <= 0:
+                continue
+
+            atom_ct = struct[i]
+            s_ct = atom_ct.symbol
+            nn_map = defaultdict(list)
+
             for j in indices:
                 if i == j:
                     continue
-
                 dist = np.linalg.norm(coords[j] - coord)
                 if (dist < tolerance) or (dist > cutoff + tolerance):
                     continue
 
-                atom_j = struct[j]
-                symbol_j = atom_j.symbol
+                atom_nb = struct[j]
+                s_nb = atom_nb.symbol
+                nn_map[s_nb].append(atom_nb)
 
-                # Add to the neighbor map
-                nn_map[atom_i][symbol_j].append(atom_j)
-
-                # Count pairs
-                pair_key = frozenset([symbol_i, symbol_j])
-                pair_counts[pair_key] += 1
-
-        # defaultdict to dict
-        cndata_list = []
-        for atom_ct, nn_data in nn_map.items():
-            s_ct = atom_ct.symbol
-            for s_nb, nn_list in nn_data.items():
-                if len(nn_list) <= 0:
-                    continue
+            for s_nb, nn_list in nn_map.items():
                 cndata_list.append(
                     CNData(
                         symbols=(s_ct, s_nb),
@@ -172,16 +152,62 @@ class CNCounter:
                         cn=len(nn_list),
                     )
                 )
+                # Count pairs
+                pair_counts[frozenset([s_ct, s_nb])] += 1
         pair_counts = dict(pair_counts)
+        return cndata_list, pair_counts
 
+    def calculate_cn_ase(
+        self, cutoff_mult: float = 1.2
+    ) -> tuple[list[CNData], dict[frozenset, int]]:
+        """
+        Calculate each atom's coordination number by ASE within a given cutoff multiplier.
+
+        Args:
+            cutoff_mult: Cutoff multiplier for coordination number counting
+        Returns:
+            Tuple[List[CNData], Dict[frozenset, int]]: List of CNData and pair counts
+        """
+        struct = self.struct
+        atoms = SimplePoscar.struct2atoms(struct)
+        cutoffs = [cutoff_mult * c for c in natural_cutoffs(atoms)]
+        nl = NeighborList(cutoffs, self_interaction=False, bothways=True)
+        nl.update(atoms)
+
+        cndata_list: list[CNData] = []
+        pair_counts = defaultdict(int)
+        for i in progress(range(len(atoms)), len(atoms), desc="Calculating CN"):
+            neighbors, _ = nl.get_neighbors(i)
+            if len(neighbors) <= 0:
+                continue
+            
+            atom_ct = struct[i]
+            s_ct = atom_ct.symbol
+            nn_map = defaultdict(list)
+
+            for j in neighbors:
+                atom_nb = struct[j]
+                s_nb = atom_nb.symbol
+                nn_map[s_nb].append(atom_nb)
+
+            for s_nb, nn_list in nn_map.items():
+                cndata_list.append(
+                    CNData(
+                        symbols=(s_ct, s_nb),
+                        center=atom_ct,
+                        neighbors=nn_list,
+                        cn=len(nn_list),
+                    )
+                )
+                # Count pairs
+                pair_counts[frozenset([s_ct, s_nb])] += 1
+        pair_counts = dict(pair_counts)
         return cndata_list, pair_counts
 
     def generate_cn_structs(self) -> dict[tuple[str, str, int], Struct]:
         """
         Generate Struct for each (center, neighbor, coordination number).
 
-        Args:
-            outdir: Output directory
         Returns:
             Dict[Tuple[str, str, int], Struct]: {cn_info: Struct}
         """
@@ -190,18 +216,15 @@ class CNCounter:
 
         # Collect cndata
         cn_structs = {}
-        for cndata in cndata_list:
+        for cndata in progress(cndata_list, desc="Generating CN Structs"):
             s_ct, s_nb = cndata.symbols
             cn = cndata.cn
-            logging.info(f"{s_ct}*-{cn}{s_nb} Coordination {cndata}")
             substruct = struct.copy(atom_list=[cndata.center] + cndata.neighbors)
             cn_structs[(s_ct, s_nb, cn)] = substruct
 
         return cn_structs
 
-    def generate_poscar(
-        self, cn_structs: dict[tuple[str, str, int], Struct], outdir: Path
-    ):
+    def generate_poscar(self, cn_structs: dict[tuple[str, str, int], Struct], outdir: Path):
         """
         Generate POSCAR files for each (center, neighbor, coordination number).
 
@@ -212,9 +235,7 @@ class CNCounter:
         name = self.name
         for (s_ct, s_nb, cn), substruct in cn_structs.items():
             output = outdir.joinpath(f"{name}-d1nn-{s_ct}-{s_nb}-{cn}.vasp")
-            SimplePoscar.write_poscar(
-                poscar=output, struct=substruct, comment=str(output.stem)
-            )
+            SimplePoscar.write_poscar(poscar=output, struct=substruct, comment=str(output.stem))
 
     def generate_poscar_by_cn(
         self, cn_structs: dict[tuple[str, str, int], Struct], outdir: Path
@@ -291,7 +312,7 @@ class CNCounter:
             cn_stats[cndata.symbols].append(cndata.cn)
 
         symbol2hatch = {
-            s: hatche_patterns[i % len(hatche_patterns)] for i, s in enumerate(symbols)
+            s: hatche_patterns[i % len(hatche_patterns)] for i, s in enumerate(symbols)  #
         }
 
         # n * n
@@ -371,9 +392,7 @@ class CNCounter:
                 for s_nb in s_nb_list
             ]
 
-            hatches = [
-                hatch_patterns[i % len(hatch_patterns)] for i in range(len(s_nb_list))
-            ]
+            hatches = [hatch_patterns[i % len(hatch_patterns)] for i in range(len(s_nb_list))]
 
             plt.figure(figsize=(10, 6))
             plt.hist(
@@ -419,9 +438,7 @@ class CNCounter:
         df = pd.DataFrame(cn_avg).fillna(0)  # center 为行, neighbor 为列
 
         plt.figure(figsize=(8, 8))
-        sns.heatmap(
-            df, annot=True, fmt=".1f", cmap="YlGnBu", cbar_kws={"label": "Average CN"}
-        )
+        sns.heatmap(df, annot=True, fmt=".1f", cmap="YlGnBu", cbar_kws={"label": "Average CN"})
         plt.title("Average Coordination Number Heatmap")
         plt.xlabel("Center Atom")
         plt.ylabel("Neighbor Atom")
@@ -431,18 +448,28 @@ class CNCounter:
         plt.close()
         logging.info(f"Coordination Number Heatmap saved to {output}")
 
-    def countCN2files(self, outdir: Path) -> Path:
+    def countCN2files(
+        self,
+        outdir: Path | str,
+        cutoff_mult: float = 1.1,
+        parallel: int = 2,
+        by_ase: bool = False,
+    ) -> Path:
         """
         Calculate coordination number and save to files.
 
         Args:
             outdir: Output directory
+            cutoff_mult: Multiplier for cutoff radius
+            parallel: Number of parallel processes
+            by_ase: Whether to use ASE for CN calculation
         Returns:
             Path: Path to output directory
         """
         name = self.name
         poscar = self.poscar
         # Create output directory
+        outdir = Path(outdir) if isinstance(outdir, str) else outdir
         outdir = outdir.joinpath(f"{name}-cn-count")
         if outdir.exists():
             shutil.rmtree(outdir)
@@ -452,64 +479,22 @@ class CNCounter:
         self.struct = SimplePoscar.read_poscar(poscar)
         logging.debug(f"Struct: {self.struct}")
 
-        # Detect cutoff
-        self.cutoff = self.detect_cutoff()
-        logging.info(f"Detected cutoff: {self.cutoff:.2f}")
-
         # Search CN
-        self.cndata_list, self.pair_counts = self.calculate_cn(self.cutoff)
+        logging.info(f"Applying cutoff multiplier: {cutoff_mult}")
+        if by_ase:
+            logging.info("Searching CN by ase")
+            self.cndata_list, self.pair_counts = self.calculate_cn_ase(cutoff_mult)
+        else:
+            cutoff = self.detect_cutoff()
+            logging.info(f"Detected cutoff: {cutoff:.2f}")
+            self.cndata_list, self.pair_counts = self.calculate_cn(cutoff, cutoff_mult)
 
-        # Generate POSCAR
-        cn_structs = self.generate_cn_structs()
-        self.generate_poscar(cn_structs=cn_structs, outdir=outdir)
-        self.generate_poscar_by_cn(cn_structs=cn_structs, outdir=outdir)
-
-        # Save to CSV
-        self.save_dataframe(outdir=outdir)
-
-        # Plot histogram
-        self.plot_histogram_faceted(outdir=outdir)
-        self.plot_histogram_stacked(outdir=outdir)
-        self.plot_heatmap(outdir=outdir)
-
-        return outdir
-
-    def countCN2files_acc(self, outdir: Path) -> Path:
-        """
-        Calculate coordination number and save to files accelerately.
-
-        Args:
-            outdir: Output directory
-        Returns:
-            Path: Path to output directory
-        """
-        name = self.name
-        poscar = self.poscar
-        # Create output directory
-        outdir = outdir.joinpath(f"{name}-cn-count")
-        if outdir.exists():
-            shutil.rmtree(outdir)
-        outdir.mkdir(parents=True, exist_ok=True)
-
-        # Read POSCAR
-        self.struct = SimplePoscar.read_poscar(poscar)
-        logging.debug(f"Struct: {self.struct}")
-
-        # Detect cutoff
-        self.cutoff = self.detect_cutoff()
-        logging.info(f"Detected cutoff: {self.cutoff:.2f}")
-
-        # Search CN
-        self.cndata_list, self.pair_counts = self.calculate_cn(self.cutoff)
-
-        from concurrent.futures import ThreadPoolExecutor
-
-        def write_single(args):
+        def write_single(args: tuple[tuple[str, str, int], Struct]):
             (s_ct, s_nb, cn), substruct = args
             output = outdir.joinpath(f"{name}-d1nn-{s_ct}-{s_nb}-{cn}.vasp")
             SimplePoscar.write_poscar(output, substruct, comment=output.stem)
 
-        def write_by_cn(args):
+        def write_by_cn(args: tuple[int, list[Struct]]):
             cn, structs = args
             if len(structs) <= 1:
                 return
@@ -526,7 +511,8 @@ class CNCounter:
         for k, s in cn_structs.items():
             cn_groups[k[2]].append(s)
 
-        with ThreadPoolExecutor(max_workers=min(8, (os.cpu_count() or 1) * 2)) as exe:
+        avail_parallel = min(parallel, (os.cpu_count() or 1))
+        with ThreadPoolExecutor(max_workers=avail_parallel) as exe:
             list(exe.map(write_single, cn_structs.items()))
             list(exe.map(write_by_cn, cn_groups.items()))
 
