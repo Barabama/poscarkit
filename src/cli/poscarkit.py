@@ -1,19 +1,27 @@
+# src/cli/poscarkit.py
+
 import sys
 import argparse
 import logging
+import tomllib
 from pathlib import Path
 from typing import Any
 
-from src.modeling.supercell import unitcell2file, supercell2file
-from src.workflow.modeling import run_modeling
-from src.workflow.slice_to_countcn import slice2files_with_countcn
 from src.modeling.base import SimplePoscar
 from src.modeling.countcn import CNCounter
 from src.modeling.slice import Slicer
+from src.workflow.modeling import run_modeling
+from src.modeling.supercell import unitcell2file, supercell2file
+from src.workflow.slice_to_countcn import slice2files_with_countcn
 from src.config import VERSION, CONTACT, DEVELOPER
 
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s[%(levelname)s]%(message)s")
+WORKDIR = Path(sys.argv[0]).absolute().parent
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s[%(levelname)s]%(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
+)
 
 
 def cmd_help(args: argparse.Namespace) -> int:
@@ -30,24 +38,24 @@ Fractions (SOFs).
 COMMANDS:
   help          Show this help message
   modeling      Run modeling workflow (make supercell and allocate atoms)
+  countcn       Calculate coordination numbers and save to files
+  slice         Slice a structure by Miller index
+  slice-to-countcn Slice a structure and count CNs in each layer
   supercell     Generate supercell from POSCAR file or structure info
   compare       Compare two POSCAR files
   merge         Merge two POSCAR files
   separate      Separate a POSCAR file by groups
-  countcn       Calculate coordination numbers and save to files
-  slice         Slice a structure by Miller index
-  slice-to-countcn Slice a structure and count CNs in each layer
 
 EXAMPLES:
   poscarkit help
   poscarkit modeling --poscar POSCAR.vasp --factors 3 3 3 --name my_model
+  poscarkit countcn --poscar POSCAR.vasp --name my_cn --outdir output/
+  poscarkit slice --poscar POSCAR.vasp --miller-index 1 1 1 --outdir output/
+  poscarkit slice-to-countcn --poscar POSCAR.vasp --miller-index 1 1 1 --outdir output/
   poscarkit supercell --poscar POSCAR.vasp --factors 2 2 2 --outdir output/
   poscarkit compare --poscar1 POSCAR1.vasp --poscar2 POSCAR2.vasp
   poscarkit merge --poscar1 POSCAR1.vasp --poscar2 POSCAR2.vasp --outdir output/
   poscarkit separate --poscar POSCAR.vasp --key note --outdir output/
-  poscarkit countcn --poscar POSCAR.vasp --name my_cn --outdir output/
-  poscarkit slice --poscar POSCAR.vasp --miller-index 1 1 1 --outdir output/
-  poscarkit slice-to-countcn --poscar POSCAR.vasp --miller-index 1 1 1 --outdir output/
 """
     )
     return 0
@@ -68,12 +76,11 @@ def cmd_modeling(args: argparse.Namespace) -> int:
     structure_info: dict[str, Any] = {}
 
     if config:
-        import tomllib
-
         with open(config, "rb") as f:
             cfg = tomllib.load(f)
-            if phase and phase in cfg:
-                structure_info = cfg[phase]
+    else:
+        cfg = {}
+    structure_info = cfg.get(phase, {})
 
     outdir.mkdir(parents=True, exist_ok=True)
 
@@ -159,8 +166,8 @@ def cmd_merge(args: argparse.Namespace) -> int:
 
     outdir.mkdir(parents=True, exist_ok=True)
 
-    SimplePoscar.merge_poscar(poscar1, poscar2, outdir)
-    logging.info(f"Merged POSCAR files saved to {outdir}")
+    merged_file = SimplePoscar.merge_poscar(poscar1, poscar2, outdir)
+    logging.info(f"Merged POSCAR files saved to {merged_file}")
     return 0
 
 
@@ -175,8 +182,10 @@ def cmd_separate(args: argparse.Namespace) -> int:
 
     outdir.mkdir(parents=True, exist_ok=True)
 
-    SimplePoscar.separate_poscar(poscar, outdir, key)
+    separated_files = SimplePoscar.separate_poscar(poscar, outdir, key)
     logging.info(f"Separated POSCAR files saved to {outdir}")
+    for file in separated_files:
+        logging.info(f"- {file}")
     return 0
 
 
@@ -563,7 +572,6 @@ def main() -> int:
 
         traceback.print_exc()
         return 1
-
 
 
 if __name__ == "__main__":

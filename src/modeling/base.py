@@ -444,15 +444,16 @@ class SimplePoscar:
             logging.info(f"The two POSCAR files are different.")
             logging.info(msg)
 
-
     @staticmethod
-    def merge_poscar(poscar1: Path | str, poscar2: Path | str, outdir: Path | str):
+    def merge_poscar(poscar1: Path | str, poscar2: Path | str, outdir: Path | str) -> Path:
         """Merge two POSCAR files.
 
         Args:
             poscar1: First POSCAR file path
             poscar2: Second POSCAR file path
             outdir: Output directory path
+        Returns:
+            Path: Merged POSCAR file path
         """
         poscar1 = Path(poscar1) if isinstance(poscar1, str) else poscar1
         poscar2 = Path(poscar2) if isinstance(poscar2, str) else poscar2
@@ -466,21 +467,29 @@ class SimplePoscar:
         output = outdir.joinpath(f"POSCAR-merged-{name1}-{name2}.vasp")
         comment = f"Merged {name1} and {name2}"
         SimplePoscar.write_poscar(poscar=output, struct=struct, comment=comment)
+        return output
 
     @staticmethod
-    def separate_poscar(poscar: Path | str, outdir: Path | str, key: str = "note"):
+    def separate_poscar(
+        poscar: Path | str, outdir: Path | str, key: str = "note"
+    ) -> list[Path]:
         """Separate a POSCAR file by a key.
 
         Args:
             poscar: POSCAR file path
             outdir: Output directory path
-            key: Key to separate by
+            key: Key to separate by (default: "note")
+        Returns:
+            List: List of output files
         """
         poscar = Path(poscar) if isinstance(poscar, str) else poscar
         outdir = Path(outdir) if isinstance(outdir, str) else outdir
         logging.info(f"Separating {poscar} by {key}")
         struct = SimplePoscar.read_poscar(poscar)
+        outputs = []
         for key, substruct in struct.group_structs(key=key):
             output = outdir.joinpath(f"POSCAR-group-{key}.vasp")
             comment = f"Group-{key}"
             SimplePoscar.write_poscar(poscar=output, struct=substruct, comment=comment)
+            outputs.append(output)
+        return outputs

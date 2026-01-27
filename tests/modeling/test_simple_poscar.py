@@ -184,9 +184,10 @@ Direct
             
             initial_atoms = len(struct1) + len(struct2)
             
-            SimplePoscar.merge_poscar(poscar1_file, poscar2_file, temp_path)
+            merged_file = SimplePoscar.merge_poscar(poscar1_file, poscar2_file, temp_path)
             
-            merged_file = temp_path / "POSCAR-merged-POSCAR1-POSCAR2.vasp"
+            expected_merged_file = temp_path / "POSCAR-merged-POSCAR1-POSCAR2.vasp"
+            self.assertEqual(merged_file, expected_merged_file, "Returned file path should match expected path")
             self.assertTrue(merged_file.exists(), "Merged file should be created")
             
             merged_struct = SimplePoscar.read_poscar(merged_file)
@@ -207,10 +208,16 @@ Direct
             struct = SimplePoscar.read_poscar(poscar1_file)
             initial_atoms = len(struct)
             
-            SimplePoscar.separate_poscar(poscar1_file, temp_path, key="note")
+            separated_files = SimplePoscar.separate_poscar(poscar1_file, temp_path, key="note")
             
             group1_file = temp_path / "POSCAR-group-1a-Au.vasp"
             group2_file = temp_path / "POSCAR-group-3c-Cu.vasp"
+            
+            self.assertEqual(len(separated_files), 2, "Should return exactly 2 separated files")
+            self.assertIn(group1_file, separated_files, "Group 1a-Au file should be in returned list")
+            self.assertIn(group2_file, separated_files, "Group 3c-Cu file should be in returned list")
+            for file in separated_files:
+                self.assertTrue(file.exists(), f"Returned file {file} should exist")
             
             self.assertTrue(group1_file.exists(), "Group 1a-Au file should be created")
             self.assertTrue(group2_file.exists(), "Group 3c-Cu file should be created")
@@ -236,10 +243,16 @@ Direct
             struct = SimplePoscar.read_poscar(poscar1_file)
             initial_atoms = len(struct)
             
-            SimplePoscar.separate_poscar(poscar1_file, temp_path, key="symbol")
+            separated_files = SimplePoscar.separate_poscar(poscar1_file, temp_path, key="symbol")
             
             au_file = temp_path / "POSCAR-group-Au.vasp"
             cu_file = temp_path / "POSCAR-group-Cu.vasp"
+            
+            self.assertEqual(len(separated_files), 2, "Should return exactly 2 separated files")
+            self.assertIn(au_file, separated_files, "Au group file should be in returned list")
+            self.assertIn(cu_file, separated_files, "Cu group file should be in returned list")
+            for file in separated_files:
+                self.assertTrue(file.exists(), f"Returned file {file} should exist")
             
             self.assertTrue(au_file.exists(), "Au group file should be created")
             self.assertTrue(cu_file.exists(), "Cu group file should be created")

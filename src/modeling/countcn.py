@@ -180,7 +180,7 @@ class CNCounter:
             neighbors, _ = nl.get_neighbors(i)
             if len(neighbors) <= 0:
                 continue
-            
+
             atom_ct = struct[i]
             s_ct = atom_ct.symbol
             nn_map = defaultdict(list)
@@ -312,7 +312,7 @@ class CNCounter:
             cn_stats[cndata.symbols].append(cndata.cn)
 
         symbol2hatch = {
-            s: hatche_patterns[i % len(hatche_patterns)] for i, s in enumerate(symbols)  #
+            s: hatche_patterns[i % len(hatche_patterns)] for i, s in enumerate(symbols)
         }
 
         # n * n

@@ -41,10 +41,17 @@ DEFAULT_CONFIG = """# config.toml
 # Batch size for modeling   # 建模的批次大小
 # batch_size = 3
 
-# Enable SQS        # 启用SQS
+# Enable SQS for modeling
 # enable_sqs = false
 
+# CountCN cutoff multiplier
+# cutoff_mult = 1.1
+# CountCN by ASE
+# by_ase = false
 
+# Separate key for separating POSCAR file, 
+# valid key in 'symbol', 'coord', 'x', 'y', 'z', 'note'
+# separate_key = "note"
 
 # ====== Sublattices Occupied Fractions parameters ======
 # ====== 各个晶体结构所对应亚晶格的占位分数的配置参数 ======

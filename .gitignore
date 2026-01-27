@@ -145,4 +145,4 @@ cython_debug/
 *temp*
 data/
 out*/
-config.toml
+conf*.toml
