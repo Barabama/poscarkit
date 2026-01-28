@@ -42,8 +42,8 @@ dev = [
 ]
 
 [project.urls]
-Homepage = "https://gitee.com/wubo-movers/poscarkit"
-Repository = "https://gitee.com/wubo-movers/poscarkit.git"
+Homepage = "https://github.com/Barabama/poscarkit"
+Repository = "https://github.com/Barabama/poscarkit.git"
 
 [build-system]
 requires = ["setuptools>=70.0", "wheel"]
