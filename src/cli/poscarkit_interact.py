@@ -144,6 +144,9 @@ class PoscarkitInteract:
         if cfg:
             return Config(**cfg)
         cfg_path = Path(cfg_path) if isinstance(cfg_path, str) else cfg_path
+        cfg_path = cfg_path.absolute()
+        if cfg_path.is_dir():
+            cfg_path = cfg_path.joinpath("config.toml")
         if cfg_path.is_file():
             with open(cfg_path, "r", encoding="utf-8") as tf:
                 config = Config(**tomllib.loads(tf.read()))

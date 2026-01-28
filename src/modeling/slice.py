@@ -2,9 +2,9 @@
 
 import logging
 import shutil
-from collections import defaultdict
-from itertools import groupby
 from pathlib import Path
+from collections import defaultdict
+from itertools import chain, groupby
 
 import numpy as np
 import matplotlib
@@ -129,31 +129,65 @@ class Slicer:
         # Get range of basis vectors
         x_min, x_max = 0.0, np.linalg.norm(layer.cell[0])
         y_min, y_max = 0.0, np.linalg.norm(layer.cell[1])
-        x_margin = (x_max - x_min) * 0.1
-        y_margin = (y_max - y_min) * 0.1
+        x_margin = (x_max - x_min) * 0.01
+        y_margin = (y_max - y_min) * 0.01
 
         # Plot
         plt.figure(figsize=(8, 8))
         for symbol, coords in symbol_counts.items():
             color = color_map.get(symbol, "#FF00FF")
             x, y = zip(*coords)
-            label = (
-                symbol
-                if not (pair_counts and symbol in pair_counts)
-                else f"{symbol}-{symbol} pairs: {pair_counts[symbol]}"
-            )
-            plt.scatter(x, y, marker="o", s=10, color=color, alpha=1.0, label=label)
+            # label = (
+            #     symbol
+            #     if not (pair_counts and symbol in pair_counts)
+            #     else f"{symbol}-{symbol} pairs: {pair_counts[symbol]}"
+            # )
+            plt.scatter(x, y, marker="o", s=10, color=color, alpha=1.0, label=symbol)
 
         plt.title(title)
         plt.xlabel(f"[{' '.join(str(v) for v in basis[0])}] Coordinate (Å)")
         plt.ylabel(f"[{' '.join(str(v) for v in basis[1])}] Coordinate (Å)")
         # plt.axis("equal")
         plt.grid()
-        plt.legend(title="Symbols", bbox_to_anchor=(1, 1), loc="upper left")
-        plt.xlim(-x_margin, x_max + x_margin)
-        plt.ylim(-y_margin, y_max + y_margin)
-        # plt.tight_layout(rect=(0, 0, 1, 1))
-        plt.savefig(imgpath, bbox_inches="tight")
+        # Adjust legend position to make space for annotation
+        legend = plt.legend(title="Symbols", bbox_to_anchor=(1, 1), loc="upper left")
+        plt.xlim(x_min - x_margin, x_max + x_margin)
+        plt.ylim(y_min - y_margin, y_max + y_margin)
+
+        # Generate symbol count string
+        count_list = [f"{s} counts: {c}" for s, c in layer.symbol_count]
+
+        # Generate pair count string
+        pair_list = []
+        for key, value in pair_counts.items():
+            if isinstance(key, frozenset):
+                pair_str = (
+                    "-".join(key) if len(key) >= 2 else f"{next(iter(key))}-{next(iter(key))}"
+                )
+            else:
+                pair_str = str(key)
+            pair_list.append(f"{pair_str} pairs: {value}")
+        pair_list.sort()
+
+        # Add annotations below the legend
+        fig = plt.gcf()
+        annotation_text = "\n".join(chain(count_list, pair_list))
+
+        # Position annotation below the legend
+        annotation = fig.text(
+            0.92,
+            0.67,
+            annotation_text,
+            ha="left",
+            va="top",
+            # fontsize=9,
+            bbox=dict(boxstyle="round", facecolor="white", alpha=0.7),
+            transform=fig.transFigure,
+        )
+
+        # Adjust layout to include annotation and ensure canvas expands to fit text
+        # plt.tight_layout()
+        plt.savefig(imgpath, bbox_inches="tight", bbox_extra_artists=[legend, annotation])
         plt.close()
 
     def slice2files(self, outdir: Path | str) -> list[Path]:
@@ -204,7 +238,8 @@ class Slicer:
             results.append(output)
             # Plot layer
             imgpath = output.with_suffix(".png")
-            self.plot_layer(imgpath=imgpath, title=str(imgpath.stem), layer=layer)
+            title = f"Transformed({' '.join(str(d) for d in miller_index)})-layer{i:0{ll}d}"
+            self.plot_layer(imgpath=imgpath, title=title, layer=layer)
 
         logging.info(f"Sliced Saved to {outdir}")
         return results

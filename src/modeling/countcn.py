@@ -317,7 +317,7 @@ class CNCounter:
 
         # n * n
         fig, axes = plt.subplots(
-            nums, nums, figsize=(nums * 4, nums * 4), sharex=True, sharey=True
+            nums, nums, figsize=(nums * 6, nums * 6), sharex=True, sharey=True
         )
         if nums == 1:
             axes = np.array([[axes]])  # Make it 2D for consistent indexing
@@ -341,8 +341,8 @@ class CNCounter:
 
                 pairs = pair_counts.get(frozenset([s_ct, s_nb]), 0)
                 ax.text(
-                    0.95,
-                    0.95,
+                    0.98,
+                    0.98,
                     f"{s_ct}-{s_nb} pairs: {pairs}",
                     transform=ax.transAxes,
                     ha="right",
@@ -359,7 +359,8 @@ class CNCounter:
                 ax.grid(True, alpha=0.3)
 
         fig.suptitle("Coordination Number Distribution", fontsize=16)
-        plt.tight_layout()
+        # Adjust layout to make space for suptitle
+        plt.tight_layout(rect=[0, 0, 1, 0.98])  # Leave space at top for suptitle
         output = outdir.joinpath(f"{name}-cn-histogram-faceted.png")
         plt.savefig(output)
         plt.close()
@@ -444,7 +445,7 @@ class CNCounter:
         plt.ylabel("Neighbor Atom")
         plt.tight_layout()
         output = outdir.joinpath(f"{name}-cn-heatmap.png")
-        plt.savefig(output, dpi=300, bbox_inches="tight")
+        plt.savefig(output, bbox_inches="tight")
         plt.close()
         logging.info(f"Coordination Number Heatmap saved to {output}")
 
