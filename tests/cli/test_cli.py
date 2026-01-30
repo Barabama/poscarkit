@@ -126,9 +126,8 @@ class TestCLI(unittest.TestCase):
             by_ase=False
         )
 
-        with self.assertRaises(SystemExit) as cm:
-            cmd_supercell(args)
-        self.assertEqual(cm.exception.code, 1)
+        exit_code = cmd_supercell(args)
+        self.assertEqual(exit_code, 1)
 
     def test_cmd_modeling(self):
         """Test modeling command."""
@@ -142,7 +141,8 @@ class TestCLI(unittest.TestCase):
             config=None,
             seeds=[42],
             batch_size=1,
-            enable_sqs=False
+            enable_sqs=False,
+            iterations=10000000
         )
 
         cmd_modeling(args)
@@ -165,7 +165,8 @@ class TestCLI(unittest.TestCase):
             config=None,
             seeds=[1, 2, 3],
             batch_size=1,
-            enable_sqs=False
+            enable_sqs=False,
+            iterations=10000000
         )
 
         cmd_modeling(args)
@@ -188,12 +189,12 @@ class TestCLI(unittest.TestCase):
             config=None,
             seeds=[42],
             batch_size=1,
-            enable_sqs=False
+            enable_sqs=False,
+            iterations=10000000
         )
 
-        with self.assertRaises(SystemExit) as cm:
-            cmd_modeling(args)
-        self.assertEqual(cm.exception.code, 1)
+        exit_code = cmd_modeling(args)
+        self.assertEqual(exit_code, 1)
 
     def test_cmd_modeling_invalid_poscar(self):
         """Test modeling command with invalid POSCAR file."""
@@ -207,12 +208,12 @@ class TestCLI(unittest.TestCase):
             config=None,
             seeds=[42],
             batch_size=1,
-            enable_sqs=False
+            enable_sqs=False,
+            iterations=10000000
         )
 
-        with self.assertRaises(SystemExit) as cm:
-            cmd_modeling(args)
-        self.assertEqual(cm.exception.code, 1)
+        exit_code = cmd_modeling(args)
+        self.assertEqual(exit_code, 1)
 
     @patch('sys.argv', ['poscarkit', 'help'])
     def test_main_help_command(self):
@@ -226,9 +227,8 @@ class TestCLI(unittest.TestCase):
     def test_main_no_command(self):
         """Test main function with no command."""
         with patch('sys.stdout', new=io.StringIO()) as fake_out:
-            with self.assertRaises(SystemExit) as cm:
-                main()
-            self.assertEqual(cm.exception.code, 0)
+            exit_code = main()
+            self.assertEqual(exit_code, 0)
             output = fake_out.getvalue()
             self.assertIn("usage:", output)
 
@@ -257,9 +257,8 @@ class TestCLI(unittest.TestCase):
             poscar2=str(self.poscar_file)
         )
 
-        with self.assertRaises(SystemExit) as cm:
-            cmd_compare(args)
-        self.assertEqual(cm.exception.code, 1)
+        exit_code = cmd_compare(args)
+        self.assertEqual(exit_code, 1)
 
     def test_cmd_compare_invalid_poscar2(self):
         """Test compare command with invalid second POSCAR file."""
@@ -268,9 +267,8 @@ class TestCLI(unittest.TestCase):
             poscar2=str(self.test_dir / "nonexistent2.vasp")
         )
 
-        with self.assertRaises(SystemExit) as cm:
-            cmd_compare(args)
-        self.assertEqual(cm.exception.code, 1)
+        exit_code = cmd_compare(args)
+        self.assertEqual(exit_code, 1)
 
     def test_cmd_merge(self):
         """Test merge command."""
@@ -295,9 +293,8 @@ class TestCLI(unittest.TestCase):
             outdir=str(outdir)
         )
 
-        with self.assertRaises(SystemExit) as cm:
-            cmd_merge(args)
-        self.assertEqual(cm.exception.code, 1)
+        exit_code = cmd_merge(args)
+        self.assertEqual(exit_code, 1)
 
     def test_cmd_merge_invalid_poscar2(self):
         """Test merge command with invalid second POSCAR file."""
@@ -308,9 +305,8 @@ class TestCLI(unittest.TestCase):
             outdir=str(outdir)
         )
 
-        with self.assertRaises(SystemExit) as cm:
-            cmd_merge(args)
-        self.assertEqual(cm.exception.code, 1)
+        exit_code = cmd_merge(args)
+        self.assertEqual(exit_code, 1)
 
     def test_cmd_separate_by_note(self):
         """Test separate command by note."""
@@ -353,9 +349,8 @@ class TestCLI(unittest.TestCase):
             outdir=str(outdir)
         )
 
-        with self.assertRaises(SystemExit) as cm:
-            cmd_separate(args)
-        self.assertEqual(cm.exception.code, 1)
+        exit_code = cmd_separate(args)
+        self.assertEqual(exit_code, 1)
 
 
 if __name__ == "__main__":

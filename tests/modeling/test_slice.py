@@ -65,11 +65,11 @@ class TestSlice(unittest.TestCase):
             self.assertTrue(transformed_file.exists())
 
             # Check that layer files were created
-            layer_files_in_dir = list(result_dir.glob("Transformed(001)-layer*.vasp"))
+            layer_files_in_dir = list(result_dir.glob("Transformed-(001)-layer*.vasp"))
             self.assertGreater(len(layer_files_in_dir), 0)
 
             # Check that corresponding image files were created
-            image_files = list(result_dir.glob("Transformed(001)-layer*.png"))
+            image_files = list(result_dir.glob("Transformed-(001)-layer*.png"))
             self.assertEqual(len(image_files), len(layer_files_in_dir))
 
     def test_slice_110_direction(self):
@@ -100,11 +100,11 @@ class TestSlice(unittest.TestCase):
             self.assertTrue(transformed_file.exists())
 
             # Check that layer files were created
-            layer_files_in_dir = list(result_dir.glob("Transformed(110)-layer*.vasp"))
+            layer_files_in_dir = list(result_dir.glob("Transformed-(110)-layer*.vasp"))
             self.assertGreater(len(layer_files_in_dir), 0)
 
             # Check that corresponding image files were created
-            image_files = list(result_dir.glob("Transformed(110)-layer*.png"))
+            image_files = list(result_dir.glob("Transformed-(110)-layer*.png"))
             self.assertEqual(len(image_files), len(layer_files_in_dir))
 
     def test_slice_111_direction(self):
@@ -135,11 +135,11 @@ class TestSlice(unittest.TestCase):
             self.assertTrue(transformed_file.exists())
 
             # Check that layer files were created
-            layer_files_in_dir = list(result_dir.glob("Transformed(111)-layer*.vasp"))
+            layer_files_in_dir = list(result_dir.glob("Transformed-(111)-layer*.vasp"))
             self.assertGreater(len(layer_files_in_dir), 0)
 
             # Check that corresponding image files were created
-            image_files = list(result_dir.glob("Transformed(111)-layer*.png"))
+            image_files = list(result_dir.glob("Transformed-(111)-layer*.png"))
             self.assertEqual(len(image_files), len(layer_files_in_dir))
 
     def test_group_by_normal(self):

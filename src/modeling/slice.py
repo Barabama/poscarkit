@@ -180,13 +180,13 @@ class Slicer:
 
         plt.title(title, fontname="Times New Roman", fontsize=24, weight="bold")
         plt.xlabel(
-            f"[{' '.join(str(v) for v in basis[0])}] Coordinate (Å)",
+            f"[{' '.join(f'{v:2}' for v in basis[0])}] Coordinate (Å)",
             fontname="Times New Roman",
             fontsize=20,
             weight="bold",
         )
         plt.ylabel(
-            f"[{' '.join(str(v) for v in basis[1])}] Coordinate (Å)",
+            f"[{' '.join(f'{v:2}' for v in basis[1])}] Coordinate (Å)",
             fontname="Times New Roman",
             fontsize=20,
             weight="bold",
@@ -292,12 +292,12 @@ class Slicer:
             logging.info(f"Layer: {layer}")
 
             # Save layer
-            output = outdir.joinpath(f"Transformed({miller_index_str})-layer{i:0{ll}d}.vasp")
+            output = outdir.joinpath(f"Transformed-({miller_index_str})-layer{i:0{ll}d}.vasp")
             SimplePoscar.write_poscar(poscar=output, struct=layer, comment=str(output.stem))
             results.append(output)
             # Plot layer
             imgpath = output.with_suffix(".png")
-            title = f"Transformed({' '.join(str(d) for d in miller_index)})-layer{i:0{ll}d}"
+            title = f"Transformed-({' '.join(f'{d:2}' for d in miller_index)})-layer{i:0{ll}d}"
             self.plot_layer(imgpath=imgpath, title=title, layer=layer)
             # Export to Excel
             xlspath = output.with_suffix(".xlsx")

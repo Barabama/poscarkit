@@ -64,11 +64,11 @@ def slice2files_with_countcn(
         layer_name = f"Transformed({miller_index_str})-layer{i:0{ll}d}"
         output = outdir.joinpath(f"{layer_name}.vasp")
         SimplePoscar.write_poscar(poscar=output, struct=layer, comment=str(output.stem))
-        results.append(output)
 
         # Count CN
         counter = CNCounter(layer_name, poscar=output)
-        results.append(counter.countCN2files(outdir=output.parent))
+        cn_count_dir = counter.countCN2files(outdir=output.parent)
+        results.append(cn_count_dir)
 
         # Export to Excel
         xlspath = output.with_suffix(".xlsx")
