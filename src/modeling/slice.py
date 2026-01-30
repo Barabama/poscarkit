@@ -8,10 +8,12 @@ from itertools import chain, groupby
 
 import numpy as np
 import matplotlib
+import pandas as pd
 
 matplotlib.use("Agg")  # Set matplotlib to use non-interactive backend
 import matplotlib.pyplot as plt
 from ase.build.tools import cut
+from ase.data import chemical_symbols, covalent_radii
 
 from src.modeling import color_map
 from src.modeling.base import Struct, SimplePoscar
@@ -94,6 +96,41 @@ class Slicer:
             layer = transfd.copy(atom_list=[transfd[i] for i in group])
             yield proj, layer
 
+    def export_layer_xls(
+        self,
+        layer: Struct,
+        xlspath: Path,
+    ):
+        """
+        Export layer's Cartesian coordinates (x, y) and element symbols to Excel.
+
+        Args:
+            layer: Struct object
+            xlspath: Path to Excel file
+        """
+
+        # Get Cartesian coordinates
+        layer.sort()
+        coords = layer.get_coords(direct=False)
+
+        # Calculate projections for x, y plane
+        b1, b2, n = [self.normalize(v) for v in layer.cell]
+        projs_normal = np.dot(coords, n)  # projection onto normal
+        projs_plane = coords - np.outer(projs_normal, n)  # projection onto plane
+        xs = np.dot(projs_plane, b1)  # portion of x-axis
+        ys = np.dot(projs_plane, b2)  # portion of y-axis
+
+        # Create DataFrame
+        data = {
+            "X": xs,
+            "Y": ys,
+            "Symbol": layer.symbols,
+        }
+        df = pd.DataFrame(data)
+
+        # Save to Excel
+        df.to_excel(xlspath, index=False, sheet_name="Layer Coordinates")
+
     def plot_layer(
         self,
         imgpath: Path,
@@ -137,20 +174,40 @@ class Slicer:
         for symbol, coords in symbol_counts.items():
             color = color_map.get(symbol, "#FF00FF")
             x, y = zip(*coords)
-            # label = (
-            #     symbol
-            #     if not (pair_counts and symbol in pair_counts)
-            #     else f"{symbol}-{symbol} pairs: {pair_counts[symbol]}"
-            # )
-            plt.scatter(x, y, marker="o", s=10, color=color, alpha=1.0, label=symbol)
+            radius = covalent_radii[chemical_symbols.index(symbol)]
+            size = max(5, radius * 20)  # Scale radius to reasonable size
+            plt.scatter(x, y, marker="o", s=size, color=color, alpha=0.8, label=symbol)
 
-        plt.title(title)
-        plt.xlabel(f"[{' '.join(str(v) for v in basis[0])}] Coordinate (Å)")
-        plt.ylabel(f"[{' '.join(str(v) for v in basis[1])}] Coordinate (Å)")
+        plt.title(title, fontname="Times New Roman", fontsize=24, weight="bold")
+        plt.xlabel(
+            f"[{' '.join(str(v) for v in basis[0])}] Coordinate (Å)",
+            fontname="Times New Roman",
+            fontsize=20,
+            weight="bold",
+        )
+        plt.ylabel(
+            f"[{' '.join(str(v) for v in basis[1])}] Coordinate (Å)",
+            fontname="Times New Roman",
+            fontsize=20,
+            weight="bold",
+        )
+        # Set axis tick font size
+        plt.xticks(fontsize=16, fontname="Times New Roman", weight="bold")
+        plt.yticks(fontsize=16, fontname="Times New Roman", weight="bold")
         # plt.axis("equal")
-        plt.grid()
+        plt.grid(alpha=0.2)  # Make grid lines lighter
         # Adjust legend position to make space for annotation
-        legend = plt.legend(title="Symbols", bbox_to_anchor=(1, 1), loc="upper left")
+        # Create font properties for legend title
+        from matplotlib.font_manager import FontProperties
+
+        title_font = FontProperties(family="Times New Roman", size=20, weight="bold")
+        legend = plt.legend(
+            title="Symbols",
+            bbox_to_anchor=(1, 1),
+            loc="upper left",
+            title_fontproperties=title_font,
+            prop={"family": "Times New Roman", "size": 16, "weight": "bold"},
+        )
         plt.xlim(x_min - x_margin, x_max + x_margin)
         plt.ylim(y_min - y_margin, y_max + y_margin)
 
@@ -180,7 +237,9 @@ class Slicer:
             annotation_text,
             ha="left",
             va="top",
-            # fontsize=9,
+            fontsize=16,
+            fontname="Times New Roman",
+            weight="bold",
             bbox=dict(boxstyle="round", facecolor="white", alpha=0.7),
             transform=fig.transFigure,
         )
@@ -240,6 +299,9 @@ class Slicer:
             imgpath = output.with_suffix(".png")
             title = f"Transformed({' '.join(str(d) for d in miller_index)})-layer{i:0{ll}d}"
             self.plot_layer(imgpath=imgpath, title=title, layer=layer)
+            # Export to Excel
+            xlspath = output.with_suffix(".xlsx")
+            self.export_layer_xls(xlspath=xlspath, layer=layer)
 
         logging.info(f"Sliced Saved to {outdir}")
         return results

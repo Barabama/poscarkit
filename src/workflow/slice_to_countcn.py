@@ -70,6 +70,10 @@ def slice2files_with_countcn(
         counter = CNCounter(layer_name, poscar=output)
         results.append(counter.countCN2files(outdir=output.parent))
 
+        # Export to Excel
+        xlspath = output.with_suffix(".xlsx")
+        slicer.export_layer_xls(layer, xlspath)
+
         # Plot layer
         imgpath = output.with_suffix(".png")
         title = f"Transformed({' '.join(str(d) for d in miller_index)})-layer{i:0{ll}d}"
