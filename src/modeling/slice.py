@@ -268,13 +268,13 @@ class Slicer:
         # Output directory
         miller_index_str = "".join(str(d) for d in miller_index)
         outdir = Path(outdir) if isinstance(outdir, str) else outdir
-        outdir = outdir.joinpath(f"{name}-sliced({miller_index_str})")
+        outdir = outdir.joinpath(f"{name}-sliced-({miller_index_str})")
         if outdir.exists():
             shutil.rmtree(outdir)
         outdir.mkdir(parents=True, exist_ok=True)
 
         # Transform
-        output = outdir.joinpath(f"Transformed({miller_index_str}).vasp")
+        output = outdir.joinpath(f"Transformed-({miller_index_str}).vasp")
         SimplePoscar.write_poscar(poscar=output, struct=transfd, comment=str(output.stem))
 
         # Group by normal

@@ -38,13 +38,13 @@ def slice2files_with_countcn(
     # Output directory
     miller_index_str = "".join(str(d) for d in miller_index)
     outdir = Path(outdir) if isinstance(outdir, str) else outdir
-    outdir = outdir.joinpath(f"{name}-sliced({miller_index_str})")
+    outdir = outdir.joinpath(f"{name}-sliced-({miller_index_str})")
     if outdir.exists():
         shutil.rmtree(outdir)
     outdir.mkdir(parents=True, exist_ok=True)
 
     # Transform
-    output = outdir.joinpath(f"Transformed({miller_index_str}).vasp")
+    output = outdir.joinpath(f"Transformed-({miller_index_str}).vasp")
     SimplePoscar.write_poscar(poscar=output, struct=transfd, comment=str(output.stem))
 
     # Group by normal
@@ -61,7 +61,7 @@ def slice2files_with_countcn(
         logging.info(f"Layer {i}: {proj:.2f}")
         logging.info(f"Layer {layer}")
         # Save layer
-        layer_name = f"Transformed({miller_index_str})-layer{i:0{ll}d}"
+        layer_name = f"Transformed-({miller_index_str})-layer{i:0{ll}d}"
         output = outdir.joinpath(f"{layer_name}.vasp")
         SimplePoscar.write_poscar(poscar=output, struct=layer, comment=str(output.stem))
 
@@ -69,20 +69,18 @@ def slice2files_with_countcn(
         counter = CNCounter(layer_name, poscar=output)
         cn_count_dir = counter.countCN2files(outdir=output.parent)
         results.append(cn_count_dir)
-
-        # Export to Excel
-        xlspath = output.with_suffix(".xlsx")
-        slicer.export_layer_xls(layer, xlspath)
-
         # Plot layer
         imgpath = output.with_suffix(".png")
-        title = f"Transformed({' '.join(str(d) for d in miller_index)})-layer{i:0{ll}d}"
+        title = f"Transformed-({' '.join(str(d) for d in miller_index)})-layer{i:0{ll}d}"
         slicer.plot_layer(
             imgpath=imgpath,
             title=title,
             layer=layer,
             pair_counts=counter.pair_counts,
         )
+        # Export to Excel
+        xlspath = output.with_suffix(".xlsx")
+        slicer.export_layer_xls(layer, xlspath)
 
     logging.info(f"Sliced Saved to {outdir}")
     return results
