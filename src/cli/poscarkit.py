@@ -117,6 +117,75 @@ def cmd_modeling(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_countcn(args: argparse.Namespace) -> int:
+    name = args.name or "countcn"
+    poscar = Path(args.poscar) if args.poscar else None
+    outdir = Path(args.outdir) if args.outdir else Path("output")
+    cutoff_mult = args.cutoff_mult
+    parallel = args.parallel
+    by_ase = args.by_ase
+
+    if not poscar or not poscar.is_file():
+        logging.error(f"POSCAR file not found: {poscar}")
+        return 1
+
+    outdir.mkdir(parents=True, exist_ok=True)
+
+    counter = CNCounter(name=name, poscar=poscar)
+    result = counter.countCN2files(
+        outdir=outdir,
+        cutoff_mult=cutoff_mult,
+        parallel=parallel,
+        by_ase=by_ase,
+    )
+
+    logging.info(f"Coordination number analysis completed. Results saved to: {result}")
+    return 0
+
+
+def cmd_slice(args: argparse.Namespace) -> int:
+    name = args.name or "slice"
+    poscar = Path(args.poscar) if args.poscar else None
+    outdir = Path(args.outdir) if args.outdir else Path("output")
+    miller_index = tuple(args.miller_index)
+
+    if not poscar or not poscar.is_file():
+        logging.error(f"POSCAR file not found: {poscar}")
+        return 1
+
+    outdir.mkdir(parents=True, exist_ok=True)
+
+    slicer = Slicer(name=name, poscar=poscar, miller_index=miller_index)
+    results = slicer.slice2files(outdir=outdir)
+
+    logging.info(f"Slicing completed. Generated {len(results)} layers:")
+    for result in results:
+        logging.info(f"  - {result}")
+    return 0
+
+
+def cmd_slice_to_countcn(args: argparse.Namespace) -> int:
+    name = args.name or "slice-to-countcn"
+    poscar = Path(args.poscar) if args.poscar else None
+    outdir = Path(args.outdir) if args.outdir else Path("output")
+    miller_index = tuple(args.miller_index)
+
+    if not poscar or not poscar.is_file():
+        logging.error(f"POSCAR file not found: {poscar}")
+        return 1
+
+    outdir.mkdir(parents=True, exist_ok=True)
+
+    results = slice2files_with_countcn(
+        name=name, poscar=poscar, outdir=outdir, miller_index=miller_index
+    )
+
+    logging.info(f"Slice to CN count completed. Results saved to:")
+    for result in results:
+        logging.info(f"  - {result}")
+    return 0
+
+
 def cmd_supercell(args: argparse.Namespace) -> int:
     poscar = Path(args.poscar) if args.poscar else None
     outdir = Path(args.outdir) if args.outdir else Path("output")
@@ -186,75 +255,6 @@ def cmd_separate(args: argparse.Namespace) -> int:
     logging.info(f"Separated POSCAR files saved to {outdir}")
     for file in separated_files:
         logging.info(f"- {file}")
-    return 0
-
-
-def cmd_countcn(args: argparse.Namespace) -> int:
-    name = args.name or "countcn"
-    poscar = Path(args.poscar) if args.poscar else None
-    outdir = Path(args.outdir) if args.outdir else Path("output")
-    cutoff_mult = args.cutoff_mult
-    parallel = args.parallel
-    by_ase = args.by_ase
-
-    if not poscar or not poscar.is_file():
-        logging.error(f"POSCAR file not found: {poscar}")
-        return 1
-
-    outdir.mkdir(parents=True, exist_ok=True)
-
-    counter = CNCounter(name=name, poscar=poscar)
-    result = counter.countCN2files(
-        outdir=outdir,
-        cutoff_mult=cutoff_mult,
-        parallel=parallel,
-        by_ase=by_ase,
-    )
-
-    logging.info(f"Coordination number analysis completed. Results saved to: {result}")
-    return 0
-
-
-def cmd_slice(args: argparse.Namespace) -> int:
-    name = args.name or "slice"
-    poscar = Path(args.poscar) if args.poscar else None
-    outdir = Path(args.outdir) if args.outdir else Path("output")
-    miller_index = tuple(args.miller_index)
-
-    if not poscar or not poscar.is_file():
-        logging.error(f"POSCAR file not found: {poscar}")
-        return 1
-
-    outdir.mkdir(parents=True, exist_ok=True)
-
-    slicer = Slicer(name=name, poscar=poscar, miller_index=miller_index)
-    results = slicer.slice2files(outdir=outdir)
-
-    logging.info(f"Slicing completed. Generated {len(results)} layers:")
-    for result in results:
-        logging.info(f"  - {result}")
-    return 0
-
-
-def cmd_slice_to_countcn(args: argparse.Namespace) -> int:
-    name = args.name or "slice-to-countcn"
-    poscar = Path(args.poscar) if args.poscar else None
-    outdir = Path(args.outdir) if args.outdir else Path("output")
-    miller_index = tuple(args.miller_index)
-
-    if not poscar or not poscar.is_file():
-        logging.error(f"POSCAR file not found: {poscar}")
-        return 1
-
-    outdir.mkdir(parents=True, exist_ok=True)
-
-    results = slice2files_with_countcn(
-        name=name, poscar=poscar, outdir=outdir, miller_index=miller_index
-    )
-
-    logging.info(f"Slice to CN count completed. Results saved to:")
-    for result in results:
-        logging.info(f"  - {result}")
     return 0
 
 
@@ -341,103 +341,6 @@ def main() -> int:
         help="Number of iterations for sqsgenerator (default: 1e7)",
     )
     parser_modeling.set_defaults(func=cmd_modeling)
-
-    # Supercell command
-    parser_supercell = subparsers.add_parser("supercell", help="Generate supercell")
-    parser_supercell.add_argument(
-        "--poscar",
-        "-p",
-        type=str,
-        required=True,
-        help="Path to POSCAR file",
-    )
-    parser_supercell.add_argument(
-        "--factors",
-        "-f",
-        type=int,
-        nargs=3,
-        default=(3, 3, 3),
-        metavar=("X", "Y", "Z"),
-        help="Supercell factors (e.g., 3 3 3)",
-    )
-    parser_supercell.add_argument(
-        "--outdir",
-        "-o",
-        type=str,
-        default="output",
-        help="Output directory (default: output)",
-    )
-    parser_supercell.add_argument(
-        "--by-ase",
-        "-a",
-        action="store_true",
-        help="Use ASE to make supercell (default: False)",
-    )
-    parser_supercell.set_defaults(func=cmd_supercell)
-
-    # Compare command
-    parser_compare = subparsers.add_parser("compare", help="Compare two POSCAR files")
-    parser_compare.add_argument(
-        "--poscar1",
-        "-p1",
-        type=str,
-        required=True,
-        help="Path to first POSCAR file",
-    )
-    parser_compare.add_argument(
-        "--poscar2",
-        "-p2",
-        type=str,
-        required=True,
-        help="Path to second POSCAR file",
-    )
-    parser_compare.set_defaults(func=cmd_compare)
-
-    # Merge command
-    parser_merge = subparsers.add_parser("merge", help="Merge two POSCAR files")
-    parser_merge.add_argument(
-        "--poscar1",
-        "-p1",
-        type=str,
-        required=True,
-        help="Path to first POSCAR file",
-    )
-    parser_merge.add_argument(
-        "--poscar2",
-        "-p2",
-        type=str,
-        required=True,
-        help="Path to second POSCAR file",
-    )
-    parser_merge.add_argument(
-        "--outdir",
-        "-o",
-        type=str,
-        default="output",
-        help="Output directory (default: output)",
-    )
-    parser_merge.set_defaults(func=cmd_merge)
-
-    # Separate command
-    parser_separate = subparsers.add_parser("separate", help="Separate a POSCAR file by groups")
-    parser_separate.add_argument(
-        "--poscar",
-        "-p",
-        type=str,
-        required=True,
-        help="Path to POSCAR file",
-    )
-    parser_separate.add_argument(
-        "--key", "-k", type=str, default="note", help="Key to group atoms (default: note)"
-    )
-    parser_separate.add_argument(
-        "--outdir",
-        "-o",
-        type=str,
-        default="output",
-        help="Output directory (default: output)",
-    )
-    parser_separate.set_defaults(func=cmd_separate)
 
     # CountCN command
     parser_countcn = subparsers.add_parser("countcn", help="Calculate coordination numbers")
@@ -553,6 +456,103 @@ def main() -> int:
         help="Miller index of the slice (e.g., 1 1 1)",
     )
     parser_slice_to_countcn.set_defaults(func=cmd_slice_to_countcn)
+
+    # Supercell command
+    parser_supercell = subparsers.add_parser("supercell", help="Generate supercell")
+    parser_supercell.add_argument(
+        "--poscar",
+        "-p",
+        type=str,
+        required=True,
+        help="Path to POSCAR file",
+    )
+    parser_supercell.add_argument(
+        "--factors",
+        "-f",
+        type=int,
+        nargs=3,
+        default=(3, 3, 3),
+        metavar=("X", "Y", "Z"),
+        help="Supercell factors (e.g., 3 3 3)",
+    )
+    parser_supercell.add_argument(
+        "--outdir",
+        "-o",
+        type=str,
+        default="output",
+        help="Output directory (default: output)",
+    )
+    parser_supercell.add_argument(
+        "--by-ase",
+        "-a",
+        action="store_true",
+        help="Use ASE to make supercell (default: False)",
+    )
+    parser_supercell.set_defaults(func=cmd_supercell)
+
+    # Compare command
+    parser_compare = subparsers.add_parser("compare", help="Compare two POSCAR files")
+    parser_compare.add_argument(
+        "--poscar1",
+        "-p1",
+        type=str,
+        required=True,
+        help="Path to first POSCAR file",
+    )
+    parser_compare.add_argument(
+        "--poscar2",
+        "-p2",
+        type=str,
+        required=True,
+        help="Path to second POSCAR file",
+    )
+    parser_compare.set_defaults(func=cmd_compare)
+
+    # Merge command
+    parser_merge = subparsers.add_parser("merge", help="Merge two POSCAR files")
+    parser_merge.add_argument(
+        "--poscar1",
+        "-p1",
+        type=str,
+        required=True,
+        help="Path to first POSCAR file",
+    )
+    parser_merge.add_argument(
+        "--poscar2",
+        "-p2",
+        type=str,
+        required=True,
+        help="Path to second POSCAR file",
+    )
+    parser_merge.add_argument(
+        "--outdir",
+        "-o",
+        type=str,
+        default="output",
+        help="Output directory (default: output)",
+    )
+    parser_merge.set_defaults(func=cmd_merge)
+
+    # Separate command
+    parser_separate = subparsers.add_parser("separate", help="Separate a POSCAR file by groups")
+    parser_separate.add_argument(
+        "--poscar",
+        "-p",
+        type=str,
+        required=True,
+        help="Path to POSCAR file",
+    )
+    parser_separate.add_argument(
+        "--key", "-k", type=str, default="note", help="Key to group atoms (default: note)"
+    )
+    parser_separate.add_argument(
+        "--outdir",
+        "-o",
+        type=str,
+        default="output",
+        help="Output directory (default: output)",
+    )
+    parser_separate.set_defaults(func=cmd_separate)
 
     args = parser.parse_args()
 

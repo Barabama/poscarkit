@@ -177,11 +177,12 @@ upx --version
 cd poscarkit
 pip install nuitka
 
-# nuitka --standalone --onefile --output-dir=dist --jobs=4 --lto=yes `
-# --enable-plugin=tk-inter --enable-plugin=no-qt --windows-console-mode=disable `
-# --windows-icon-from-ico="src/gui/poscarkit.ico" `
-# --onefile-no-compression `
+# nuitka --standalone --onefile --output-dir=dist --jobs=2 --lto=yes `
+# --follow-imports --enable-plugin=no-qt --include-package=pandas --onefile-no-compression `
 # --enable-plugin=upx --upx-binary="D:\\Programs\\upx-5.0.2-win64\\upx.exe" `
+# --nofollow-import-to=matplotlib.tests --nofollow-import-to=pandas.tests `
+# --nofollow-import-to=pytest --nofollow-import-to=setuptools.tests `
+# --windows-icon-from-ico="src/gui/poscarkit.ico" `
 # --output-filename=poscarkit-0.9.0.exe `
 # --file-version=0.9.0 `
 # --copyright="(C) 2025 MCMF, Fuzhou University" `
