@@ -70,6 +70,7 @@ def run_modeling(
     # Save structures
     filepaths = []
     for filename, struct in generator:
+        struct.add_constraints()
         poscar = outdir.joinpath(filename)
         SimplePoscar.write_poscar(poscar=poscar, struct=struct, comment=str(filename))
         logging.info(f"Structure saved to {poscar}")

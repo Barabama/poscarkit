@@ -37,6 +37,16 @@ class Atom:
         self.note = note
         self.meta = meta
 
+    def __dict__(self):
+        return {
+            "index": self.index,
+            "symbol": self.symbol,
+            "coord": self.coord,
+            "constr": self.constr,
+            "note": self.note,
+            "meta": self.meta,
+        }
+
     def __eq__(self, other):
         if isinstance(other, Atom):
             return self.symbol == other.symbol and np.allclose(self.coord, other.coord)
@@ -222,6 +232,31 @@ class Struct:
         if missing2:
             return False, f"atoms are different, missing in struct1: {missing2}"
         return True, f"{struct1} equals {struct2}"
+
+    def remove_constraints(self):
+        """Remove constraints."""
+        self.atom_list = [Atom(**{**atom.__dict__(), "constr": []}) for atom in self.atom_list]
+
+    def add_constraints(self, tolerance: float = 1e-5):
+        """Add constraints for atom on axis.
+
+        Args:
+            tolerance: Tolerance for comparing coordinates.
+        """
+        normal_atoms = []
+        axile_atoms = []
+        for atom in self.atom_list:
+            constr = ["T", "T", "T"]
+            for i, c in enumerate(atom.coord):
+                if np.isclose(c, 0.0, atol=tolerance):
+                    constr[i] = "F"
+            if constr.count("F") <= 1:
+                normal_atom = Atom(**{**atom.__dict__(), "constr": ["T", "T", "T"]})
+                normal_atoms.append(normal_atom)
+            else:
+                axile_atom = Atom(**{**atom.__dict__(), "constr": constr})
+                axile_atoms.append(axile_atom)
+        self.atom_list = normal_atoms + axile_atoms
 
 
 class SimplePoscar:
