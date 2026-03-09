@@ -480,28 +480,29 @@ class SimplePoscar:
             logging.info(msg)
 
     @staticmethod
-    def merge_poscar(poscar1: Path | str, poscar2: Path | str, outdir: Path | str) -> Path:
-        """Merge two POSCAR files.
+    def merge_poscar(poscars: list[Path | str], outdir: Path | str) -> Path:
+        """Merge multiple POSCAR files.
 
         Args:
-            poscar1: First POSCAR file path
-            poscar2: Second POSCAR file path
+            poscars: List of POSCAR file paths
             outdir: Output directory path
         Returns:
             Path: Merged POSCAR file path
         """
-        poscar1 = Path(poscar1) if isinstance(poscar1, str) else poscar1
-        poscar2 = Path(poscar2) if isinstance(poscar2, str) else poscar2
+        if len(poscars) < 2:
+            raise ValueError("At least 2 POSCAR files are required for merging")
+        poscars = [Path(p) if isinstance(p, str) else p for p in poscars]
         outdir = Path(outdir) if isinstance(outdir, str) else outdir
-        name1 = poscar1.stem
-        name2 = poscar2.stem
-        logging.info(f"Merging {poscar1} and {poscar2}")
-        struct1 = SimplePoscar.read_poscar(poscar1)
-        struct2 = SimplePoscar.read_poscar(poscar2)
-        struct = struct1.copy(atom_list=struct1.atom_list + struct2.atom_list)
-        output = outdir.joinpath(f"POSCAR-merged-{name1}-{name2}.vasp")
-        comment = f"Merged {name1} and {name2}"
-        SimplePoscar.write_poscar(poscar=output, struct=struct, comment=comment)
+        names = [p.stem for p in poscars]
+        logging.info(f"Merging {len(poscars)} POSCAR files: {', '.join(str(p) for p in poscars)}")
+        merged_struct = SimplePoscar.read_poscar(poscars[0])
+        for poscar in poscars[1:]:
+            struct = SimplePoscar.read_poscar(poscar)
+            merged_struct = merged_struct.copy(atom_list=merged_struct.atom_list + struct.atom_list)
+        names_str = "-".join(names)
+        output = outdir.joinpath(f"POSCAR-merged-{names_str}.vasp")
+        comment = f"Merged {', '.join(names)}"
+        SimplePoscar.write_poscar(poscar=output, struct=merged_struct, comment=comment)
         return output
 
     @staticmethod

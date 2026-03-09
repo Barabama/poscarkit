@@ -11,9 +11,10 @@ POSCARKIT is a tool for modeling structure POSCAR files, based on Sublattice Occ
 - Atomic allocation based on Sublattice occupied fractions (SOFs).
 - Count Coordinate Numbers (CN) of all pairs of atoms in the supercell and calculate the Nearest Neighbors (NN).
 - Slice structure to layers normal to a Miller Index.
+- Slice to layers and count CN for each layer.
 - Supercell generation along the basis vectors.
 - Compare two POSCAR files.
-- Merge two POSCAR files into one.
+- Merge multiple POSCAR files into one.
 - Separate a POSCAR file by different criteria.
 
 ## Usage
@@ -58,15 +59,88 @@ config.toml 文件用于配置工具行为, 包括超胞生成、原子分配、
            `bcc.1b.sofs`: bcc 结构中亚晶格位置 'b' 的原子分数.）
   - 单胞结构信息, 这些信息用于生成不同结构类型的单胞 POSCAR 文件.
 
-## 操作选项
+## CLI 命令行工具
+
+安装后可以使用 `poscarkit` 命令行工具:
+
+### 查看帮助
+
+```bash
+poscarkit help
+```
+
+### 建模工作流
+
+```bash
+poscarkit modeling --poscar POSCAR.vasp --factors 3 3 3 --name my_model
+poscarkit modeling --config config.toml --phase fcc --seeds 1 2 3
+```
+
+### 配位数统计
+
+```bash
+poscarkit countcn --poscar POSCAR.vasp --name my_cn --outdir output/
+poscarkit countcn --poscar POSCAR.vasp --cutoff-mult 1.2 --parallel 4
+```
+
+### 切片操作
+
+```bash
+poscarkit slice --poscar POSCAR.vasp --miller-index 1 1 1 --outdir output/
+```
+
+### 切片并统计配位数
+
+```bash
+poscarkit slice-to-countcn --poscar POSCAR.vasp --miller-index 1 1 1 --outdir output/
+```
+
+### 超胞生成
+
+```bash
+poscarkit supercell --poscar POSCAR.vasp --factors 2 2 2 --outdir output/
+```
+
+### 比较 POSCAR 文件
+
+```bash
+poscarkit compare --poscar1 POSCAR1.vasp --poscar2 POSCAR2.vasp
+```
+
+### 合并 POSCAR 文件
+
+```bash
+# 合并两个文件
+poscarkit merge --poscars POSCAR1.vasp POSCAR2.vasp --outdir output/
+
+# 合并多个文件
+poscarkit merge --poscars POSCAR1.vasp POSCAR2.vasp POSCAR3.vasp --outdir output/
+```
+
+### 分离 POSCAR 文件
+
+```bash
+# 按 note 分离
+poscarkit separate --poscar POSCAR.vasp --key note --outdir output/
+
+# 按 symbol 分离
+poscarkit separate --poscar POSCAR.vasp --key symbol --outdir output/
+```
+
+## 操作选项 (交互式模式)
+
+运行 `python main.py` 或 `poscarkit_interact` 进入交互式模式:
 
 1. 帮助: 显示帮助信息.
 2. 读取配置: 读取 config.toml 文件中的配置.
 3. 工作流: 结合超胞生成、分配的工作流.
-4. 超胞生成: 根据 POSCAR 文件或配置生成超胞.
-5. 分配: 根据配置对 POSCAR 文件中的原子进行随机洗牌和分配.
-6. 统计配位: 统计 POSCAR 文件中每个原子的配位数和最近邻数.
-7. 切片: 根据配置对 POSCAR 文件进行切片.
+4. 配位数统计: 统计 POSCAR 文件中每个原子的配位数和最近邻数.
+5. 切片: 根据配置对 POSCAR 文件进行切片.
+6. 切片并统计配位数: 切片后对每层进行配位数统计.
+7. 超胞生成: 根据 POSCAR 文件或配置生成超胞.
+8. 比较: 比较两个 POSCAR 文件.
+9. 合并: 合并多个 POSCAR 文件.
+10. 分离: 根据指定条件分离 POSCAR 文件.
 
 ## 项目结构
 
@@ -167,7 +241,7 @@ python -m unittest tests.workflow.test_slice_to_countcn
 
 ```Shell
 # 安装UPX
-curl -O https://github.com/upx/upx/releases/download/v5.0.0-win64/upx-5.0.0-win64.zip
+curl -O https://gh-proxy.com/github.com/upx/upx/releases/download/v5.0.0-win64/upx-5.0.0-win64.zip
 unzip upx-5.0.0-win64.zip
 cd upx-5.0.0-win64
 setx PATH "%PATH%;%CD%"
@@ -183,8 +257,8 @@ pip install nuitka
 # --nofollow-import-to=matplotlib.tests --nofollow-import-to=pandas.tests `
 # --nofollow-import-to=pytest --nofollow-import-to=setuptools.tests `
 # --windows-icon-from-ico="src/gui/poscarkit.ico" `
-# --output-filename=poscarkit-0.9.0.exe `
-# --file-version=0.9.0 `
+# --output-filename=poscarkit-0.9.2.exe `
+# --file-version=0.9.2 `
 # --copyright="(C) 2025 MCMF, Fuzhou University" `
 # main.py
 ```

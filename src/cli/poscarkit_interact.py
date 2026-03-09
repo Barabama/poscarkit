@@ -35,7 +35,7 @@ INFO_OPTIONS = """
   6) Slice to CountCN: Slice to layers and then count CN for each layer.
   7) Make Supercell  : based on <supercell_factors> along the basis vectors.
   8) Compare         : Compare two POSCAR files.
-  9) Merge           : Merge two POSCAR files.
+  9) Merge           : Merge multiple POSCAR files.
  10) Separate        : Separate a POSCAR file by groups.
 """
 INFO_HELP = f"""
@@ -434,10 +434,15 @@ class PoscarkitInteract:
         Returns:
             Path: Merged POSCAR file path
         """
-        poscar1 = self._handle_poscar(force=True)
-        poscar2 = self._handle_poscar(force=True)
+        poscars = []
+        while True:
+            poscar = self._handle_poscar(force=True)
+            poscars.append(poscar)
+            more = input("Add another POSCAR file? (y/n)[n]\n> ").strip().lower()
+            if more != 'y':
+                break
         outdir = self._handle_outdir()
-        merged = SimplePoscar.merge_poscar(poscar1, poscar2, outdir)
+        merged = SimplePoscar.merge_poscar(poscars, outdir)
         return merged
 
     def run_separate(self) -> list[Path]:

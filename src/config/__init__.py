@@ -2,7 +2,7 @@
 
 # Application metadata
 DEVELOPER = "Author: Gao Min-Liang, Qiao Yang, Yang Su-wen, Wu Bo*, et al."
-VERSION = "Version: 0.9.0 | © 2025 MCMF, Fuzhou University"
+VERSION = "Version: 0.9.2 | © 2025 MCMF, Fuzhou University"
 CONTACT = "Email: wubo@fzu.edu.cn | Phone: +86 130 2381 9517"
 
 DEFAULT_CONFIG = """# config.toml

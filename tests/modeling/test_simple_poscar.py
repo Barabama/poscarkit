@@ -136,7 +136,7 @@ class TestSimplePoscar(unittest.TestCase):
             self.assertFalse(flag, "Structures with different symbol counts should not be equal")
     
     def test_merge_poscar(self):
-        """Test merging two POSCAR files."""
+        """Test merging multiple POSCAR files."""
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_path = Path(temp_dir)
             
@@ -184,7 +184,7 @@ Direct
             
             initial_atoms = len(struct1) + len(struct2)
             
-            merged_file = SimplePoscar.merge_poscar(poscar1_file, poscar2_file, temp_path)
+            merged_file = SimplePoscar.merge_poscar([poscar1_file, poscar2_file], temp_path)
             
             expected_merged_file = temp_path / "POSCAR-merged-POSCAR1-POSCAR2.vasp"
             self.assertEqual(merged_file, expected_merged_file, "Returned file path should match expected path")
@@ -196,6 +196,64 @@ Direct
                 initial_atoms,
                 f"Merged structure should have {initial_atoms} atoms"
             )
+    
+    def test_merge_multiple_poscars(self):
+        """Test merging more than two POSCAR files."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir)
+            
+            poscar1_content = """SYSTEM=Structure1
+ 1.0000000000000000
+    3.7740000000000000    0.0000000000000000    0.0000000000000000
+    0.0000000000000000    3.7740000000000000    0.0000000000000000
+    0.0000000000000000    0.0000000000000000    3.7740000000000000
+  Au
+   1
+Selective dynamics
+Direct
+ 0.0000000000000000 0.0000000000000000 0.0000000000000000 T T T # 1a-Au-#1
+"""
+            
+            poscar2_content = """SYSTEM=Structure2
+ 1.0000000000000000
+    3.7740000000000000    0.0000000000000000    0.0000000000000000
+    0.0000000000000000    3.7740000000000000    0.0000000000000000
+    0.0000000000000000    0.0000000000000000    3.7740000000000000
+  Ag
+   1
+Selective dynamics
+Direct
+ 0.5000000000000000 0.5000000000000000 0.5000000000000000 T T T # 1a-Ag-#1
+"""
+            
+            poscar3_content = """SYSTEM=Structure3
+ 1.0000000000000000
+    3.7740000000000000    0.0000000000000000    0.0000000000000000
+    0.0000000000000000    3.7740000000000000    0.0000000000000000
+    0.0000000000000000    0.0000000000000000    3.7740000000000000
+  Cu
+   1
+Selective dynamics
+Direct
+ 0.2500000000000000 0.2500000000000000 0.2500000000000000 T T T # 1a-Cu-#1
+"""
+            
+            poscar1_file = temp_path / "POSCAR1.vasp"
+            poscar2_file = temp_path / "POSCAR2.vasp"
+            poscar3_file = temp_path / "POSCAR3.vasp"
+            
+            poscar1_file.write_text(poscar1_content)
+            poscar2_file.write_text(poscar2_content)
+            poscar3_file.write_text(poscar3_content)
+            
+            merged_file = SimplePoscar.merge_poscar([poscar1_file, poscar2_file, poscar3_file], temp_path)
+            
+            expected_merged_file = temp_path / "POSCAR-merged-POSCAR1-POSCAR2-POSCAR3.vasp"
+            self.assertEqual(merged_file, expected_merged_file)
+            self.assertTrue(merged_file.exists())
+            
+            merged_struct = SimplePoscar.read_poscar(merged_file)
+            self.assertEqual(len(merged_struct), 3, "Merged structure should have 3 atoms")
     
     def test_separate_poscar_by_note(self):
         """Test separating a POSCAR file by note."""

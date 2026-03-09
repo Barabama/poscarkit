@@ -54,7 +54,7 @@ EXAMPLES:
   poscarkit slice-to-countcn --poscar POSCAR.vasp --miller-index 1 1 1 --outdir output/
   poscarkit supercell --poscar POSCAR.vasp --factors 2 2 2 --outdir output/
   poscarkit compare --poscar1 POSCAR1.vasp --poscar2 POSCAR2.vasp
-  poscarkit merge --poscar1 POSCAR1.vasp --poscar2 POSCAR2.vasp --outdir output/
+  poscarkit merge --poscars POSCAR1.vasp POSCAR2.vasp POSCAR3.vasp --outdir output/
   poscarkit separate --poscar POSCAR.vasp --key note --outdir output/
 """
     )
@@ -221,21 +221,21 @@ def cmd_compare(args: argparse.Namespace) -> int:
 
 
 def cmd_merge(args: argparse.Namespace) -> int:
-    poscar1 = Path(args.poscar1) if args.poscar1 else None
-    poscar2 = Path(args.poscar2) if args.poscar2 else None
+    poscars = [Path(p) for p in args.poscars] if args.poscars else []
     outdir = Path(args.outdir) if args.outdir else Path("output")
 
-    if not poscar1 or not poscar1.is_file():
-        logging.error(f"POSCAR file not found: {poscar1}")
+    if len(poscars) < 2:
+        logging.error("At least 2 POSCAR files are required for merging")
         return 1
 
-    if not poscar2 or not poscar2.is_file():
-        logging.error(f"POSCAR file not found: {poscar2}")
-        return 1
+    for poscar in poscars:
+        if not poscar.is_file():
+            logging.error(f"POSCAR file not found: {poscar}")
+            return 1
 
     outdir.mkdir(parents=True, exist_ok=True)
 
-    merged_file = SimplePoscar.merge_poscar(poscar1, poscar2, outdir)
+    merged_file = SimplePoscar.merge_poscar(poscars, outdir)
     logging.info(f"Merged POSCAR files saved to {merged_file}")
     return 0
 
@@ -509,20 +509,14 @@ def main() -> int:
     parser_compare.set_defaults(func=cmd_compare)
 
     # Merge command
-    parser_merge = subparsers.add_parser("merge", help="Merge two POSCAR files")
+    parser_merge = subparsers.add_parser("merge", help="Merge multiple POSCAR files")
     parser_merge.add_argument(
-        "--poscar1",
-        "-p1",
+        "--poscars",
+        "-p",
         type=str,
+        nargs="+",
         required=True,
-        help="Path to first POSCAR file",
-    )
-    parser_merge.add_argument(
-        "--poscar2",
-        "-p2",
-        type=str,
-        required=True,
-        help="Path to second POSCAR file",
+        help="Paths to POSCAR files to merge (at least 2)",
     )
     parser_merge.add_argument(
         "--outdir",
