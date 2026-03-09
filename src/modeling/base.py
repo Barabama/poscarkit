@@ -243,20 +243,29 @@ class Struct:
         Args:
             tolerance: Tolerance for comparing coordinates.
         """
+        axile_atoms: dict[tuple[str, str, str], Atom] = {}
         normal_atoms = []
-        axile_atoms = []
         for atom in self.atom_list:
             constr = ["T", "T", "T"]
             for i, c in enumerate(atom.coord):
                 if np.isclose(c, 0.0, atol=tolerance):
                     constr[i] = "F"
             if constr.count("F") <= 1:
-                normal_atom = Atom(**{**atom.__dict__(), "constr": ["T", "T", "T"]})
-                normal_atoms.append(normal_atom)
-            else:
-                axile_atom = Atom(**{**atom.__dict__(), "constr": constr})
-                axile_atoms.append(axile_atom)
-        self.atom_list = normal_atoms + axile_atoms
+                normal_atoms.append(Atom(**{**atom.__dict__(), "constr": ["T", "T", "T"]}))
+                continue
+            axile_atom = axile_atoms.get(tuple(constr))
+            if axile_atom is None:
+                axile_atoms[tuple(constr)] = Atom(**{**atom.__dict__(), "constr": constr})
+                continue
+            logging.info(f"debug axis {constr} {axile_atom.symbol}")
+            if np.sum(axile_atom.coord) > np.sum(atom.coord):
+                normal_atoms.append(Atom(**{**atom.__dict__(), "constr": ["T", "T", "T"]}))
+                continue
+            logging.info(f"Changing {constr}, {axile_atom.symbol} -> {atom.symbol}")
+            axile_atoms[tuple(constr)] = Atom(**{**atom.__dict__(), "constr": constr})
+            normal_atoms.append(Atom(**{**axile_atom.__dict__(), "constr": ["T", "T", "T"]}))
+
+        self.atom_list: list[Atom] = normal_atoms + list(axile_atoms.values())
 
 
 class SimplePoscar:
@@ -494,11 +503,15 @@ class SimplePoscar:
         poscars = [Path(p) if isinstance(p, str) else p for p in poscars]
         outdir = Path(outdir) if isinstance(outdir, str) else outdir
         names = [p.stem for p in poscars]
-        logging.info(f"Merging {len(poscars)} POSCAR files: {', '.join(str(p) for p in poscars)}")
+        logging.info(
+            f"Merging {len(poscars)} POSCAR files: {', '.join(str(p) for p in poscars)}"
+        )
         merged_struct = SimplePoscar.read_poscar(poscars[0])
         for poscar in poscars[1:]:
             struct = SimplePoscar.read_poscar(poscar)
-            merged_struct = merged_struct.copy(atom_list=merged_struct.atom_list + struct.atom_list)
+            merged_struct = merged_struct.copy(
+                atom_list=merged_struct.atom_list + struct.atom_list
+            )
         names_str = "-".join(names)
         output = outdir.joinpath(f"POSCAR-merged-{names_str}.vasp")
         comment = f"Merged {', '.join(names)}"

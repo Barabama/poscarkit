@@ -29,45 +29,50 @@ class TestCNCounter(unittest.TestCase):
         self.temp_dir = Path(tempfile.mkdtemp())
         self.poscar_path = self.temp_dir / "POSCAR"
         SimplePoscar.write_poscar(self.poscar_path, self.test_struct, "Test structure")
-        
+
         self.counter = CNCounter(name="test", poscar=self.poscar_path)
 
     def test_countCN2files(self):
         """Test countCN2files method."""
         # Run the countCN2files method with by_ase=False (default)
-        output_dir = self.counter.countCN2files(outdir=self.temp_dir, cutoff_mult=1.1, parallel=2, by_ase=False)
-        
+        output_dir = self.counter.countCN2files(
+            outdir=self.temp_dir, cutoff_mult=1.1, parallel=2, by_ase=False
+        )
+
         # Check that output directory was created
         self.assertTrue(output_dir.exists())
         self.assertTrue(output_dir.is_dir())
-        
+
         # Check that some output files were created
         csv_file = output_dir / "test-d1nn-cn-count.csv"
         self.assertTrue(csv_file.exists())
-        
+
         png_files = list(output_dir.glob("*.png"))
         self.assertGreater(len(png_files), 0)
-        
+
         poscar_files = list(output_dir.glob("*.vasp"))
         # Note: depending on the structure, there may or may not be POSCAR files generated
-        
+
     def test_countCN2files_ase(self):
         """Test countCN2files method with ASE."""
         # Run the countCN2files method with by_ase=True
-        output_dir = self.counter.countCN2files(outdir=self.temp_dir, cutoff_mult=1.1, parallel=2, by_ase=True)
-        
+        output_dir = self.counter.countCN2files(
+            outdir=self.temp_dir, cutoff_mult=1.1, parallel=2, by_ase=True
+        )
+
         # Check that output directory was created
         self.assertTrue(output_dir.exists())
         self.assertTrue(output_dir.is_dir())
-        
+
         # Check that some output files were created
         csv_file = output_dir / "test-d1nn-cn-count.csv"
         self.assertTrue(csv_file.exists())
-        
+
     def tearDown(self):
         """Clean up test fixtures."""
         # Clean up temporary directory
         import shutil
+
         shutil.rmtree(self.temp_dir, ignore_errors=True)
 
 

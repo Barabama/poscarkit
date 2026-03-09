@@ -439,7 +439,7 @@ class PoscarkitInteract:
             poscar = self._handle_poscar(force=True)
             poscars.append(poscar)
             more = input("Add another POSCAR file? (y/n)[n]\n> ").strip().lower()
-            if more != 'y':
+            if more != "y":
                 break
         outdir = self._handle_outdir()
         merged = SimplePoscar.merge_poscar(poscars, outdir)
