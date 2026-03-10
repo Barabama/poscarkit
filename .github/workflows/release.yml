@@ -26,7 +26,7 @@ on:
         description: 'Run tests before release'
         required: true
         type: boolean
-        default: true
+        default: false
 
 jobs:
   test:
@@ -95,12 +95,12 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+          architecture: 'x64'
 
-      - name: Install dependencies and Nuitka
+      - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -e .
-          pip install nuitka ordered-set zstandard
 
       - name: Get version
         id: version
@@ -114,20 +114,23 @@ jobs:
           }
 
       - name: Build executable with Nuitka
-        run: |
-          nuitka --standalone --onefile --output-dir=dist --jobs=4 --lto=yes `
-            --follow-imports --enable-plugin=no-qt `
-            --include-package=pandas `
-            --nofollow-import-to=matplotlib.tests `
-            --nofollow-import-to=pandas.tests `
-            --nofollow-import-to=pytest `
-            --nofollow-import-to=setuptools.tests `
-            --windows-icon-from-ico="src/gui/poscarkit.ico" `
-            --output-filename=poscarkit-${{ steps.version.outputs.version }}-win-x64.exe `
-            --file-version=${{ steps.version.outputs.version }} `
-            --copyright="(C) 2025 MCMF, Fuzhou University" `
-            main.py
-        shell: pwsh
+        uses: Nuitka/Nuitka-Action@main
+        with:
+          nuitka-version: main
+          script-name: main.py
+          mode: onefile
+          onefile-tempdir-spec: "{CACHE_DIR}/nuitka/onefile"
+          output-dir: dist
+          output-filename: poscarkit-${{ steps.version.outputs.version }}-win-x64.exe
+          product-name: poscarkit
+          product-version: ${{ steps.version.outputs.version }}
+          file-description: POSCAR modeling tool
+          company-name: MCMF, Fuzhou University
+          copyright: "(C) 2025 MCMF, Fuzhou University"
+          windows-icon-from-ico: src/gui/poscarkit.ico
+          enable-plugin: no-qt
+          include-package: pandas
+          nofollow-import-to: matplotlib.tests,pandas.tests,pytest,setuptools.tests
 
       - name: Upload Windows executable
         uses: actions/upload-artifact@v4
@@ -135,6 +138,7 @@ jobs:
           name: exe-windows
           path: dist/*.exe
           retention-days: 7
+          if-no-files-found: warn
 
   build-exe-linux:
     needs: [test]
@@ -149,16 +153,10 @@ jobs:
         with:
           python-version: '3.12'
 
-      - name: Install system dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y gcc g++ patchelf
-
-      - name: Install dependencies and Nuitka
+      - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -e .
-          pip install nuitka ordered-set zstandard
 
       - name: Get version
         id: version
@@ -171,18 +169,21 @@ jobs:
           fi
 
       - name: Build executable with Nuitka
-        run: |
-          nuitka --standalone --onefile --output-dir=dist --jobs=4 --lto=yes \
-            --follow-imports --enable-plugin=no-qt \
-            --include-package=pandas \
-            --nofollow-import-to=matplotlib.tests \
-            --nofollow-import-to=pandas.tests \
-            --nofollow-import-to=pytest \
-            --nofollow-import-to=setuptools.tests \
-            --output-filename=poscarkit-${{ steps.version.outputs.version }}-linux-x64 \
-            --file-version=${{ steps.version.outputs.version }} \
-            --copyright="(C) 2025 MCMF, Fuzhou University" \
-            main.py
+        uses: Nuitka/Nuitka-Action@main
+        with:
+          nuitka-version: main
+          script-name: main.py
+          mode: onefile
+          onefile-tempdir-spec: "{CACHE_DIR}/nuitka/onefile"
+          output-dir: dist
+          output-filename: poscarkit-${{ steps.version.outputs.version }}-linux-x64
+          product-name: poscarkit
+          product-version: ${{ steps.version.outputs.version }}
+          file-description: POSCAR modeling tool
+          company-name: MCMF, Fuzhou University
+          enable-plugin: no-qt
+          include-package: pandas
+          nofollow-import-to: matplotlib.tests,pandas.tests,pytest,setuptools.tests
 
       - name: Upload Linux executable
         uses: actions/upload-artifact@v4
@@ -190,6 +191,7 @@ jobs:
           name: exe-linux
           path: dist/poscarkit-*
           retention-days: 7
+          if-no-files-found: warn
 
   publish-pypi:
     needs: [build-wheel]
@@ -228,18 +230,18 @@ jobs:
         continue-on-error: true
 
       - name: Download Windows executable
+        if: needs.build-exe-windows.result == 'success'
         uses: actions/download-artifact@v4
         with:
           name: exe-windows
           path: dist/
-        continue-on-error: true
 
       - name: Download Linux executable
+        if: needs.build-exe-linux.result == 'success'
         uses: actions/download-artifact@v4
         with:
           name: exe-linux
           path: dist/
-        continue-on-error: true
 
       - name: Get version
         id: version
