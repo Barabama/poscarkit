@@ -283,7 +283,7 @@ class CNCounter:
 
         # Save to CSV
         data = defaultdict(list)
-        for (s_ct, s_nb, cn), cndata_list in cndata_dict.items():
+        for (s_ct, s_nb, cn), cndata_list in sorted(cndata_dict.items()):
             data["CN"].append(f"{s_ct}*-{cn}{s_nb}")
             data["Count"].append(len(cndata_list))
 
