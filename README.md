@@ -237,23 +237,15 @@ python -m unittest tests.workflow.test_slice_to_countcn
 
 ## 编译
 
-- 用Nuitka和UPX打包
+- 用Nuitka打包
 
 ```Shell
-# 安装UPX
-curl -O https://gh-proxy.com/github.com/upx/upx/releases/download/v5.0.0-win64/upx-5.0.0-win64.zip
-unzip upx-5.0.0-win64.zip
-cd upx-5.0.0-win64
-setx PATH "%PATH%;%CD%"
-upx --version
-
 # 安装Nuitka
 cd poscarkit
 pip install nuitka
 
-# nuitka --standalone --onefile --output-dir=dist --jobs=2 --lto=yes `
-# --follow-imports --enable-plugin=no-qt --include-package=pandas --onefile-no-compression `
-# --enable-plugin=upx --upx-binary="D:\\Programs\\upx-5.0.2-win64\\upx.exe" `
+# nuitka --standalone --onefile --output-dir=dist --jobs4 --lto=yes `
+# --follow-imports --enable-plugin=no-qt --include-package=pandas `
 # --nofollow-import-to=matplotlib.tests --nofollow-import-to=pandas.tests `
 # --nofollow-import-to=pytest --nofollow-import-to=setuptools.tests `
 # --windows-icon-from-ico="src/gui/poscarkit.ico" `

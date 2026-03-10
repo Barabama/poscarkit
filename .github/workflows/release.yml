@@ -1,0 +1,265 @@
+name: Build and Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version (e.g., 0.9.2, leave empty to use pyproject.toml version)'
+        required: false
+        type: string
+      publish_pypi:
+        description: 'Publish to PyPI'
+        required: true
+        type: boolean
+        default: false
+      build_executable:
+        description: 'Build executable with Nuitka'
+        required: true
+        type: boolean
+        default: true
+      create_release:
+        description: 'Create GitHub Release'
+        required: true
+        type: boolean
+        default: true
+      test_first:
+        description: 'Run tests before release'
+        required: true
+        type: boolean
+        default: true
+
+jobs:
+  test:
+    if: inputs.test_first
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        python-version: ['3.10', '3.11', '3.12']
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .[dev]
+
+      - name: Run tests
+        run: |
+          pytest tests/ -v
+
+  build-wheel:
+    needs: [test]
+    if: always() && (needs.test.result == 'success' || needs.test.result == 'skipped')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install build tools
+        run: |
+          python -m pip install --upgrade pip
+          pip install build wheel
+
+      - name: Build package
+        run: |
+          python -m build
+
+      - name: Upload wheel artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist-wheel
+          path: dist/
+          retention-days: 7
+
+  build-exe-windows:
+    needs: [test]
+    if: inputs.build_executable && (needs.test.result == 'success' || needs.test.result == 'skipped')
+    runs-on: windows-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies and Nuitka
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .
+          pip install nuitka ordered-set zstandard
+
+      - name: Get version
+        id: version
+        shell: pwsh
+        run: |
+          if ("${{ inputs.version }}" -ne "") {
+            echo "version=${{ inputs.version }}" >> $env:GITHUB_OUTPUT
+          } else {
+            $version = python -c "import tomllib; print(tomllib.load(open('pyproject.toml', 'rb'))['project']['version'])"
+            echo "version=$version" >> $env:GITHUB_OUTPUT
+          }
+
+      - name: Build executable with Nuitka
+        run: |
+          nuitka --standalone --onefile --output-dir=dist --jobs=4 --lto=yes `
+            --follow-imports --enable-plugin=no-qt `
+            --include-package=pandas `
+            --nofollow-import-to=matplotlib.tests `
+            --nofollow-import-to=pandas.tests `
+            --nofollow-import-to=pytest `
+            --nofollow-import-to=setuptools.tests `
+            --windows-icon-from-ico="src/gui/poscarkit.ico" `
+            --output-filename=poscarkit-${{ steps.version.outputs.version }}-win-x64.exe `
+            --file-version=${{ steps.version.outputs.version }} `
+            --copyright="(C) 2025 MCMF, Fuzhou University" `
+            main.py
+        shell: pwsh
+
+      - name: Upload Windows executable
+        uses: actions/upload-artifact@v4
+        with:
+          name: exe-windows
+          path: dist/*.exe
+          retention-days: 7
+
+  build-exe-linux:
+    needs: [test]
+    if: inputs.build_executable && (needs.test.result == 'success' || needs.test.result == 'skipped')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc g++ patchelf
+
+      - name: Install dependencies and Nuitka
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .
+          pip install nuitka ordered-set zstandard
+
+      - name: Get version
+        id: version
+        run: |
+          if [ -n "${{ inputs.version }}" ]; then
+            echo "version=${{ inputs.version }}" >> $GITHUB_OUTPUT
+          else
+            VERSION=$(python -c "import tomllib; print(tomllib.load(open('pyproject.toml', 'rb'))['project']['version'])")
+            echo "version=$VERSION" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Build executable with Nuitka
+        run: |
+          nuitka --standalone --onefile --output-dir=dist --jobs=4 --lto=yes \
+            --follow-imports --enable-plugin=no-qt \
+            --include-package=pandas \
+            --nofollow-import-to=matplotlib.tests \
+            --nofollow-import-to=pandas.tests \
+            --nofollow-import-to=pytest \
+            --nofollow-import-to=setuptools.tests \
+            --output-filename=poscarkit-${{ steps.version.outputs.version }}-linux-x64 \
+            --file-version=${{ steps.version.outputs.version }} \
+            --copyright="(C) 2025 MCMF, Fuzhou University" \
+            main.py
+
+      - name: Upload Linux executable
+        uses: actions/upload-artifact@v4
+        with:
+          name: exe-linux
+          path: dist/poscarkit-*
+          retention-days: 7
+
+  publish-pypi:
+    needs: [build-wheel]
+    if: inputs.publish_pypi
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/p/poscarkit
+    permissions:
+      id-token: write
+    steps:
+      - name: Download wheel artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: dist-wheel
+          path: dist/
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+
+  create-release:
+    needs: [build-wheel, build-exe-windows, build-exe-linux]
+    if: inputs.create_release && always() && (needs.build-wheel.result == 'success')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download wheel artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: dist-wheel
+          path: dist/
+        continue-on-error: true
+
+      - name: Download Windows executable
+        uses: actions/download-artifact@v4
+        with:
+          name: exe-windows
+          path: dist/
+        continue-on-error: true
+
+      - name: Download Linux executable
+        uses: actions/download-artifact@v4
+        with:
+          name: exe-linux
+          path: dist/
+        continue-on-error: true
+
+      - name: Get version
+        id: version
+        run: |
+          if [ -n "${{ inputs.version }}" ]; then
+            echo "version=${{ inputs.version }}" >> $GITHUB_OUTPUT
+          else
+            VERSION=$(python -c "import tomllib; print(tomllib.load(open('pyproject.toml', 'rb'))['project']['version'])")
+            echo "version=$VERSION" >> $GITHUB_OUTPUT
+          fi
+
+      - name: List release files
+        run: ls -la dist/
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.version.outputs.version }}
+          name: poscarkit v${{ steps.version.outputs.version }}
+          generate_release_notes: true
+          files: dist/*
+          draft: false
+          prerelease: false
