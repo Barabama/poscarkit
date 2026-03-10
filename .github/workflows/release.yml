@@ -85,7 +85,7 @@ jobs:
 
   build-exe-windows:
     needs: [test]
-    if: inputs.build_executable && (needs.test.result == 'success' || needs.test.result == 'skipped')
+    if: inputs.build_executable && always() && (needs.test.result == 'success' || needs.test.result == 'skipped')
     runs-on: windows-latest
     steps:
       - name: Checkout code
@@ -142,7 +142,7 @@ jobs:
 
   build-exe-linux:
     needs: [test]
-    if: inputs.build_executable && (needs.test.result == 'success' || needs.test.result == 'skipped')
+    if: inputs.build_executable && always() && (needs.test.result == 'success' || needs.test.result == 'skipped')
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
