@@ -257,11 +257,11 @@ class Struct:
             if axile_atom is None:
                 axile_atoms[tuple(constr)] = Atom(**{**atom.__dict__(), "constr": constr})
                 continue
-            logging.info(f"debug axis {constr} {axile_atom.symbol}")
+            # logging.info(f"debug axis {constr} {axile_atom.symbol}")
             if np.sum(axile_atom.coord) > np.sum(atom.coord):
                 normal_atoms.append(Atom(**{**atom.__dict__(), "constr": ["T", "T", "T"]}))
                 continue
-            logging.info(f"Changing {constr}, {axile_atom.symbol} -> {atom.symbol}")
+            # logging.info(f"Changing {constr}, {axile_atom.symbol} -> {atom.symbol}")
             axile_atoms[tuple(constr)] = Atom(**{**atom.__dict__(), "constr": constr})
             normal_atoms.append(Atom(**{**axile_atom.__dict__(), "constr": ["T", "T", "T"]}))
 

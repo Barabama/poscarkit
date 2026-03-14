@@ -142,22 +142,23 @@ class PoscarkitInteract:
             Config: config
         """
         if cfg:
-            return Config(**cfg)
+            self.config = Config(**cfg)
+            return self.config
         cfg_path = Path(cfg_path) if isinstance(cfg_path, str) else cfg_path
         cfg_path = cfg_path.absolute()
         if cfg_path.is_dir():
             cfg_path = cfg_path.joinpath("config.toml")
         if cfg_path.is_file():
             with open(cfg_path, "r", encoding="utf-8") as tf:
-                config = Config(**tomllib.loads(tf.read()))
+                self.config = Config(**tomllib.loads(tf.read()))
                 logging.info(f"Read config from {str(cfg_path)}")
         else:
             logging.warning(f"Config file {str(cfg_path)} does not exist, using default one.")
             cfg_path = WORKDIR.joinpath("config.toml")
             with open(cfg_path, "w", encoding="utf-8") as tf:
                 tf.write(DEFAULT_CONFIG)
-            config = self.read_config(cfg_path=cfg_path, **kwargs)
-        return config
+            self.read_config(cfg_path=cfg_path, **kwargs)
+        return self.config
 
     def _handle_option(self, option: int = 0) -> int:
         """
