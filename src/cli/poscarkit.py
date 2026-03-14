@@ -16,7 +16,7 @@ from src.workflow.slice_to_countcn import slice2files_with_countcn
 from src.config import VERSION, CONTACT, DEVELOPER
 
 
-WORKDIR = Path(sys.argv[0]).absolute().parent
+WORKDIR = Path.cwd()
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s[%(levelname)s]%(message)s",

@@ -89,7 +89,7 @@ INFO_HELP = f"""
 
 
 OPTIONS = (1, 2, 3, 4, 5, 6, 7, 8, 9, 10)
-WORKDIR = Path(sys.argv[0]).absolute().parent
+WORKDIR = Path.cwd()
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s[%(levelname)s]%(message)s",
