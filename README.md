@@ -244,7 +244,7 @@ python -m unittest tests.workflow.test_slice_to_countcn
 cd poscarkit
 pip install nuitka
 
-# nuitka --standalone --onefile --output-dir=dist --jobs4 --lto=yes `
+# nuitka --standalone --onefile --output-dir=dist --jobs=4 --lto=yes `
 # --follow-imports --enable-plugin=no-qt --include-package=pandas `
 # --nofollow-import-to=matplotlib.tests --nofollow-import-to=pandas.tests `
 # --nofollow-import-to=pytest --nofollow-import-to=setuptools.tests `
