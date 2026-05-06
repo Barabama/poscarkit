@@ -1,7 +1,7 @@
 [project]
 name = "poscarkit"
 version = "0.9.2"
-description = "A tool for modeling structure POSCAR files, based on Sublattice Occupied Fractions (SOFs)."
+description = "A tool for modeling structure POSCAR files, based on Sublattice Occupying Fractions (SOFs)."
 authors = [
     { name="Gao Min-Liang", email="barabama@qq.com" },
     { name="Qiao Yang", email="1848294558@qq.com" },

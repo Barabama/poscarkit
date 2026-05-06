@@ -32,7 +32,7 @@ def cmd_help(args: argparse.Namespace) -> int:
 {VERSION}
 {CONTACT}
 
-A tool for modeling structure POSCAR files, based on Sublattice Occupied 
+A tool for modeling structure POSCAR files, based on Sublattice Occupying 
 Fractions (SOFs).
 
 COMMANDS:

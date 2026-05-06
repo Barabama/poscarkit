@@ -3,12 +3,12 @@
 ## Introduction
 
 POSCARKIT 是一个用于处理 VASP POSCAR 文件的工具, 主要用于基于原子占位的建模.
-POSCARKIT is a tool for modeling structure POSCAR files, based on Sublattice Occupied Fractions (SOFs).
+POSCARKIT is a tool for modeling structure POSCAR files, based on Sublattice Occupying Fractions (SOFs).
 
 ## Features
 
 - Structure modeling for ordered framework materials.
-- Atomic allocation based on Sublattice occupied fractions (SOFs).
+- Atomic allocation based on Sublattice Occupying Fractions (SOFs).
 - Count Coordinate Numbers (CN) of all pairs of atoms in the supercell and calculate the Nearest Neighbors (NN).
 - Slice structure to layers normal to a Miller Index.
 - Slice to layers and count CN for each layer.
