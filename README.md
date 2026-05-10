@@ -249,8 +249,8 @@ pip install nuitka
 # --nofollow-import-to=matplotlib.tests --nofollow-import-to=pandas.tests `
 # --nofollow-import-to=pytest --nofollow-import-to=setuptools.tests `
 # --windows-icon-from-ico="src/gui/poscarkit.ico" `
-# --output-filename=poscarkit-0.9.2.exe `
-# --file-version=0.9.2 `
+# --output-filename=poscarkit-0.9.3.exe `
+# --file-version=0.9.3 `
 # --copyright="(C) 2025 MCMF, Fuzhou University" `
 # main.py
 ```

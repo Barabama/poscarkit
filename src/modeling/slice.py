@@ -136,7 +136,7 @@ class Slicer:
         imgpath: Path,
         title: str,
         layer: Struct,
-        pair_counts: dict[str, int] = {},
+        pair_counts: dict[frozenset[str], int] = {},
     ):
         """
         Plot layer structure based on basis.
@@ -214,17 +214,13 @@ class Slicer:
         # Generate symbol count string
         count_list = [f"{s} counts: {c}" for s, c in layer.symbol_count]
 
-        # Generate pair count string
+        # Generate pair count string (all possible pairs, including zeros)
+        symbols = sorted(set(layer.symbols))
         pair_list = []
-        for key, value in pair_counts.items():
-            if isinstance(key, frozenset):
-                pair_str = (
-                    "-".join(key) if len(key) >= 2 else f"{next(iter(key))}-{next(iter(key))}"
-                )
-            else:
-                pair_str = str(key)
-            pair_list.append(f"{pair_str} pairs: {value}")
-        pair_list.sort()
+        for i, s1 in enumerate(symbols):
+            for s2 in symbols[i:]:
+                value = pair_counts.get(frozenset([s1, s2]), 0)
+                pair_list.append(f"{s1}-{s2} pairs: {value}")
 
         # Add annotations below the legend
         fig = plt.gcf()
@@ -233,7 +229,7 @@ class Slicer:
         # Position annotation below the legend
         annotation = fig.text(
             0.92,
-            0.67,
+            0.55,
             annotation_text,
             ha="left",
             va="top",

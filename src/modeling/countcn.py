@@ -19,7 +19,6 @@ from scipy.spatial import KDTree
 from scipy.spatial.distance import pdist
 from ase.neighborlist import NeighborList, natural_cutoffs
 
-from src.modeling import color_map
 from src.modeling.base import Atom, Struct, SimplePoscar
 from src.utils.progress import progress
 
@@ -125,7 +124,7 @@ class CNCounter:
         for i, coord in progress(enumerate(coords), len(coords), desc="Calculating CN"):
             # Search for neighbors within the cutoff + tolerance
             indices = tree.query_ball_point(coord, cutoff + tolerance)
-            if len(indices) <= 0:
+            if not indices:
                 continue
 
             atom_ct = struct[i]
@@ -178,7 +177,7 @@ class CNCounter:
         pair_counts = defaultdict(int)
         for i in progress(range(len(atoms)), len(atoms), desc="Calculating CN"):
             neighbors, _ = nl.get_neighbors(i)
-            if len(neighbors) <= 0:
+            if len(neighbors) == 0:
                 continue
 
             atom_ct = struct[i]
@@ -248,14 +247,14 @@ class CNCounter:
             outdir: Output directory
         """
         name = self.name
-        cn_substruct_list = defaultdict(list[Struct])
+        cn_substruct_list = defaultdict(list)
         for (s_ct, s_nb, cn), struct in cn_structs.items():
             cn_substruct_list[cn].append(struct)
 
         for cn, struct_list in cn_substruct_list.items():
             if len(struct_list) <= 1:
                 continue
-            struct_all = struct_list[0]
+            struct_all = struct_list[0].copy()
             for struct in struct_list[1:]:
                 struct_all.extend(struct)
             if not struct_all:
@@ -283,9 +282,9 @@ class CNCounter:
 
         # Save to CSV
         data = defaultdict(list)
-        for (s_ct, s_nb, cn), cndata_list in sorted(cndata_dict.items()):
+        for (s_ct, s_nb, cn), cndata_items in sorted(cndata_dict.items()):
             data["CN"].append(f"{s_ct}*-{cn}{s_nb}")
-            data["Count"].append(len(cndata_list))
+            data["Count"].append(len(cndata_items))
 
         output = outdir.joinpath(f"{self.name}-d1nn-cn-count.csv")
         df = pd.DataFrame(data)
@@ -303,7 +302,9 @@ class CNCounter:
         cndata_list = self.cndata_list
         pair_counts = self.pair_counts
         hatche_patterns = self._hatch_patterns
-        symbols = sorted(list(set(d.symbols[0] for d in cndata_list)))
+        symbols = sorted(
+            list(set(d.symbols[0] for d in cndata_list) | set(d.symbols[1] for d in cndata_list))
+        )
         nums = len(symbols)
 
         # Group data
@@ -327,19 +328,18 @@ class CNCounter:
                 ax = axes[i, j]
                 key = (s_ct, s_nb)
                 data = cn_stats.get(key, [])
-                if len(data) <= 0:
-                    continue
-
-                ax.hist(
-                    data,
-                    bins=range(0, max(data) + 1),
-                    alpha=0.7,
-                    edgecolor="black",
-                    hatch=symbol2hatch[s_nb],
-                    align="left",
-                )
-
                 pairs = pair_counts.get(frozenset([s_ct, s_nb]), 0)
+
+                if len(data) > 0:
+                    ax.hist(
+                        data,
+                        bins=range(0, max(data) + 1),
+                        alpha=0.7,
+                        edgecolor="black",
+                        hatch=symbol2hatch[s_nb],
+                        align="left",
+                    )
+
                 ax.text(
                     0.98,
                     0.98,
@@ -441,8 +441,8 @@ class CNCounter:
         plt.figure(figsize=(8, 8))
         sns.heatmap(df, annot=True, fmt=".1f", cmap="YlGnBu", cbar_kws={"label": "Average CN"})
         plt.title("Average Coordination Number Heatmap")
-        plt.xlabel("Center Atom")
-        plt.ylabel("Neighbor Atom")
+        plt.xlabel("Neighbor Atom")
+        plt.ylabel("Center Atom")
         plt.tight_layout()
         output = outdir.joinpath(f"{name}-cn-heatmap.png")
         plt.savefig(output, bbox_inches="tight")
