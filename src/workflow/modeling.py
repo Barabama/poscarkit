@@ -9,7 +9,7 @@ from sqsgenerator import write
 from sqsgenerator.core import Structure
 
 from src.modeling.base import SimplePoscar, Struct
-from src.modeling.supercell import unitcell2file
+from src.modeling.supercell import unitcell2file, supercell2file
 from src.modeling.model import ModelStruct
 
 
@@ -51,6 +51,9 @@ def run_modeling(
         poscar = unitcell2file(structure_info=structure_info, outdir=outdir)
     else:
         raise ValueError("Either POSCAR file path or structure_info should be provided")
+
+    # Save supercell template for reference
+    supercell = supercell2file(poscar, outdir, supercell_factors)
 
     modeler = ModelStruct(
         name=name,

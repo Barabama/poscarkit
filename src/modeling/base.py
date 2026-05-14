@@ -68,6 +68,7 @@ class Struct:
         "y": lambda atom: atom.coord[1],
         "z": lambda atom: atom.coord[2],
         "note": lambda atom: atom.note,
+        "meta": lambda atom: atom.meta,
     }
 
     def __init__(
@@ -281,7 +282,7 @@ class SimplePoscar:
         if not comment_str:
             return result
 
-        match = re.search(r"(\d+[a-z]-[A-Za-z]+)-#(\d+)(.)?", comment_str)
+        match = re.search(r"(\d+[a-z]-[A-Za-z]+)-#(\d+)(?:\s+(\S+))?", comment_str)
         if match:
             try:
                 return (match.group(1), int(match.group(2)) - 1, match.group(3))
@@ -432,8 +433,14 @@ class SimplePoscar:
         lines.append(s)
         struct.get_coords(is_direct)
 
+        # Sort by symbol first, then by shuffle-order meta within each symbol
+        struct.atom_list.sort(key=lambda a: (
+            a.symbol,
+            int(a.meta[1:]) if isinstance(a.meta, str) and a.meta.startswith('s') else 0
+        ))
+
         # Write atoms (coordinates, constraint, note)
-        for atom in progress(struct.sort(), len(struct), desc="Writing atoms"):
+        for atom in progress(struct, len(struct), desc="Writing atoms"):
             coord_str = " " + " ".join(f"{c:19.16f}" for c in atom.coord)
             constr_str = (
                 " " + " ".join(c for c in atom.constr)

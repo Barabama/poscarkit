@@ -177,7 +177,6 @@ class ModelStruct:
         """
         if seed is not None:
             random.seed(seed)
-
         site_substruct = {}
         for note, substruct in supercell.group_structs(key="note"):
             match = re.search(r"(\d+[a-z])-([A-Za-z]+)", note)
@@ -188,11 +187,8 @@ class ModelStruct:
             site, elem = match.groups()
             site = (site, elem)
 
-            # Re-index atoms
-            for i, atom in enumerate(substruct):
-                atom.index = i
-
             # Shuffle atoms within the same sublattice
+            # atom.index keeps the global supercell index — NOT reset to local
             sub_list = substruct.atom_list
             random.shuffle(sub_list)
 
@@ -207,7 +203,7 @@ class ModelStruct:
             slsl = len(str(len(sub_list)))
             for idx, (symbol, atom) in enumerate(zip(symbols, sub_list), start=1):
                 atom.symbol = symbol
-                atom.meta = f"{idx:0{slsl}d}"
+                atom.meta = f"s{idx:0{slsl}d}"
 
             new_substruct = substruct.copy(atom_list=sub_list)
             site_substruct[site] = new_substruct

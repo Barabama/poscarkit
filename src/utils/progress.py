@@ -1,11 +1,8 @@
 import sys
-from typing import Iterable, Iterator, Optional, Any, Generator
+from typing import Iterable, Iterator, Any, Generator
 from contextlib import contextmanager
 
-try:
-    from tqdm import tqdm as TqdmProgress
-except ImportError:
-    TqdmProgress = None
+from tqdm import tqdm as TqdmProgress
 
 
 class SimpleProgress:
@@ -17,8 +14,8 @@ class SimpleProgress:
 
     def __init__(
         self,
-        iterable: Optional[Iterable] = None,
-        total: Optional[int] = None,
+        iterable: Iterable | None = None,
+        total: int | None = None,
         desc: str = "",
         unit: str = "it",
         unit_scale: bool = False,
@@ -55,7 +52,7 @@ class SimpleProgress:
         self.leave = leave
 
         self.n = 0
-        self._tqdm: Optional[TqdmProgress] = None
+        self._tqdm: TqdmProgress | None = None
 
         if iterable is not None:
             if total is None:
@@ -90,11 +87,11 @@ class SimpleProgress:
     def write(self, msg: str = "", end: str = "\n"):
         """
         Write a message to stdout, ensuring progress bar is on a new line.
-        
+
         Args:
             msg: Message to write
             end: String to append at the end (default: newline)
-            
+
         Examples:
             >>> with progress(total=100, desc="Processing") as p:
             ...     for i in range(100):
@@ -103,10 +100,10 @@ class SimpleProgress:
         """
         if self._tqdm is None:
             self._tqdm = self._create_tqdm()
-        
+
         self._tqdm.write(msg, end=end)
 
-    def wrap(self, iterable: Optional[Iterable] = None) -> Iterator[Any]:
+    def wrap(self, iterable: Iterable | None = None) -> Iterator[Any]:
         """
         Wrap an iterable to automatically update progress.
 
@@ -173,8 +170,8 @@ class SimpleProgress:
 
 
 def progress(
-    iterable: Optional[Iterable] = None,
-    total: Optional[int] = None,
+    iterable: Iterable | None = None,
+    total: int | None = None,
     desc: str = "",
     unit: str = "it",
     unit_scale: bool = False,
@@ -224,7 +221,7 @@ def progress(
 
 @contextmanager
 def progress_context(
-    total: Optional[int] = None,
+    total: int | None = None,
     desc: str = "",
     unit: str = "it",
     unit_scale: bool = False,

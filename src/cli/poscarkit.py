@@ -92,16 +92,9 @@ def cmd_modeling(args: argparse.Namespace) -> int:
         logging.error("Either --poscar or (--config and --phase) must be provided")
         return 1
 
-    if poscar:
-        poscar_path = poscar
-    elif structure_info:
-        poscar_path = unitcell2file(structure_info=structure_info, outdir=outdir)
-    else:
-        poscar_path = Path("")
-
     results = run_modeling(
         name=name,
-        poscar=poscar_path,
+        poscar=Path(poscar or ""),
         outdir=outdir,
         supercell_factors=factors,
         structure_info=structure_info,
