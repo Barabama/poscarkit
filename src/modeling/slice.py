@@ -7,11 +7,6 @@ from collections import defaultdict
 from itertools import chain, groupby
 
 import numpy as np
-import matplotlib
-import pandas as pd
-
-matplotlib.use("Agg")  # Set matplotlib to use non-interactive backend
-import matplotlib.pyplot as plt
 from ase.build.tools import cut
 from ase.data import chemical_symbols, covalent_radii
 
@@ -109,6 +104,8 @@ class Slicer:
             xlspath: Path to Excel file
         """
 
+        import pandas as pd
+
         # Get Cartesian coordinates
         layer.sort()
         coords = layer.get_coords(direct=False)
@@ -147,6 +144,10 @@ class Slicer:
             layer: Struct object
             pair_counts: Pair counts
         """
+        import matplotlib
+        matplotlib.use("Agg")
+        import matplotlib.pyplot as plt
+
         basis = self.basis
         # Calculate projections
         layer.sort()
