@@ -136,7 +136,7 @@ def _sof_editor(parent, phase, cfg):
             color = "green" if abs(s - 1.0) < 1e-6 else "red"
             lbl.config(text=f"sum={s:.4f}", fg=color)
 
-    def _add_row(site):
+    def _add_row(site, before_widget):
         rf = tk.Frame(editor)
         ev = tk.StringVar(value="")
         sv = tk.StringVar(value="0.0")
@@ -144,11 +144,14 @@ def _sof_editor(parent, phase, cfg):
         e2 = tk.Entry(rf, textvariable=sv, width=10)
         e1.pack(side=tk.LEFT)
         e2.pack(side=tk.LEFT, padx=4)
-        tk.Button(rf, text="-", width=2,
-                  command=lambda: (rf.destroy(), rows.remove(row),
-                                   _refresh_sums())).pack(side=tk.LEFT)
-        rf.pack(fill=tk.X, pady=1)
+        row_ref = [None]  # mutable container for closure
+        btn = tk.Button(rf, text="-", width=2,
+                        command=lambda: (rf.destroy(), rows.remove(row_ref[0]),
+                                         _refresh_sums()))
+        btn.pack(side=tk.LEFT)
+        rf.pack(fill=tk.X, pady=1, before=before_widget)
         row = (site, ev, sv)
+        row_ref[0] = row
         rows.append(row)
         ev.trace_add("write", lambda *a: _refresh_sums())
         sv.trace_add("write", lambda *a: _refresh_sums())
@@ -185,7 +188,7 @@ def _sof_editor(parent, phase, cfg):
 
         add_btn = tk.Button(
             editor, text=f"+ Add to {site}",
-            command=lambda s=site: _add_row(s),
+            command=lambda s=site, b=add_btn: _add_row(s, b),
         )
         add_btn.pack(anchor="w", padx=20)
 

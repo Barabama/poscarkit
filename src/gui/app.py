@@ -46,7 +46,7 @@ class PoscaKitGUI:
     def __init__(self):
         self.root = tk.Tk()
         self.root.title(f"POSCARKIT {VERSION.split(':')[1].split('|')[0].strip()}")
-        self.root.geometry("960x680")
+        self.root.geometry("960x780")
         self.root.minsize(800, 500)
 
         # Styling
@@ -108,18 +108,35 @@ class PoscaKitGUI:
         right = tk.Frame(self.root)
         right.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True)
 
-        # Top: form container with a title label
+        # PanedWindow: form on top, log on bottom (user can drag to resize)
+        pane = tk.PanedWindow(right, orient=tk.VERTICAL, sashrelief=tk.RAISED, sashwidth=4)
+        pane.pack(fill=tk.BOTH, expand=True)
+
+        # Top: form area inside a canvas + scrollbar
+        form_outer = tk.Frame(pane)
         self._title_label = tk.Label(
-            right, text="", font=("Arial", 14, "bold"), anchor="w", pady=6, padx=12,
+            form_outer, text="", font=("Arial", 14, "bold"), anchor="w", pady=6, padx=12,
         )
         self._title_label.pack(fill=tk.X)
 
-        self._form_frame = tk.Frame(right, padx=12, pady=6)
-        self._form_frame.pack(fill=tk.BOTH, expand=True)
+        form_canvas = tk.Canvas(form_outer, highlightthickness=0)
+        form_scroll = ttk.Scrollbar(form_outer, orient="vertical", command=form_canvas.yview)
+        self._form_frame = tk.Frame(form_canvas, padx=12, pady=6)
+        _fw = form_canvas.create_window((0, 0), window=self._form_frame, anchor="nw")
+        self._form_frame.bind(
+            "<Configure>",
+            lambda e: form_canvas.configure(scrollregion=form_canvas.bbox("all")),
+        )
+        form_canvas.bind("<Configure>", lambda e, w=_fw: form_canvas.itemconfig(w, width=e.width))
+        form_canvas.configure(yscrollcommand=form_scroll.set)
+        form_canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        form_scroll.pack(side=tk.RIGHT, fill=tk.Y)
+
+        pane.add(form_outer, stretch="always")
 
         # Bottom: log area
-        log_frame = tk.LabelFrame(right, text="Log", padx=4, pady=2)
-        log_frame.pack(side=tk.BOTTOM, fill=tk.BOTH, expand=True)
+        log_frame = tk.LabelFrame(pane, text="Log", padx=4, pady=2)
+        pane.add(log_frame, stretch="always")
 
         self._log_area = tk.Text(
             log_frame, height=12, wrap=tk.WORD, state=tk.NORMAL,
