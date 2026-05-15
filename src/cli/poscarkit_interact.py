@@ -245,17 +245,17 @@ class PoscarkitInteract:
         """
         phase = phase or self.config.get("phase", "")
         if force:
-            prompt = "Enter phase to build unitcell (fcc, bcc, hcp, ...)\n> "
-            phase = phase or input(prompt)
-            while phase not in self.config:
-                logging.error(f"Phase {phase} not found. Please try again.")
-                phase = input(prompt)
+            prompt = "Enter phase to build unitcell (FCC, BCC, HCP, ...)\n> "
+            phase = phase or input(prompt).strip()
+            while phase.lower() not in self.config:
+                logging.error(f"Phase {phase.upper()} not found. Please try again.")
+                phase = input(prompt).strip()
         else:
             prompt = "Enter phase to load sofs data or leave blank to shuffle atoms only[ ]\n> "
             phase = phase or input(prompt).strip()
-            if phase not in self.config:
-                logging.warning(f"Phase {phase} not found. Shuffle atoms only.")
-        return deepcopy(self.config.get(phase, {}))
+            if phase.lower() not in self.config:
+                logging.warning(f"Phase {phase.upper()} not found. Shuffle atoms only.")
+        return deepcopy(self.config.get(phase.lower(), {}))
 
     def _handle_factors(self, factors: list[int] = []) -> tuple[int, int, int]:
         """

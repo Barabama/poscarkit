@@ -66,7 +66,7 @@ def cmd_modeling(args: argparse.Namespace) -> int:
     poscar = Path(args.poscar) if args.poscar else None
     outdir = Path(args.outdir) if args.outdir else Path("output")
     factors = tuple(args.factors)
-    phase = args.phase
+    phase = args.phase.upper() if args.phase else args.phase
     config = args.config
     seeds = args.seeds if args.seeds else [None]
     batch_size = args.batch_size
@@ -80,7 +80,7 @@ def cmd_modeling(args: argparse.Namespace) -> int:
             cfg = tomllib.load(f)
     else:
         cfg = {}
-    structure_info = cfg.get(phase, {})
+    structure_info = cfg.get(phase.lower() if phase else "", {})
 
     outdir.mkdir(parents=True, exist_ok=True)
 
