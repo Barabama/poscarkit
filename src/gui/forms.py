@@ -114,14 +114,12 @@ def modeling_form(parent, cfg: dict):
     _file_row(parent, "POSCAR file", poscar_var, cfg, "poscar")
     outdir_var = tk.StringVar(value=str(_cfg_get(cfg, "outdir", "output")))
     _dir_row(parent, "Output dir", outdir_var)
-    phase_var = tk.StringVar(value=str(_cfg_get(cfg, "phase", "")))
-    _combo(parent, "Phase", ["", "FCC", "BCC", "HCP"], cfg, "phase")
+    _, phase_var = _combo(parent, "Phase", ["", "FCC", "BCC", "HCP"], cfg, "phase")
     config_var = tk.StringVar(value="config.toml")
     _file_row(parent, "Config file", config_var, cfg, "config")
     factors_vars = _int_entries(parent, "Supercell factors", 3, cfg,
                                 "supercell_factors", (3, 3, 3))
-    seeds_var = tk.StringVar(value="42")
-    _entry(parent, cfg, "shuffle_seeds", "42")  # simple entry, comma-sep
+    _, seeds_var = _entry(parent, cfg, "shuffle_seeds", "42")
     batch_w, batch_var = _entry(parent, cfg, "batch_size", "1")
     sqs_var = _checkbox(parent, "Enable SQS", _cfg_get(cfg, "enable_sqs", False))
     iter_w, iter_var = _entry(parent, cfg, "iterations", "10000000")
@@ -151,8 +149,7 @@ def modeling_form(parent, cfg: dict):
 def import_sofs_form(parent, cfg: dict):
     csv_var = tk.StringVar()
     _file_row(parent, "CSV/XLSX file", csv_var, cfg, "")
-    phase_var = tk.StringVar(value=str(_cfg_get(cfg, "phase", "")))
-    _combo(parent, "Phase", ["", "FCC", "BCC", "HCP"], cfg, "phase")
+    _, phase_var = _combo(parent, "Phase", ["", "FCC", "BCC", "HCP"], cfg, "phase")
     temps_var = tk.StringVar()
     f_t = tk.Frame(parent)
     f_t.pack(fill=tk.X, pady=2)
@@ -360,8 +357,7 @@ def separate_form(parent, cfg: dict):
     _file_row(parent, "POSCAR file", poscar_var, cfg, "")
     outdir_var = tk.StringVar(value=str(_cfg_get(cfg, "outdir", "output")))
     _dir_row(parent, "Output dir", outdir_var)
-    key_var = tk.StringVar(value=str(_cfg_get(cfg, "separate_key", "note")))
-    _combo(parent, "Group by", ["note", "symbol", "x", "y", "z"], cfg, "separate_key", "note")
+    _, key_var = _combo(parent, "Group by", ["note", "symbol", "x", "y", "z"], cfg, "separate_key", "note")
 
     def get_args():
         return argparse.Namespace(
