@@ -188,8 +188,8 @@ class PoscarkitInteract:
         Returns:
             str: Name
         """
-        name = name or self.config.get("name", "") or input("Enter work name\n> ")
-        return self._handle_name(name) if not name else name
+        name = name or self.config.get("name", "") or input("Enter work name [modeling]\n> ").strip()
+        return name or "modeling"
 
     def _handle_poscar(self, poscar: str = "", force: bool = True) -> Path:
         """
