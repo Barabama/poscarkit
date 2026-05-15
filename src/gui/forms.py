@@ -571,7 +571,6 @@ def separate_form(parent, cfg: dict):
 
 FORMS = {
     "Modeling": modeling_form,
-    "Import SOFs": import_sofs_form,
     "Count CN": countcn_form,
     "Slice": slice_form,
     "Slice + CN": slice_to_countcn_form,

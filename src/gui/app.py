@@ -11,7 +11,6 @@ from src.config import VERSION
 
 FUNC_NAMES = [
     ("Modeling", "#4A90D9"),
-    ("Import SOFs", "#50B86C"),
     ("Count CN", "#E8A838"),
     ("Slice", "#D94A4A"),
     ("Slice + CN", "#9B59B6"),
@@ -46,7 +45,7 @@ class PoscaKitGUI:
     def __init__(self):
         self.root = tk.Tk()
         self.root.title(f"POSCARKIT {VERSION.split(':')[1].split('|')[0].strip()}")
-        self.root.geometry("960x780")
+        self.root.geometry("960x820")
         self.root.minsize(800, 500)
 
         # Styling
@@ -108,30 +107,21 @@ class PoscaKitGUI:
         right = tk.Frame(self.root)
         right.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True)
 
-        # PanedWindow: form on top, log on bottom (user can drag to resize)
+        # PanedWindow: form on top, log on bottom (draggable divider)
         pane = tk.PanedWindow(right, orient=tk.VERTICAL, sashrelief=tk.RAISED, sashwidth=4)
         pane.pack(fill=tk.BOTH, expand=True)
+        # Set initial sash position after layout
+        self.root.update_idletasks()
+        pane.sash_place(0, 0, 420)
 
-        # Top: form area inside a canvas + scrollbar
+        # Top: form area
         form_outer = tk.Frame(pane)
         self._title_label = tk.Label(
             form_outer, text="", font=("Arial", 14, "bold"), anchor="w", pady=6, padx=12,
         )
         self._title_label.pack(fill=tk.X)
-
-        form_canvas = tk.Canvas(form_outer, highlightthickness=0)
-        form_scroll = ttk.Scrollbar(form_outer, orient="vertical", command=form_canvas.yview)
-        self._form_frame = tk.Frame(form_canvas, padx=12, pady=6)
-        _fw = form_canvas.create_window((0, 0), window=self._form_frame, anchor="nw")
-        self._form_frame.bind(
-            "<Configure>",
-            lambda e: form_canvas.configure(scrollregion=form_canvas.bbox("all")),
-        )
-        form_canvas.bind("<Configure>", lambda e, w=_fw: form_canvas.itemconfig(w, width=e.width))
-        form_canvas.configure(yscrollcommand=form_scroll.set)
-        form_canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-        form_scroll.pack(side=tk.RIGHT, fill=tk.Y)
-
+        self._form_frame = tk.Frame(form_outer, padx=12, pady=6)
+        self._form_frame.pack(fill=tk.BOTH, expand=True)
         pane.add(form_outer, stretch="always")
 
         # Bottom: log area
