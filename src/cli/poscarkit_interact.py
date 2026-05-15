@@ -393,12 +393,14 @@ class PoscarkitInteract:
         outdir = self._handle_outdir()
         miller = self._handle_miller()
         pbc = self.config.get("pbc", False)
+        by_ase = self.config.get("by_ase", False)
         results = slice2files_with_countcn(
             name=name,
             poscar=poscar,
             outdir=outdir,
             miller_index=miller,
             pbc=pbc,
+            by_ase=by_ase,
         )
         return results
 

@@ -165,6 +165,7 @@ def cmd_slice_to_countcn(args: argparse.Namespace) -> int:
     outdir = Path(args.outdir) if args.outdir else Path("output")
     miller_index = tuple(args.miller_index)
     pbc = getattr(args, "pbc", False)
+    by_ase = getattr(args, "by_ase", False)
 
     if not poscar or not poscar.is_file():
         logging.error(f"POSCAR file not found: {poscar}")
@@ -173,7 +174,8 @@ def cmd_slice_to_countcn(args: argparse.Namespace) -> int:
     outdir.mkdir(parents=True, exist_ok=True)
 
     results = slice2files_with_countcn(
-        name=name, poscar=poscar, outdir=outdir, miller_index=miller_index, pbc=pbc
+        name=name, poscar=poscar, outdir=outdir, miller_index=miller_index,
+        pbc=pbc, by_ase=by_ase,
     )
 
     logging.info(f"Slice to CN count completed. Results saved to:")
@@ -460,6 +462,12 @@ def main() -> int:
         "--pbc",
         action="store_true",
         help="Enable periodic boundary conditions for CN counting in layers",
+    )
+    parser_slice_to_countcn.add_argument(
+        "--by-ase",
+        "-a",
+        action="store_true",
+        help="Use ASE backend for CN counting (default: False)",
     )
     parser_slice_to_countcn.set_defaults(func=cmd_slice_to_countcn)
 

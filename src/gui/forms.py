@@ -210,6 +210,14 @@ def _sof_editor(parent, phase, cfg):
     return editor, collect
 
 
+def _link_ase_pbc(ase_var: tk.BooleanVar, pbc_var: tk.BooleanVar):
+    """When ASE is checked, auto-check PBC (ASE always uses PBC)."""
+    def _sync(*_):
+        if ase_var.get():
+            pbc_var.set(True)
+    ase_var.trace_add("write", _sync)
+
+
 def _write_sofs_to_config(cfg_path, phase, sofs_by_site):
     """Write edited SOFs into config.toml sections like [PHASE.SITE.sofs]."""
     import re
@@ -385,6 +393,8 @@ def countcn_form(parent, cfg: dict):
     par_w, par_var = _entry(parent, cfg, "parallel", "2")
     ase_var = _checkbox(parent, "Use ASE backend", _cfg_get(cfg, "by_ase", False))
     pbc_var = _checkbox(parent, "Periodic boundary (PBC)", _cfg_get(cfg, "pbc", False))
+    # ASE always includes PBC — link checkboxes
+    _link_ase_pbc(ase_var, pbc_var)
 
     def get_args():
         return argparse.Namespace(
@@ -436,7 +446,9 @@ def slice_to_countcn_form(parent, cfg: dict):
     _dir_row(parent, "Output dir", outdir_var)
     miller_vars = _int_entries(parent, "Miller index", 3, cfg,
                                "slice_direction", (0, 0, 1))
+    ase_var = _checkbox(parent, "Use ASE backend", _cfg_get(cfg, "by_ase", False))
     pbc_var = _checkbox(parent, "Periodic boundary (PBC)", _cfg_get(cfg, "pbc", False))
+    _link_ase_pbc(ase_var, pbc_var)
 
     def get_args():
         return argparse.Namespace(
@@ -445,6 +457,7 @@ def slice_to_countcn_form(parent, cfg: dict):
             outdir=outdir_var.get(),
             miller_index=[int(v.get()) for v in miller_vars],
             pbc=pbc_var.get(),
+            by_ase=ase_var.get(),
         )
 
     return get_args
