@@ -31,12 +31,13 @@ class CNCounter:
         self.name = name
         self.poscar = poscar
 
-    def detect_cutoff(self, sample_size: int = 1000) -> float:
+    def detect_cutoff(self, sample_size: int = 1000, pbc: bool = False) -> float:
         """
         Detect the cutoff distance for coordination number counting.
 
         Args:
             sample_size: Number of atoms to sample to avoid large memory usage
+            pbc: Whether to apply periodic boundary conditions
         Returns:
             float: Cutoff distance
         """
@@ -44,13 +45,21 @@ class CNCounter:
         coords = struct.get_coords(direct=False)
         # Sample for a large structure
         len_coords = len(coords)
-        if len_coords > sample_size:
+        if pbc:
+            # Always sample for PBC — full N^2 MIC distances are expensive
+            n_sample = min(len_coords, max(sample_size, 200))
+            if len_coords > n_sample:
+                indices = np.random.choice(len_coords, size=n_sample, replace=False)
+                coords = coords[indices]
+            distances = self._pdist_mic(coords, struct.cell)
+        elif len_coords > sample_size:
             logging.info(f"Sampling atoms {sample_size}/{len_coords}")
             indices = np.random.choice(len_coords, size=sample_size, replace=False)
             coords = coords[indices]
+            distances = pdist(coords)
+        else:
+            distances = pdist(coords)
 
-        # Calculate pairwise distances and filter out small distances
-        distances = pdist(coords)
         distances = distances[distances > 0.1]
 
         if len(distances) == 0:
@@ -89,8 +98,55 @@ class CNCounter:
 
         return float(dist_cutoff)
 
+    def _pdist_mic(self, coords: np.ndarray, cell: np.ndarray) -> np.ndarray:
+        """Compute minimum-image pairwise distances for a sampled coordinate set."""
+        inv_cell = np.linalg.inv(cell)
+        n = len(coords)
+        dists = []
+        for i in range(n):
+            diff = coords[i] - coords[i + 1 :]
+            diff_frac = diff @ inv_cell
+            diff_frac -= np.round(diff_frac)
+            diff_mic = diff_frac @ cell
+            dists.append(np.linalg.norm(diff_mic, axis=1))
+        return np.concatenate(dists) if dists else np.array([])
+
+    def _replicate_atoms(
+        self, coords: np.ndarray, cell: np.ndarray, cutoff: float
+    ) -> tuple[np.ndarray, np.ndarray]:
+        """Generate periodic images of atoms within cutoff distance.
+
+        Returns:
+            expanded_coords: (N_total, 3) array of original + image positions
+            index_map: (N_total,) array mapping expanded index → original index
+        """
+        n_atoms = len(coords)
+        # Compute how many replicas are needed in each direction
+        cell_lengths = np.linalg.norm(cell, axis=1)
+        n_replicas = np.ceil(cutoff / cell_lengths).astype(int)
+        # Limit to 1 replica per direction for performance
+        n_replicas = np.clip(n_replicas, 1, 1)
+
+        all_coords = [coords]
+        index_maps = [np.arange(n_atoms)]
+
+        for ni, nj, nk in product(
+            range(-n_replicas[0], n_replicas[0] + 1),
+            range(-n_replicas[1], n_replicas[1] + 1),
+            range(-n_replicas[2], n_replicas[2] + 1),
+        ):
+            if ni == 0 and nj == 0 and nk == 0:
+                continue
+            offset = ni * cell[0] + nj * cell[1] + nk * cell[2]
+            all_coords.append(coords + offset)
+            index_maps.append(np.arange(n_atoms))
+
+        expanded = np.vstack(all_coords)
+        index_map = np.concatenate(index_maps)
+        return expanded, index_map
+
     def calculate_cn(
-        self, cutoff: float, cutoff_mult: float = 1.1
+        self, cutoff: float, cutoff_mult: float = 1.1, pbc: bool = False
     ) -> tuple[list[CNData], dict[frozenset, int]]:
         """
         Calculate each atom's coordination number within a given cutoff distance.
@@ -105,6 +161,7 @@ class CNCounter:
 
         struct = self.struct
         coords = struct.get_coords(direct=False)
+        cell = struct.cell
 
         cndata_list: list[CNData] = []
         pair_counts: dict[frozenset, int] = defaultdict(int)
@@ -112,8 +169,12 @@ class CNCounter:
         # Apply cutoff multiplier
         cutoff = cutoff * cutoff_mult
 
-        # Make a KDTree
-        tree = KDTree(coords)
+        if pbc:
+            expanded_coords, index_map = self._replicate_atoms(coords, cell, cutoff)
+            tree = KDTree(expanded_coords)
+        else:
+            tree = KDTree(coords)
+
         tolerance = cutoff * 0.1
         for i, coord in progress(enumerate(coords), len(coords), desc="Calculating CN"):
             # Search for neighbors within the cutoff + tolerance
@@ -126,13 +187,26 @@ class CNCounter:
             nn_map = defaultdict(list)
 
             for j in indices:
-                if i == j:
-                    continue
-                dist = np.linalg.norm(coords[j] - coord)
+                if pbc:
+                    orig_j = int(index_map[j])
+                    if orig_j == i:
+                        continue
+                    atom_nb = struct[orig_j]
+                    # Compute MIC distance for accurate filtering
+                    diff = coords[orig_j] - coord
+                    diff_frac = diff @ np.linalg.inv(cell)
+                    diff_frac -= np.round(diff_frac)
+                    diff_mic = diff_frac @ cell
+                    dist = np.linalg.norm(diff_mic)
+                else:
+                    if j == i:
+                        continue
+                    dist = np.linalg.norm(coords[j] - coord)
+                    atom_nb = struct[j]
+
                 if (dist < tolerance) or (dist > cutoff + tolerance):
                     continue
 
-                atom_nb = struct[j]
                 s_nb = atom_nb.symbol
                 nn_map[s_nb].append(atom_nb)
 
@@ -465,6 +539,7 @@ class CNCounter:
         cutoff_mult: float = 1.1,
         parallel: int = 2,
         by_ase: bool = False,
+        pbc: bool = False,
     ) -> Path:
         """
         Calculate coordination number and save to files.
@@ -474,6 +549,7 @@ class CNCounter:
             cutoff_mult: Multiplier for cutoff radius
             parallel: Number of parallel processes
             by_ase: Whether to use ASE for CN calculation
+            pbc: Whether to apply periodic boundary conditions
         Returns:
             Path: Path to output directory
         """
@@ -493,12 +569,16 @@ class CNCounter:
         # Search CN
         logging.info(f"Applying cutoff multiplier: {cutoff_mult}")
         if by_ase:
-            logging.info("Searching CN by ase")
+            logging.info("Searching CN by ase (PBC always on)")
             self.cndata_list, self.pair_counts = self.calculate_cn_ase(cutoff_mult)
         else:
-            cutoff = self.detect_cutoff()
+            cutoff = self.detect_cutoff(pbc=pbc)
             logging.info(f"Detected cutoff: {cutoff:.2f}")
-            self.cndata_list, self.pair_counts = self.calculate_cn(cutoff, cutoff_mult)
+            if pbc:
+                logging.info("PBC enabled — using periodic image replication")
+            self.cndata_list, self.pair_counts = self.calculate_cn(
+                cutoff, cutoff_mult, pbc=pbc
+            )
 
         def write_single(args: tuple[tuple[str, str, int], Struct]):
             (s_ct, s_nb, cn), substruct = args

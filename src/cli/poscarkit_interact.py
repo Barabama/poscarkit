@@ -352,6 +352,7 @@ class PoscarkitInteract:
         mult = self.config.get("cutoff_mult", 1.1)
         parallel = self.config.get("parallel", 2)
         by_ase = self.config.get("by_ase", False)
+        pbc = self.config.get("pbc", False)
 
         counter = CNCounter(name, posc)
         result = counter.countCN2files(
@@ -359,6 +360,7 @@ class PoscarkitInteract:
             cutoff_mult=mult,
             parallel=parallel,
             by_ase=by_ase,
+            pbc=pbc,
         )
         return result
 
@@ -390,11 +392,13 @@ class PoscarkitInteract:
         poscar = self._handle_poscar()
         outdir = self._handle_outdir()
         miller = self._handle_miller()
+        pbc = self.config.get("pbc", False)
         results = slice2files_with_countcn(
             name=name,
             poscar=poscar,
             outdir=outdir,
             miller_index=miller,
+            pbc=pbc,
         )
         return results
 
