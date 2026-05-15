@@ -110,9 +110,6 @@ class PoscaKitGUI:
         # PanedWindow: form on top, log on bottom (draggable divider)
         pane = tk.PanedWindow(right, orient=tk.VERTICAL, sashrelief=tk.RAISED, sashwidth=4)
         pane.pack(fill=tk.BOTH, expand=True)
-        # Set initial sash position after layout
-        self.root.update_idletasks()
-        pane.sash_place(0, 0, 420)
 
         # Top: form area
         form_outer = tk.Frame(pane)
