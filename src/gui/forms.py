@@ -105,10 +105,160 @@ def _int_entries(parent, label, count, cfg, key, defaults):
 
 
 # ------------------------------------------------------------------ #
+#  SOF editor                                                        #
+# ------------------------------------------------------------------ #
+
+def _sof_editor(parent, phase, cfg):
+    """Build an editable SOF table for the given phase.
+
+    Returns (editor_frame, collect_fn) where collect_fn() → {site: {elem: fraction}}.
+    If phase not found in config, returns (None, lambda: {}).
+    """
+    phase_cfg = cfg.get(phase.upper(), {})
+    if not phase_cfg or "cell" not in phase_cfg:
+        return None, lambda: {}
+
+    editor = tk.LabelFrame(parent, text=f"SOFs for {phase.upper()}")
+    editor.pack(fill=tk.X, pady=(8, 0))
+
+    rows: list[tuple[str, tk.StringVar, tk.StringVar]] = []
+    sum_labels: dict[str, tk.Label] = {}
+
+    def _refresh_sums():
+        site_sums: dict[str, float] = {}
+        for site, ev, sv in rows:
+            try:
+                site_sums[site] = site_sums.get(site, 0) + float(sv.get() or 0)
+            except ValueError:
+                pass
+        for site, lbl in sum_labels.items():
+            s = site_sums.get(site, 0)
+            color = "green" if abs(s - 1.0) < 1e-6 else "red"
+            lbl.config(text=f"sum={s:.4f}", fg=color)
+
+    def _add_row(site):
+        rf = tk.Frame(editor)
+        ev = tk.StringVar(value="")
+        sv = tk.StringVar(value="0.0")
+        e1 = tk.Entry(rf, textvariable=ev, width=8)
+        e2 = tk.Entry(rf, textvariable=sv, width=10)
+        e1.pack(side=tk.LEFT)
+        e2.pack(side=tk.LEFT, padx=4)
+        tk.Button(rf, text="-", width=2,
+                  command=lambda: (rf.destroy(), rows.remove(row),
+                                   _refresh_sums())).pack(side=tk.LEFT)
+        rf.pack(fill=tk.X, pady=1)
+        row = (site, ev, sv)
+        rows.append(row)
+        ev.trace_add("write", lambda *a: _refresh_sums())
+        sv.trace_add("write", lambda *a: _refresh_sums())
+
+    for site, data in phase_cfg.items():
+        if site == "cell":
+            continue
+        elem, coords = data.get("atoms", ["?", []])
+        sofs = data.get("sofs", {})
+
+        header = tk.Label(
+            editor, text=f"   {site}   (×{len(coords)}, default: {elem})",
+            font=("Arial", 9, "bold"), anchor="w",
+        )
+        header.pack(fill=tk.X, pady=(6, 2))
+
+        for el, val in sorted(sofs.items()):
+            rf = tk.Frame(editor)
+            ev = tk.StringVar(value=el)
+            sv = tk.StringVar(value=str(val))
+            e1 = tk.Entry(rf, textvariable=ev, width=8)
+            e2 = tk.Entry(rf, textvariable=sv, width=10)
+            e1.pack(side=tk.LEFT)
+            e2.pack(side=tk.LEFT, padx=4)
+            tk.Button(rf, text="-", width=2,
+                      command=lambda r=rf, row=(site, ev, sv):
+                          (r.destroy(), rows.remove(row), _refresh_sums())
+                      ).pack(side=tk.LEFT)
+            rf.pack(fill=tk.X, pady=1)
+            row = (site, ev, sv)
+            rows.append(row)
+            ev.trace_add("write", lambda *a: _refresh_sums())
+            sv.trace_add("write", lambda *a: _refresh_sums())
+
+        add_btn = tk.Button(
+            editor, text=f"+ Add to {site}",
+            command=lambda s=site: _add_row(s),
+        )
+        add_btn.pack(anchor="w", padx=20)
+
+        sum_lbl = tk.Label(editor, text="sum=0.0000", fg="gray")
+        sum_lbl.pack(anchor="e")
+        sum_labels[site] = sum_lbl
+
+    _refresh_sums()
+
+    def collect():
+        result: dict[str, dict[str, float]] = {}
+        for site, ev, sv in rows:
+            e = ev.get().strip()
+            if not e:
+                continue
+            try:
+                result.setdefault(site, {})[e] = float(sv.get() or 0)
+            except ValueError:
+                pass
+        return result
+
+    return editor, collect
+
+
+def _write_sofs_to_config(cfg_path, phase, sofs_by_site):
+    """Write edited SOFs into config.toml sections like [PHASE.SITE.sofs]."""
+    import re
+    phase_upper = phase.upper()
+    with open(cfg_path, "r", encoding="utf-8") as f:
+        lines = f.readlines()
+
+    # Build map: section_header -> {elem: value, ...}
+    wanted = {f"{phase_upper}.{site}.sofs": sofs
+              for site, sofs in sofs_by_site.items()}
+
+    new_lines = []
+    skip_section = False
+    seen = set()
+    for i, line in enumerate(lines):
+        m = re.match(r"^\s*\[([^\]]+)\]\s*$", line)
+        if m:
+            section = m.group(1).strip()
+            skip_section = section in wanted
+            if skip_section:
+                new_lines.append(line)
+                for elem, val in sorted(wanted[section].items()):
+                    new_lines.append(f"{elem} = {val:.6g}\n")
+                new_lines.append("\n")
+                seen.add(section)
+                continue
+        if skip_section and line.strip() and not line.strip().startswith("#"):
+            continue
+        new_lines.append(line)
+
+    # Append any section not yet written
+    for section, sofs in wanted.items():
+        if section not in seen:
+            new_lines.append(f"\n[{section}]\n")
+            for elem, val in sorted(sofs.items()):
+                new_lines.append(f"{elem} = {val:.6g}\n")
+
+    with open(cfg_path, "w", encoding="utf-8") as f:
+        f.writelines(new_lines)
+
+
+# ------------------------------------------------------------------ #
 #  Modeling                                                          #
 # ------------------------------------------------------------------ #
 
 def modeling_form(parent, cfg: dict):
+    import tomllib
+    from src.config import normalize_config_keys
+
     name_w, name_var = _entry(parent, cfg, "name", "modeling")
     poscar_var = tk.StringVar(value=str(_cfg_get(cfg, "poscar", "")))
     _file_row(parent, "POSCAR file", poscar_var, cfg, "poscar")
@@ -116,7 +266,29 @@ def modeling_form(parent, cfg: dict):
     _dir_row(parent, "Output dir", outdir_var)
     _, phase_var = _combo(parent, "Phase", ["", "FCC", "BCC", "HCP"], cfg, "phase")
     config_var = tk.StringVar(value="config.toml")
+
+    # SOF editor container (rebuilt on phase/config change)
+    sof_container = tk.Frame(parent)
+    sof_container.pack(fill=tk.X)
+    _sof_collect = lambda: {}  # mutable closure
+
+    def _reload_sof(*_):
+        nonlocal _sof_collect
+        for w in sof_container.winfo_children():
+            w.destroy()
+        p = phase_var.get().strip()
+        cp = config_var.get().strip()
+        if not p or not cp or not Path(cp).is_file():
+            return
+        with open(cp, "rb") as f:
+            cfg2 = normalize_config_keys(tomllib.load(f))
+        editor, collect = _sof_editor(sof_container, p, cfg2)
+        _sof_collect = collect if editor else (lambda: {})
+
+    phase_var.trace_add("write", _reload_sof)
     _file_row(parent, "Config file", config_var, cfg, "config")
+    config_var.trace_add("write", _reload_sof)
+
     factors_vars = _int_entries(parent, "Supercell factors", 3, cfg,
                                 "supercell_factors", (3, 3, 3))
     _, seeds_var = _entry(parent, cfg, "shuffle_seeds", "42")
@@ -125,12 +297,17 @@ def modeling_form(parent, cfg: dict):
     iter_w, iter_var = _entry(parent, cfg, "iterations", "10000000")
 
     def get_args():
+        sofs_by_site = _sof_collect()
+        phase = phase_var.get()
+        cp = config_var.get().strip()
+        if sofs_by_site and cp and Path(cp).is_file():
+            _write_sofs_to_config(cp, phase, sofs_by_site)
         return argparse.Namespace(
             name=name_var.get(),
             poscar=poscar_var.get(),
             outdir=outdir_var.get(),
-            phase=phase_var.get(),
-            config=config_var.get() or None,
+            phase=phase,
+            config=cp or None,
             factors=[int(v.get()) for v in factors_vars],
             seeds=[int(s.strip()) for s in seeds_var.get().split(",") if s.strip()] or [None],
             batch_size=int(batch_var.get() or "1"),
@@ -138,7 +315,10 @@ def modeling_form(parent, cfg: dict):
             iterations=int(float(iter_var.get() or "1e7")),
         )
 
-    # Build the actual form frame
+    # Trigger initial load if phase is pre-filled
+    if phase_var.get().strip():
+        _reload_sof()
+
     return get_args
 
 
