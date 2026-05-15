@@ -1,256 +1,223 @@
 # POSCARKIT
 
-## Introduction
+**A toolkit for modeling VASP POSCAR files based on Sublattice Occupying Fractions (SOFs).**
+**基于亚晶格占位分数 (SOFs) 的 VASP POSCAR 结构建模工具包.**
 
-POSCARKIT 是一个用于处理 VASP POSCAR 文件的工具, 主要用于基于原子占位的建模.
-POSCARKIT is a tool for modeling structure POSCAR files, based on Sublattice Occupying Fractions (SOFs).
+[![Version](https://img.shields.io/badge/version-0.9.4-blue)](./pyproject.toml)
+[![Python](https://img.shields.io/badge/python-≥3.10-blue)](./pyproject.toml)
+[![License](https://img.shields.io/badge/license-MIT-green)](./LICENSE)
 
-## Features
+---
 
-- Structure modeling for ordered framework materials.
-- Atomic allocation based on Sublattice Occupying Fractions (SOFs).
-- Count Coordinate Numbers (CN) of all pairs of atoms in the supercell and calculate the Nearest Neighbors (NN).
-- Slice structure to layers normal to a Miller Index.
-- Slice to layers and count CN for each layer.
-- Supercell generation along the basis vectors.
-- Compare two POSCAR files.
-- Merge multiple POSCAR files into one.
-- Separate a POSCAR file by different criteria.
+## Features · 功能
 
-## Usage
+| Feature · 功能 | Description · 描述 |
+|---|---|
+| Modeling · 建模 | Generate supercell and allocate atoms based on SOFs · 基于 SOFs 生成超胞并分配原子 |
+| Count CN · 配位数统计 | Coordination number & nearest-neighbor pair counting · 配位数和最近邻原子对统计 |
+| PBC support · 周期性 | Optional periodic boundary conditions for CN counting · 可选的周期性边界条件配位数统计 |
+| Slice · 切片 | Slice structure normal to a Miller index · 沿晶面指数切片 |
+| Slice + CN · 切片配位 | Slice then count CN per layer · 切片后逐层统计配位数 |
+| Supercell · 超胞 | Expand unit cell along basis vectors · 沿基矢方向扩展超胞 |
+| Compare · 比较 | Diff two POSCAR files · 比较两个 POSCAR 文件 |
+| Merge · 合并 | Combine multiple POSCARs into one · 合并多个 POSCAR 文件 |
+| Separate · 分离 | Split a POSCAR by element, coordinate, or group · 按元素/坐标/分组分离 POSCAR |
 
-### Run executable
+---
 
-```shell
-# Run it directly
-POSCARKIT.exe
+## Quick Start · 快速开始
 
-# Run it with parameters
-POSCARKIT.exe -p <POSCAR.vasp> -c <config.toml>
-```
-
-### Run from source
-
-```shell
-# Clone the repository
-git clone https://github.com/Barabama/POSCARKIT.git
-# Build
-pip install -e .
-# Run
-python main.py
-```
-
-### Configuration
-
-config.toml 文件用于配置工具行为, 包括超胞生成、原子分配、统计配位、切片等操作的参数.
-**可以不进行配置, 对于未配置好的参数程序会请求用户手动输入参数.**
-
-- `name`: 工作名称.
-- `poscar`: POSCAR 文件的路径.
-- `outdir`: 输出目录.
-- `phase`: 指定晶体结构类型（例如 'fcc', 'bcc', 'hcp'）.
-- `supercell_factors`: 超胞因子, 沿晶格矢量方向的倍数.
-- `slice_direction`: 切片操作的方向, 指定沿晶格矢量方向的切片方向.
-- `shuffle_seeds`: 乱序亚晶格位置的随机种子列表.
-
-- `structure_info`: 结构信息参数, 包括结构的单胞结构信息和亚晶格位置的原子分数.
-  - Site of Fractions 参数, 用于指定不同亚晶格位置的原子分数.
-    （例如, `fcc.1a.sofs`: fcc 结构中亚晶格位置 'a' 的原子分数；
-           `bcc.1b.sofs`: bcc 结构中亚晶格位置 'b' 的原子分数.）
-  - 单胞结构信息, 这些信息用于生成不同结构类型的单胞 POSCAR 文件.
-
-## CLI 命令行工具
-
-安装后可以使用 `poscarkit` 命令行工具:
-
-### 查看帮助
+### Run executable · 运行可执行文件
 
 ```bash
-poscarkit help
+POSCARKIT.exe                           # interactive mode · 交互模式
+POSCARKIT.exe -p POSCAR.vasp -c config.toml
 ```
 
-### 建模工作流
+### Run from source · 从源码运行
+
+```bash
+git clone https://github.com/Barabama/POSCARKIT.git
+cd poscarkit
+pip install -e .
+python main.py                          # no args → interactive · 无参数→交互模式
+```
+
+---
+
+## CLI Commands · 命令行
+
+```
+poscarkit help                          # show help · 显示帮助
+```
+
+### Modeling · 建模
 
 ```bash
 poscarkit modeling --poscar POSCAR.vasp --factors 3 3 3 --name my_model
 poscarkit modeling --config config.toml --phase fcc --seeds 1 2 3
+poscarkit modeling --config config.toml --phase fcc --enable-sqs --batch-size 4
 ```
 
-### 配位数统计
+### Count CN · 配位数统计
 
 ```bash
-poscarkit countcn --poscar POSCAR.vasp --name my_cn --outdir output/
+poscarkit countcn --poscar POSCAR.vasp --name my_cn
 poscarkit countcn --poscar POSCAR.vasp --cutoff-mult 1.2 --parallel 4
+poscarkit countcn --poscar POSCAR.vasp --by-ase              # use ASE backend · 使用 ASE 后端
+poscarkit countcn --poscar unitcell.vasp --pbc               # with PBC · 启用周期性边界
 ```
 
-### 切片操作
+### Slice · 切片
 
 ```bash
 poscarkit slice --poscar POSCAR.vasp --miller-index 1 1 1 --outdir output/
 ```
 
-### 切片并统计配位数
+### Slice to Count CN · 切片后统计配位
 
 ```bash
-poscarkit slice-to-countcn --poscar POSCAR.vasp --miller-index 1 1 1 --outdir output/
+poscarkit slice-to-countcn --poscar POSCAR.vasp --miller-index 1 1 1
+poscarkit slice-to-countcn --poscar POSCAR.vasp --miller-index 1 1 1 --pbc
 ```
 
-### 超胞生成
+### Supercell · 超胞生成
 
 ```bash
 poscarkit supercell --poscar POSCAR.vasp --factors 2 2 2 --outdir output/
+poscarkit supercell --poscar POSCAR.vasp --factors 2 2 2 --by-ase
 ```
 
-### 比较 POSCAR 文件
+### Compare · 比较
 
 ```bash
 poscarkit compare --poscar1 POSCAR1.vasp --poscar2 POSCAR2.vasp
 ```
 
-### 合并 POSCAR 文件
+### Merge · 合并
 
 ```bash
-# 合并两个文件
 poscarkit merge --poscars POSCAR1.vasp POSCAR2.vasp --outdir output/
-
-# 合并多个文件
-poscarkit merge --poscars POSCAR1.vasp POSCAR2.vasp POSCAR3.vasp --outdir output/
+poscarkit merge --poscars A.vasp B.vasp C.vasp --outdir output/
 ```
 
-### 分离 POSCAR 文件
+### Separate · 分离
 
 ```bash
-# 按 note 分离
 poscarkit separate --poscar POSCAR.vasp --key note --outdir output/
-
-# 按 symbol 分离
 poscarkit separate --poscar POSCAR.vasp --key symbol --outdir output/
 ```
 
-## 操作选项 (交互式模式)
+## Interactive Mode · 交互模式
 
-运行 `python main.py` 或 `poscarkit_interact` 进入交互式模式:
+`python main.py` (no arguments) enters a numbered menu · `python main.py`（无参数）进入菜单:
 
-1. 帮助: 显示帮助信息.
-2. 读取配置: 读取 config.toml 文件中的配置.
-3. 工作流: 结合超胞生成、分配的工作流.
-4. 配位数统计: 统计 POSCAR 文件中每个原子的配位数和最近邻数.
-5. 切片: 根据配置对 POSCAR 文件进行切片.
-6. 切片并统计配位数: 切片后对每层进行配位数统计.
-7. 超胞生成: 根据 POSCAR 文件或配置生成超胞.
-8. 比较: 比较两个 POSCAR 文件.
-9. 合并: 合并多个 POSCAR 文件.
-10. 分离: 根据指定条件分离 POSCAR 文件.
+```
+ 1) Help                5) Slice to layers    8)  Compare
+ 2) Read config         6) Slice to CountCN   9)  Merge
+ 3) Run Modeling        7) Make Supercell    10)  Separate
+ 4) Count CN
+```
 
-## 项目结构
+---
+
+## Configuration · 配置
+
+The `config.toml` file defines phases, sublattice geometries, and SOF parameters.
+`config.toml` 文件定义晶体相、亚晶格几何和 SOF 参数。
+
+Key parameters · 关键参数:
+
+| Parameter · 参数 | Description · 描述 |
+|---|---|
+| `name` | Work name · 工作名称 |
+| `poscar` | Input POSCAR path · 输入文件路径 |
+| `outdir` | Output directory · 输出目录 |
+| `phase` | Crystal structure: `fcc`, `bcc`, `hcp` · 晶体结构类型 |
+| `supercell_factors` | Expansion factors e.g. `[3, 3, 3]` · 超胞因子 |
+| `shuffle_seeds` | Random seeds for reproducibility · 随机种子 |
+| `batch_size` | Number of parallel modeling batches · 并行批次数 |
+| `enable_sqs` | Enable SQS generation · 启用 SQS 生成 |
+| `cutoff_mult` | CN cutoff multiplier · 配位截断倍数 |
+| `by_ase` | Use ASE for CN / supercell · 使用 ASE 后端 |
+| `pbc` | Periodic boundary conditions for CN · 配位统计周期边界 |
+
+SOFs are defined per phase per sublattice · SOFs 按相/亚晶格定义:
+
+```toml
+[fcc.1a.sofs]
+V = 1.0
+
+[fcc.3c.sofs]
+Co = 0.4444
+Ni = 0.4444
+V = 0.1112
+```
+
+Custom phases can be added · 可添加自定义相 (see `config.toml` Advanced Usage).
+
+---
+
+## Project Structure · 项目结构
 
 ```
 .
-├── examples/              # 示例文件
-├── old/                   # 旧代码备份
-├── src/                   # 核心功能模块
-│   ├── cli/               # 命令行接口
-│   │   ├── poscarkit.py           # 命令行主程序
-│   │   └── poscarkit_interact.py  # 交互式命令行
-│   ├── config/            # 配置模块
-│   ├── gui/               # GUI 相关资源
-│   ├── modeling/          # 建模核心模块
-│   │   ├── __init__.py
-│   │   ├── base.py        # 基础结构类
-│   │   ├── countcn.py     # 配位数统计
-│   │   ├── model.py       # 模型相关
-│   │   ├── slice.py       # 切片操作
-│   │   └── supercell.py   # 超胞生成
-│   ├── utils/             # 通用工具
-│   └── workflow/          # 工作流模块
-│       ├── modeling.py        # 建模工作流
-│       └── slice_to_countcn.py # 切片到配位数统计工作流
-├── tests/                 # 测试代码
-│   ├── cli/               # CLI 测试
-│   ├── modeling/          # 建模模块测试
-│   ├── utils/             # 工具测试
-│   └── workflow/          # 工作流测试
-├── main.py                # 主程序入口
-├── pyproject.toml         # 项目配置
-└── README.md              # 项目文档
+├── examples/                    # sample POSCARs · 示例文件
+├── old/                         # legacy scripts · 旧版脚本
+├── src/
+│   ├── cli/                     # command-line interface · 命令行接口
+│   │   ├── poscarkit.py         #    CLI entry · 命令行入口
+│   │   └── poscarkit_interact.py#    interactive menu · 交互菜单
+│   ├── config/                  # metadata & default config · 元数据与默认配置
+│   ├── modeling/                # core modeling · 核心建模
+│   │   ├── base.py              #    Atom, Struct, SimplePoscar
+│   │   ├── countcn.py           #    CN counter with KDTree & ASE backends
+│   │   ├── model.py             #    ModelStruct — shuffle & SQS allocation
+│   │   ├── slice.py             #    Slicer — Miller-index layer slicing
+│   │   └── supercell.py         #    supercell generation · 超胞生成
+│   ├── utils/                   # utilities · 工具
+│   └── workflow/                # high-level workflows · 高层工作流
+│       ├── modeling.py          #    supercell + allocation · 超胞+分配
+│       └── slice_to_countcn.py  #    slice + CN per layer · 切片+逐层配位
+├── tests/                       # unit tests · 单元测试
+├── main.py                      # program entry · 程序入口
+├── pyproject.toml               # project metadata & deps · 项目元数据
+├── config.toml                  # user configuration · 用户配置
+└── README.md
 ```
 
-## 工作流
+---
 
-### 建模工作流 (Modeling Workflow)
-
-建模工作流包含两个主要步骤: 
-1. 超胞生成: 根据指定的超胞因子生成超胞
-2. 原子分配: 根据结构信息和随机种子分配原子
-
-该工作流实现在 `src/workflow/modeling.py` 模块中.
-
-### 切片到配位数统计工作流 (Slice to Count CN Workflow)
-
-此工作流结合了切片和配位数统计功能: 
-1. 按指定晶面指数切片
-2. 对每个切片层分别进行配位数统计
-
-该工作流实现在 `src/workflow/slice_to_countcn.py` 模块中.
-
-## 核心功能
-
-### 1. 超胞生成 (Supercell Generation)
-
-根据输入的 POSCAR 文件和超胞因子, 生成指定大小的超胞结构.
-
-### 2. 原子分配 (Atomic Allocation)
-
-根据配置文件中的亚晶格原子分数, 对超胞中的原子进行随机分配, 生成具有指定成分的结构.
-
-### 3. 配位数统计 (Coordination Number Counting)
-
-统计结构中每个原子的配位数和最近邻原子对的数量, 生成配位数分布直方图.
-
-### 4. 切片操作 (Slicing)
-
-将结构沿指定方向切片, 生成平行于指定晶面的原子层结构, 并可选择对每层进行配位数统计.
-
-### 5. POSCAR 合并与分离 (Merge & Separate)
-
-- 合并多个 POSCAR 文件为一个
-- 根据指定条件分离一个 POSCAR 文件为多个
-
-## 测试
-
-本项目包含完整的单元测试, 可以通过以下方式运行: 
-
-### 运行所有测试
+## Testing · 测试
 
 ```bash
-python -m unittest discover tests
-```
-
-### 运行特定模块的测试
-
-```bash
+python -m unittest discover tests             # all tests · 全部测试
 python -m unittest tests.modeling.test_simple_poscar
-python -m unittest tests.modeling.test_supercell
+python -m unittest tests.modeling.test_countcn
 python -m unittest tests.workflow.test_modeling
-python -m unittest tests.workflow.test_slice_to_countcn
 ```
 
-## 编译
+---
 
-- 用Nuitka打包
+## Build · 编译
 
-```Shell
-# 安装Nuitka
-cd poscarkit
+Packaged with Nuitka · 用 Nuitka 打包:
+
+```bash
 pip install nuitka
-
-# nuitka --standalone --onefile --output-dir=dist --jobs=4 --lto=yes `
-# --follow-imports --enable-plugin=no-qt --include-package=pandas `
-# --nofollow-import-to=matplotlib.tests --nofollow-import-to=pandas.tests `
-# --nofollow-import-to=pytest --nofollow-import-to=setuptools.tests `
-# --windows-icon-from-ico="src/gui/poscarkit.ico" `
-# --output-filename=poscarkit-0.9.4.exe `
-# --file-version=0.9.4 `
-# --copyright="(C) 2025 MCMF, Fuzhou University" `
-# main.py
+nuitka --standalone --onefile --output-dir=dist --jobs=4 --lto=yes \
+    --follow-imports --enable-plugin=no-qt --include-package=pandas \
+    --nofollow-import-to=matplotlib.tests --nofollow-import-to=pandas.tests \
+    --nofollow-import-to=pytest --nofollow-import-to=setuptools.tests \
+    --windows-icon-from-ico="src/gui/poscarkit.ico" \
+    --output-filename=poscarkit-0.9.4.exe \
+    --file-version=0.9.4 \
+    --copyright="(C) 2025 MCMF, Fuzhou University" \
+    main.py
 ```
+
+---
+
+## License · 许可证
+
+MIT © 2025 MCMF, Fuzhou University · MCMF

@@ -13,7 +13,7 @@ from src.modeling.slice import Slicer
 from src.workflow.modeling import run_modeling
 from src.modeling.supercell import unitcell2file, supercell2file
 from src.workflow.slice_to_countcn import slice2files_with_countcn
-from src.config import VERSION, CONTACT, DEVELOPER
+from src.config import VERSION, CONTACT, DEVELOPER, normalize_config_keys
 
 
 WORKDIR = Path.cwd()
@@ -77,10 +77,10 @@ def cmd_modeling(args: argparse.Namespace) -> int:
 
     if config:
         with open(config, "rb") as f:
-            cfg = tomllib.load(f)
+            cfg = normalize_config_keys(tomllib.load(f))
     else:
         cfg = {}
-    structure_info = cfg.get(phase.lower() if phase else "", {})
+    structure_info = cfg.get(phase.upper() if phase else "", {})
 
     outdir.mkdir(parents=True, exist_ok=True)
 

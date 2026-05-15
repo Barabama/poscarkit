@@ -31,6 +31,8 @@ def _integer_fractions(
     Returns:
         dict: Dictionary {symbol: integer fraction}.
     """
+    if not fracts:
+        raise ValueError("fracts must not be empty")
     factor = np.prod(factors)
     # Super_fracts is every fract * multi * factor
     super_fracts = {s: f * multipl * factor for s, f in fracts.items()}
@@ -51,7 +53,7 @@ def _integer_fractions(
         adjustment = target_total - rounded_total
 
         # Apply adjustments
-        for i in range(abs(adjustment)):
+        for i in range(min(abs(adjustment), len(diffs))):
             symbol, decimal, direction = diffs[i]
             fracts_rounded[symbol] += direction
 
@@ -61,6 +63,11 @@ def _integer_fractions(
 def _ask_normalize_fractions(site: str, fractions: dict[str, float]):
     """Ask user to normalize the fractions."""
     total = sum(fractions.values())
+    if total == 0:
+        raise ValueError(
+            f"Sum of fractions for site {site} is zero. "
+            f"Provide SOFs in config.toml or leave site unconfigured for 100% default element."
+        )
     if abs(total - 1) > 1e-6:
         logging.warning(f"The Sum(fractions of site {site}) not close to 1.")
         logging.warning(f"Fractions: {fractions}")
@@ -135,18 +142,21 @@ class ModelStruct:
                 continue
             # Get site fractions
             if "sofs" not in data:
-                raise ValueError(f"SOFs_info not found in stie {site}.")
+                raise ValueError(f"SOFs_info not found in site {site}.")
             fractions: dict = data["sofs"]
-            fractions = _ask_normalize_fractions(site=site, fractions=fractions)
-
-            # # Get multiplicity from site identifier
-            # site_integers[site] = _integer_fractions(
-            #     fracts=fractions, factors=factors, multipl=int(site[0])
-            # )
+            if not fractions:
+                # Empty SOFs → keep the default element at 100%
+                elem = data.get("atoms", ["", []])[0]
+                logging.info(
+                    f"Site {site}: empty SOFs, keeping 100% {elem}"
+                )
+                fractions = {elem: 1.0}
+            else:
+                fractions = _ask_normalize_fractions(site=site, fractions=fractions)
 
             # Get multiplicity from length of atoms
             if "atoms" not in data:
-                raise ValueError(f"Atoms_info not found in stie {site}.")
+                raise ValueError(f"Atoms_info not found in site {site}.")
             elem, coords = data["atoms"]
             if elem not in symbol_count:
                 raise ValueError(f"Element {elem} not found in struct {unitcell}.")

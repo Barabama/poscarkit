@@ -1,9 +1,43 @@
 # src/config/__init__.py
 
+import logging
+
 # Application metadata
 DEVELOPER = "Author: Gao Min-Liang, Qiao Yang, Yang Su-wen, Wu Bo*, et al."
 VERSION = "Version: 0.9.4 | © 2025 MCMF, Fuzhou University"
 CONTACT = "Email: wubo@fzu.edu.cn | Phone: +86 130 2381 9517"
+
+
+def normalize_config_keys(cfg: dict) -> dict:
+    """Merge case-variant phase keys so [BCC] and [bcc] resolve to the
+    same lowercase entry.  Sub-tables like [BCC.1a.sofs] are merged
+    recursively into their lowercase equivalents (bcc.1a.sofs).
+    """
+    for key in list(cfg.keys()):
+        if not isinstance(key, str):
+            continue
+        upper = key.upper()
+        if upper == key:
+            continue
+        if upper in cfg:
+            logging.info(
+                f"Merging config section [{key}] into [{upper}]"
+            )
+            _deep_update(cfg[upper], cfg.pop(key))
+        else:
+            cfg[upper] = cfg.pop(key)
+    return cfg
+
+
+def _deep_update(target: dict, source: dict):
+    """Recursively merge *source* into *target*.  Nested dicts are merged;
+    non-dict values in *source* overwrite those in *target*.
+    """
+    for k, v in source.items():
+        if k in target and isinstance(target[k], dict) and isinstance(v, dict):
+            _deep_update(target[k], v)
+        else:
+            target[k] = v
 
 DEFAULT_CONFIG = """# config.toml
 
@@ -48,6 +82,8 @@ DEFAULT_CONFIG = """# config.toml
 # cutoff_mult = 1.1
 # CountCN by ASE
 # by_ase = false
+# CountCN applying periodic boundary conditions
+# pbc = false
 
 # Separate key for separating POSCAR file, 
 # valid key in 'symbol', 'coord', 'x', 'y', 'z', 'note'
@@ -58,21 +94,21 @@ DEFAULT_CONFIG = """# config.toml
 # If the sum of sofs is not close to 1, it will ask for normalization.
 # 如果占位分数和总和不接近1, 它会询问归一化.
 
-[bcc.1a.sofs]
+[BCC.1a.sofs]
 
-[bcc.1b.sofs]
+[BCC.1b.sofs]
 
-[fcc.1a.sofs]
+[FCC.1a.sofs]
 V = 1.0
 
-[fcc.3c.sofs]
+[FCC.3c.sofs]
 Co = 4.444E-1
 Ni = 0.4444
 V = 0.1112
 
-[hcp.2a.sofs]
+[HCP.2a.sofs]
 
-[hcp.6c.sofs]
+[HCP.6c.sofs]
 
 
 # ====== ! Unit cell structure parameters, be cautious when modifying ! ======
@@ -81,17 +117,17 @@ V = 0.1112
 # when finished the R7 step (ISIF=7, NSW=10) in INCAR to run VASP
 # when the HEA-POSCAR established based on SOFs and small supercell.
 # Then we can give considerable reliable ruler tag.
-[bcc]
+[BCC]
 cell = [2.7, 2.7, 2.7]
 1a.atoms = ["Al", [[0, 0, 0]]]
 1b.atoms = ["Ni", [[0.5, 0.5, 0.5]]]
 
-[fcc]
+[FCC]
 cell = [3.774, 3.774, 3.774]
 1a.atoms = ["Au", [[0, 0, 0]]]
 3c.atoms = ["Cu", [[0, 0.5, 0.5], [0.5, 0, 0.5], [0.5, 0.5, 0]]]
 
-[hcp]
+[HCP]
 cell = [[2.6525, -4.593, 0], [2.6525, 4.593, 0], [0, 0, 4.242]]
 2a.atoms = ["Sn", [[0.3333, 0.6667, 0.25], [0.6667, 0.3333, 0.75]]]
 6c.atoms = ["Ni", [[0.1596, 0.8404, 0.75], [0.1596, 0.3192, 0.75],
