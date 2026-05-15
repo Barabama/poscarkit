@@ -86,7 +86,8 @@ def _ask_normalize_fractions(site: str, fractions: dict[str, float]):
         logging.warning(f"Fractions: {fractions}")
 
         # Ask user to normalize the fractions
-        user_answer = input("Normalize the fractions? [Y/N]|Y\n>>> ")
+        # user_answer = input("Normalize the fractions? [Y/N]|Y\n>>> ")
+        user_answer = "yes"
         if user_answer.lower().startswith("y"):
             fractions = {s: f / total for s, f in fractions.items()}
         else:

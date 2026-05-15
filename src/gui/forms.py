@@ -134,7 +134,7 @@ def _sof_editor(parent, phase, cfg):
         for site, lbl in sum_labels.items():
             s = site_sums.get(site, 0)
             color = "green" if abs(s - 1.0) < 1e-6 else "red"
-            lbl.config(text=f"sum={s:.4f}", fg=color)
+            lbl.config(text=f"sum={s:.6f}", fg=color)
 
     def _add_row(site, before_widget):
         rf = tk.Frame(editor)
@@ -186,10 +186,8 @@ def _sof_editor(parent, phase, cfg):
             ev.trace_add("write", lambda *a: _refresh_sums())
             sv.trace_add("write", lambda *a: _refresh_sums())
 
-        add_btn = tk.Button(
-            editor, text=f"+ Add to {site}",
-            command=lambda s=site, b=add_btn: _add_row(s, b),
-        )
+        add_btn = tk.Button(editor, text=f"+ Add to {site}")
+        add_btn.configure(command=lambda s=site, b=add_btn: _add_row(s, b))
         add_btn.pack(anchor="w", padx=20)
 
         sum_lbl = tk.Label(editor, text="sum=0.0000", fg="gray")

@@ -111,14 +111,35 @@ class PoscaKitGUI:
         pane = tk.PanedWindow(right, orient=tk.VERTICAL, sashrelief=tk.RAISED, sashwidth=4)
         pane.pack(fill=tk.BOTH, expand=True)
 
-        # Top: form area
+        # Top: form area with scrollbar
         form_outer = tk.Frame(pane)
         self._title_label = tk.Label(
             form_outer, text="", font=("Arial", 14, "bold"), anchor="w", pady=6, padx=12,
         )
         self._title_label.pack(fill=tk.X)
-        self._form_frame = tk.Frame(form_outer, padx=12, pady=6)
-        self._form_frame.pack(fill=tk.BOTH, expand=True)
+
+        canvas = tk.Canvas(form_outer, highlightthickness=0)
+        scrollbar = ttk.Scrollbar(form_outer, orient="vertical", command=canvas.yview)
+        self._form_frame = tk.Frame(canvas, padx=12, pady=6)
+        self._win_id = canvas.create_window((0, 0), window=self._form_frame, anchor="nw")
+
+        def _on_form_configure(event):
+            canvas.configure(scrollregion=canvas.bbox("all"))
+        self._form_frame.bind("<Configure>", _on_form_configure)
+
+        def _on_canvas_configure(event):
+            canvas.itemconfig(self._win_id, width=event.width)
+        canvas.bind("<Configure>", _on_canvas_configure)
+
+        canvas.configure(yscrollcommand=scrollbar.set)
+        canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+
+        # Mousewheel scrolling
+        def _on_mousewheel(event):
+            canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
+        canvas.bind_all("<MouseWheel>", _on_mousewheel, add="+")
+
         pane.add(form_outer, stretch="always")
 
         # Bottom: log area
