@@ -9,8 +9,6 @@ from pathlib import Path
 from typing import Any, Generator
 
 import numpy as np
-from sqsgenerator import StructureFormat, parse_config, optimize
-from sqsgenerator.core import SqsConfiguration
 
 from src.modeling.base import SimplePoscar, Struct
 from src.modeling.supercell import make_supercell
@@ -19,7 +17,7 @@ from src.utils.progress import progress
 
 def _integer_fractions(
     fracts: dict[str, float], factors: tuple[int, int, int], multipl: int
-) -> dict[str, int]:
+) -> tuple[dict[str, int], list[dict]]:
     """
     Convert decimal fractions to integer fractions.
 
@@ -29,7 +27,8 @@ def _integer_fractions(
         multip: Multiplicity of sublattice in unitcell
 
     Returns:
-        dict: Dictionary {symbol: integer fraction}.
+        (result_dict, log_rows): result = {symbol: integer_count};
+        log_rows = [{element, SOF, multiplicity, factor, raw, rounded, adjusted, delta}, ...]
     """
     if not fracts:
         raise ValueError("fracts must not be empty")
@@ -41,23 +40,37 @@ def _integer_fractions(
     rounded_total = sum(fracts_rounded.values())
     target_total = multipl * factor
 
+    # Build log rows (pre-adjustment)
+    log_rows = []
+    for s, f in super_fracts.items():
+        log_rows.append({
+            "Element": s,
+            "SOF": fracts[s],
+            "Multiplicity": multipl,
+            "Factor": int(factor),
+            "Raw": round(f, 6),
+            "Rounded": fracts_rounded[s],
+        })
+
     # Adjusting rounding errors
     if rounded_total != target_total:
-        # Calculate differences and adjust based on closeness to the next integer
         diffs = [
             (s, float(abs(f - round(f))), 1 if f - round(f) > 0 else -1)
             for s, f in super_fracts.items()
         ]
         diffs.sort(key=lambda x: x[1], reverse=True)
-        # Determine the adjustment needed
         adjustment = target_total - rounded_total
 
-        # Apply adjustments
         for i in range(min(abs(adjustment), len(diffs))):
             symbol, decimal, direction = diffs[i]
             fracts_rounded[symbol] += direction
 
-    return fracts_rounded
+    # Fill in adjusted values and delta
+    for row in log_rows:
+        row["Adjusted"] = fracts_rounded[row["Element"]]
+        row["Delta"] = row["Adjusted"] - row["Rounded"]
+
+    return fracts_rounded, log_rows
 
 
 def _ask_normalize_fractions(site: str, fractions: dict[str, float]):
@@ -130,6 +143,7 @@ class ModelStruct:
         unitcell = self.unitcell
 
         site_integers = defaultdict(dict)
+        self._sof_integer_log: list[dict] = []
         struct_info = structure_info.copy()
         if not struct_info:
             logging.warning("No structure info provided.")
@@ -160,11 +174,16 @@ class ModelStruct:
             elem, coords = data["atoms"]
             if elem not in symbol_count:
                 raise ValueError(f"Element {elem} not found in struct {unitcell}.")
-            site_integers[(site, elem)] = _integer_fractions(
+            result, log_rows = _integer_fractions(
                 fracts=fractions,
                 factors=factors,
                 multipl=symbol_count[elem],
             )
+            site_integers[(site, elem)] = result
+            # Tag log rows with site and phase info
+            for row in log_rows:
+                row["Site"] = f"{site}-{elem}"
+            self._sof_integer_log.extend(log_rows)
         logging.info(f"SOFs_info: {dict(site_integers)}")
         return site_integers
 
@@ -302,6 +321,9 @@ class ModelStruct:
         Returns:
             List of tuples (filename, Struct)
         """
+        from sqsgenerator import StructureFormat, parse_config, optimize
+        from sqsgenerator.core import SqsConfiguration
+
         name, unitcell, site_integers, factors, iterations, seed, t, ssl = args
         logging.info(f"Modeling {name} by sqsgen, batch {t}")
 

@@ -9,14 +9,6 @@ from dataclasses import dataclass
 from concurrent.futures import ThreadPoolExecutor
 
 import numpy as np
-import matplotlib
-
-matplotlib.use("Agg")  # Set matplotlib to use non-interactive backend
-import matplotlib.pyplot as plt
-import pandas as pd
-import seaborn as sns
-from itertools import product
-
 from scipy.spatial import KDTree
 from scipy.spatial.distance import pdist
 from ase.neighborlist import NeighborList, natural_cutoffs
@@ -348,6 +340,8 @@ class CNCounter:
         Args:
             outdir: Output directory
         """
+        import pandas as pd
+
         cndata_list = self.cndata_list
         # group cndata
         cndata_dict = defaultdict(list)
@@ -374,6 +368,10 @@ class CNCounter:
         Args:
             outdir: Output directory
         """
+        import matplotlib
+        matplotlib.use("Agg")
+        import matplotlib.pyplot as plt
+
         name = self.name
         cndata_list = self.cndata_list
         pair_counts = self.pair_counts
@@ -449,6 +447,10 @@ class CNCounter:
         Args:
             outdir: Output directory
         """
+        import matplotlib
+        matplotlib.use("Agg")
+        import matplotlib.pyplot as plt
+
         name = self.name
         cndata_list = self.cndata_list
         pair_counts = self.pair_counts
@@ -501,6 +503,12 @@ class CNCounter:
         Args:
             outdir: Output directory
         """
+        import matplotlib
+        matplotlib.use("Agg")
+        import matplotlib.pyplot as plt
+        import pandas as pd
+        import seaborn as sns
+
         name = self.name
         cndata_list = self.cndata_list
         # Group data

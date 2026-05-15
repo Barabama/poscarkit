@@ -1,12 +1,8 @@
 # src/workflow/modeling.py
 
-# import os
 import logging
 from typing import Any
 from pathlib import Path
-
-from sqsgenerator import write
-from sqsgenerator.core import Structure
 
 from src.modeling.base import SimplePoscar, Struct
 from src.modeling.supercell import unitcell2file, supercell2file
@@ -62,6 +58,20 @@ def run_modeling(
         struct_info=structure_info,
         batch_size=batch_size,
     )
+
+    # Save SOF → integer conversion log
+    if hasattr(modeler, "_sof_integer_log") and modeler._sof_integer_log:
+        import csv
+        log_path = outdir / f"{name}-sof-integers.csv"
+        fieldnames = [
+            "Site", "Element", "SOF", "Multiplicity", "Factor",
+            "Raw", "Rounded", "Adjusted", "Delta",
+        ]
+        with open(log_path, "w", newline="") as f:
+            w = csv.DictWriter(f, fieldnames=fieldnames, extrasaction="ignore")
+            w.writeheader()
+            w.writerows(modeler._sof_integer_log)
+        logging.info(f"SOF integer conversion log saved to {log_path}")
 
     # Choose model engine
     generator = (

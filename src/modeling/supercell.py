@@ -4,7 +4,6 @@ import logging
 from pathlib import Path
 
 import numpy as np
-from ase.build import make_supercell as ase_make_supercell
 
 from src.modeling.base import Atom, Struct, SimplePoscar
 from src.utils.progress import progress
@@ -120,6 +119,7 @@ def supercell2file(
     logging.debug(f"struct: {struct}")
 
     if by_ase:
+        from ase.build import make_supercell as ase_make_supercell
         # Make supercell by ase.make_supercell()
         atoms = SimplePoscar.struct2atoms(struct)
         a, b, c = factors
