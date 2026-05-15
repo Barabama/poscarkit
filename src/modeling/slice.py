@@ -214,13 +214,14 @@ class Slicer:
         # Generate symbol count string
         count_list = [f"{s} counts: {c}" for s, c in layer.symbol_count]
 
-        # Generate pair count string (all possible pairs, including zeros)
-        symbols = sorted(set(layer.symbols))
+        # Generate pair count string (only shown when pair_counts is provided)
         pair_list = []
-        for i, s1 in enumerate(symbols):
-            for s2 in symbols[i:]:
-                value = pair_counts.get(frozenset([s1, s2]), 0)
-                pair_list.append(f"{s1}-{s2} pairs: {value}")
+        if pair_counts:
+            layer_symbols = sorted(set(layer.symbols))
+            for i, s1 in enumerate(layer_symbols):
+                for s2 in layer_symbols[i:]:
+                    value = pair_counts.get(frozenset([s1, s2]), 0)
+                    pair_list.append(f"{s1}-{s2} pairs: {value}")
 
         # Add annotations below the legend
         fig = plt.gcf()
