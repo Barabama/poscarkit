@@ -15,7 +15,7 @@ from src.modeling.supercell import unitcell2file, supercell2file
 from src.workflow.slice_to_countcn import slice2files_with_countcn
 from src.io.readers import detect_format, read as read_sof_data
 from src.io.ir import get_sofs_at, build_structure_info, parse_sublattice_map
-from src.config import VERSION, CONTACT, DEVELOPER
+from src.config import VERSION, CONTACT, DEVELOPER, normalize_config_keys
 
 
 WORKDIR = Path.cwd()
@@ -71,7 +71,7 @@ def cmd_modeling(args: argparse.Namespace) -> int:
     poscar = Path(args.poscar) if args.poscar else None
     outdir = Path(args.outdir) if args.outdir else Path("output")
     factors = tuple(args.factors)
-    phase = args.phase
+    phase = args.phase.upper() if args.phase else args.phase
     config = args.config
     seeds = args.seeds if args.seeds else [None]
     batch_size = args.batch_size
@@ -82,10 +82,10 @@ def cmd_modeling(args: argparse.Namespace) -> int:
 
     if config:
         with open(config, "rb") as f:
-            cfg = tomllib.load(f)
+            cfg = normalize_config_keys(tomllib.load(f))
     else:
         cfg = {}
-    structure_info = cfg.get(phase, {})
+    structure_info = cfg.get(phase.upper() if phase else "", {})
 
     outdir.mkdir(parents=True, exist_ok=True)
 
@@ -122,6 +122,7 @@ def cmd_countcn(args: argparse.Namespace) -> int:
     cutoff_mult = args.cutoff_mult
     parallel = args.parallel
     by_ase = args.by_ase
+    pbc = getattr(args, "pbc", False)
 
     if not poscar or not poscar.is_file():
         logging.error(f"POSCAR file not found: {poscar}")
@@ -135,6 +136,7 @@ def cmd_countcn(args: argparse.Namespace) -> int:
         cutoff_mult=cutoff_mult,
         parallel=parallel,
         by_ase=by_ase,
+        pbc=pbc,
     )
 
     logging.info(f"Coordination number analysis completed. Results saved to: {result}")
@@ -167,6 +169,7 @@ def cmd_slice_to_countcn(args: argparse.Namespace) -> int:
     poscar = Path(args.poscar) if args.poscar else None
     outdir = Path(args.outdir) if args.outdir else Path("output")
     miller_index = tuple(args.miller_index)
+    pbc = getattr(args, "pbc", False)
 
     if not poscar or not poscar.is_file():
         logging.error(f"POSCAR file not found: {poscar}")
@@ -175,7 +178,7 @@ def cmd_slice_to_countcn(args: argparse.Namespace) -> int:
     outdir.mkdir(parents=True, exist_ok=True)
 
     results = slice2files_with_countcn(
-        name=name, poscar=poscar, outdir=outdir, miller_index=miller_index
+        name=name, poscar=poscar, outdir=outdir, miller_index=miller_index, pbc=pbc
     )
 
     logging.info(f"Slice to CN count completed. Results saved to:")
@@ -267,10 +270,10 @@ def cmd_import_sofs(args: argparse.Namespace) -> int:
         logging.error(f"Config file not found: {config_path}")
         return 1
     with open(config_path, "rb") as f:
-        cfg = tomllib.load(f)
+        cfg = normalize_config_keys(tomllib.load(f))
 
-    phase = args.phase.lower()
-    phase_cfg = cfg.get(phase, cfg.get(phase.lower(), {}))
+    phase = args.phase.upper()
+    phase_cfg = cfg.get(phase, {})
     if not phase_cfg:
         logging.error(f"Phase '{phase}' not found in config.toml")
         return 1
@@ -518,6 +521,11 @@ def main() -> int:
         action="store_true",
         help="Whether to use ASE for CN calculation (default: False)",
     )
+    parser_countcn.add_argument(
+        "--pbc",
+        action="store_true",
+        help="Enable periodic boundary conditions for CN counting",
+    )
     parser_countcn.set_defaults(func=cmd_countcn)
 
     # Slice command
@@ -587,6 +595,11 @@ def main() -> int:
         required=True,
         metavar=("H", "K", "L"),
         help="Miller index of the slice (e.g., 1 1 1)",
+    )
+    parser_slice_to_countcn.add_argument(
+        "--pbc",
+        action="store_true",
+        help="Enable periodic boundary conditions for CN counting in layers",
     )
     parser_slice_to_countcn.set_defaults(func=cmd_slice_to_countcn)
 

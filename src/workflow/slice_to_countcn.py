@@ -15,6 +15,7 @@ def slice2files_with_countcn(
     poscar: Path,
     outdir: Path,
     miller_index: tuple[int, int, int],
+    pbc: bool = False,
 ) -> list[Path]:
     """
     Slice a structure into layers and count the CNs in each layer.
@@ -24,6 +25,7 @@ def slice2files_with_countcn(
         poscar: Path to the POSCAR file.
         outdir: Path to the output directory.
         miller_index: Miller index of the slice.
+        pbc: Whether to use periodic boundary conditions.
 
     Returns:
         A list of paths to the output dirs.
@@ -67,7 +69,7 @@ def slice2files_with_countcn(
 
         # Count CN
         counter = CNCounter(layer_name, poscar=output)
-        cn_count_dir = counter.countCN2files(outdir=output.parent)
+        cn_count_dir = counter.countCN2files(outdir=output.parent, pbc=pbc)
         results.append(cn_count_dir)
         # Plot layer
         imgpath = output.with_suffix(".png")

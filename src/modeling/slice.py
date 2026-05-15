@@ -7,11 +7,6 @@ from collections import defaultdict
 from itertools import chain, groupby
 
 import numpy as np
-import matplotlib
-import pandas as pd
-
-matplotlib.use("Agg")  # Set matplotlib to use non-interactive backend
-import matplotlib.pyplot as plt
 from ase.build.tools import cut
 from ase.data import chemical_symbols, covalent_radii
 
@@ -109,6 +104,8 @@ class Slicer:
             xlspath: Path to Excel file
         """
 
+        import pandas as pd
+
         # Get Cartesian coordinates
         layer.sort()
         coords = layer.get_coords(direct=False)
@@ -147,6 +144,10 @@ class Slicer:
             layer: Struct object
             pair_counts: Pair counts
         """
+        import matplotlib
+        matplotlib.use("Agg")
+        import matplotlib.pyplot as plt
+
         basis = self.basis
         # Calculate projections
         layer.sort()
@@ -214,13 +215,14 @@ class Slicer:
         # Generate symbol count string
         count_list = [f"{s} counts: {c}" for s, c in layer.symbol_count]
 
-        # Generate pair count string (all possible pairs, including zeros)
-        symbols = sorted(set(layer.symbols))
+        # Generate pair count string (only shown when pair_counts is provided)
         pair_list = []
-        for i, s1 in enumerate(symbols):
-            for s2 in symbols[i:]:
-                value = pair_counts.get(frozenset([s1, s2]), 0)
-                pair_list.append(f"{s1}-{s2} pairs: {value}")
+        if pair_counts:
+            layer_symbols = sorted(set(layer.symbols))
+            for i, s1 in enumerate(layer_symbols):
+                for s2 in layer_symbols[i:]:
+                    value = pair_counts.get(frozenset([s1, s2]), 0)
+                    pair_list.append(f"{s1}-{s2} pairs: {value}")
 
         # Add annotations below the legend
         fig = plt.gcf()
@@ -229,11 +231,11 @@ class Slicer:
         # Position annotation below the legend
         annotation = fig.text(
             0.92,
-            0.55,
+            0.60,
             annotation_text,
             ha="left",
             va="top",
-            fontsize=16,
+            fontsize=10,
             fontname="Times New Roman",
             weight="bold",
             bbox=dict(boxstyle="round", facecolor="white", alpha=0.7),

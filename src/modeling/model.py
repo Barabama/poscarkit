@@ -9,8 +9,6 @@ from pathlib import Path
 from typing import Any, Generator
 
 import numpy as np
-from sqsgenerator import StructureFormat, parse_config, optimize
-from sqsgenerator.core import SqsConfiguration
 
 from src.modeling.base import SimplePoscar, Struct
 from src.modeling.supercell import make_supercell
@@ -19,7 +17,7 @@ from src.utils.progress import progress
 
 def _integer_fractions(
     fracts: dict[str, float], factors: tuple[int, int, int], multipl: int
-) -> dict[str, int]:
+) -> tuple[dict[str, int], list[dict]]:
     """
     Convert decimal fractions to integer fractions.
 
@@ -29,8 +27,11 @@ def _integer_fractions(
         multip: Multiplicity of sublattice in unitcell
 
     Returns:
-        dict: Dictionary {symbol: integer fraction}.
+        (result_dict, log_rows): result = {symbol: integer_count};
+        log_rows = [{element, SOF, multiplicity, factor, raw, rounded, adjusted, delta}, ...]
     """
+    if not fracts:
+        raise ValueError("fracts must not be empty")
     factor = np.prod(factors)
     # Super_fracts is every fract * multi * factor
     super_fracts = {s: f * multipl * factor for s, f in fracts.items()}
@@ -39,28 +40,47 @@ def _integer_fractions(
     rounded_total = sum(fracts_rounded.values())
     target_total = multipl * factor
 
+    # Build log rows (pre-adjustment)
+    log_rows = []
+    for s, f in super_fracts.items():
+        log_rows.append({
+            "Element": s,
+            "SOF": fracts[s],
+            "Multiplicity": multipl,
+            "Factor": int(factor),
+            "Raw": round(f, 6),
+            "Rounded": fracts_rounded[s],
+        })
+
     # Adjusting rounding errors
     if rounded_total != target_total:
-        # Calculate differences and adjust based on closeness to the next integer
         diffs = [
             (s, float(abs(f - round(f))), 1 if f - round(f) > 0 else -1)
             for s, f in super_fracts.items()
         ]
         diffs.sort(key=lambda x: x[1], reverse=True)
-        # Determine the adjustment needed
         adjustment = target_total - rounded_total
 
-        # Apply adjustments
-        for i in range(abs(adjustment)):
+        for i in range(min(abs(adjustment), len(diffs))):
             symbol, decimal, direction = diffs[i]
             fracts_rounded[symbol] += direction
 
-    return fracts_rounded
+    # Fill in adjusted values and delta
+    for row in log_rows:
+        row["Adjusted"] = fracts_rounded[row["Element"]]
+        row["Delta"] = row["Adjusted"] - row["Rounded"]
+
+    return fracts_rounded, log_rows
 
 
 def _ask_normalize_fractions(site: str, fractions: dict[str, float]):
     """Ask user to normalize the fractions."""
     total = sum(fractions.values())
+    if total == 0:
+        raise ValueError(
+            f"Sum of fractions for site {site} is zero. "
+            f"Provide SOFs in config.toml or leave site unconfigured for 100% default element."
+        )
     if abs(total - 1) > 1e-6:
         logging.warning(f"The Sum(fractions of site {site}) not close to 1.")
         logging.warning(f"Fractions: {fractions}")
@@ -123,6 +143,7 @@ class ModelStruct:
         unitcell = self.unitcell
 
         site_integers = defaultdict(dict)
+        self._sof_integer_log: list[dict] = []
         struct_info = structure_info.copy()
         if not struct_info:
             logging.warning("No structure info provided.")
@@ -135,26 +156,34 @@ class ModelStruct:
                 continue
             # Get site fractions
             if "sofs" not in data:
-                raise ValueError(f"SOFs_info not found in stie {site}.")
+                raise ValueError(f"SOFs_info not found in site {site}.")
             fractions: dict = data["sofs"]
-            fractions = _ask_normalize_fractions(site=site, fractions=fractions)
-
-            # # Get multiplicity from site identifier
-            # site_integers[site] = _integer_fractions(
-            #     fracts=fractions, factors=factors, multipl=int(site[0])
-            # )
+            if not fractions:
+                # Empty SOFs → keep the default element at 100%
+                elem = data.get("atoms", ["", []])[0]
+                logging.info(
+                    f"Site {site}: empty SOFs, keeping 100% {elem}"
+                )
+                fractions = {elem: 1.0}
+            else:
+                fractions = _ask_normalize_fractions(site=site, fractions=fractions)
 
             # Get multiplicity from length of atoms
             if "atoms" not in data:
-                raise ValueError(f"Atoms_info not found in stie {site}.")
+                raise ValueError(f"Atoms_info not found in site {site}.")
             elem, coords = data["atoms"]
             if elem not in symbol_count:
                 raise ValueError(f"Element {elem} not found in struct {unitcell}.")
-            site_integers[(site, elem)] = _integer_fractions(
+            result, log_rows = _integer_fractions(
                 fracts=fractions,
                 factors=factors,
                 multipl=symbol_count[elem],
             )
+            site_integers[(site, elem)] = result
+            # Tag log rows with site and phase info
+            for row in log_rows:
+                row["Site"] = f"{site}-{elem}"
+            self._sof_integer_log.extend(log_rows)
         logging.info(f"SOFs_info: {dict(site_integers)}")
         return site_integers
 
@@ -292,6 +321,9 @@ class ModelStruct:
         Returns:
             List of tuples (filename, Struct)
         """
+        from sqsgenerator import StructureFormat, parse_config, optimize
+        from sqsgenerator.core import SqsConfiguration
+
         name, unitcell, site_integers, factors, iterations, seed, t, ssl = args
         logging.info(f"Modeling {name} by sqsgen, batch {t}")
 
