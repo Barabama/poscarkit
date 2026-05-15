@@ -57,14 +57,14 @@ class PoscaKitGUI:
         self._cfg: dict = {}
         self._load_config()
 
-        # Layout frames
-        self._build_sidebar()
-        self._build_main_area()
-
-        # State
+        # State (init before building widgets that reference these)
         self._current_form = None
         self._func_buttons: dict[str, tk.Button] = {}
         self._running = False
+
+        # Layout frames
+        self._build_sidebar()
+        self._build_main_area()
 
         # Log redirect
         self._log_handler = _LogHandler(self._log_area)
