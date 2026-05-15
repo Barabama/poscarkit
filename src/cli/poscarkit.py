@@ -13,7 +13,7 @@ from src.modeling.slice import Slicer
 from src.workflow.modeling import run_modeling
 from src.modeling.supercell import unitcell2file, supercell2file
 from src.workflow.slice_to_countcn import slice2files_with_countcn
-from src.config import VERSION, CONTACT, DEVELOPER
+from src.config import VERSION, CONTACT, DEVELOPER, normalize_config_keys
 
 
 WORKDIR = Path.cwd()
@@ -77,10 +77,10 @@ def cmd_modeling(args: argparse.Namespace) -> int:
 
     if config:
         with open(config, "rb") as f:
-            cfg = tomllib.load(f)
+            cfg = normalize_config_keys(tomllib.load(f))
     else:
         cfg = {}
-    structure_info = cfg.get(phase.lower() if phase else "", {})
+    structure_info = cfg.get(phase.upper() if phase else "", {})
 
     outdir.mkdir(parents=True, exist_ok=True)
 
@@ -117,6 +117,7 @@ def cmd_countcn(args: argparse.Namespace) -> int:
     cutoff_mult = args.cutoff_mult
     parallel = args.parallel
     by_ase = args.by_ase
+    pbc = getattr(args, "pbc", False)
 
     if not poscar or not poscar.is_file():
         logging.error(f"POSCAR file not found: {poscar}")
@@ -130,6 +131,7 @@ def cmd_countcn(args: argparse.Namespace) -> int:
         cutoff_mult=cutoff_mult,
         parallel=parallel,
         by_ase=by_ase,
+        pbc=pbc,
     )
 
     logging.info(f"Coordination number analysis completed. Results saved to: {result}")
@@ -162,6 +164,7 @@ def cmd_slice_to_countcn(args: argparse.Namespace) -> int:
     poscar = Path(args.poscar) if args.poscar else None
     outdir = Path(args.outdir) if args.outdir else Path("output")
     miller_index = tuple(args.miller_index)
+    pbc = getattr(args, "pbc", False)
 
     if not poscar or not poscar.is_file():
         logging.error(f"POSCAR file not found: {poscar}")
@@ -170,7 +173,7 @@ def cmd_slice_to_countcn(args: argparse.Namespace) -> int:
     outdir.mkdir(parents=True, exist_ok=True)
 
     results = slice2files_with_countcn(
-        name=name, poscar=poscar, outdir=outdir, miller_index=miller_index
+        name=name, poscar=poscar, outdir=outdir, miller_index=miller_index, pbc=pbc
     )
 
     logging.info(f"Slice to CN count completed. Results saved to:")
@@ -378,6 +381,11 @@ def main() -> int:
         action="store_true",
         help="Whether to use ASE for CN calculation (default: False)",
     )
+    parser_countcn.add_argument(
+        "--pbc",
+        action="store_true",
+        help="Enable periodic boundary conditions for CN counting",
+    )
     parser_countcn.set_defaults(func=cmd_countcn)
 
     # Slice command
@@ -447,6 +455,11 @@ def main() -> int:
         required=True,
         metavar=("H", "K", "L"),
         help="Miller index of the slice (e.g., 1 1 1)",
+    )
+    parser_slice_to_countcn.add_argument(
+        "--pbc",
+        action="store_true",
+        help="Enable periodic boundary conditions for CN counting in layers",
     )
     parser_slice_to_countcn.set_defaults(func=cmd_slice_to_countcn)
 

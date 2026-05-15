@@ -15,7 +15,7 @@ from src.modeling.slice import Slicer
 from src.modeling.supercell import unitcell2file, supercell2file
 from src.workflow.modeling import run_modeling
 from src.workflow.slice_to_countcn import slice2files_with_countcn
-from src.config import VERSION, CONTACT, DEVELOPER, DEFAULT_CONFIG
+from src.config import VERSION, CONTACT, DEVELOPER, DEFAULT_CONFIG, normalize_config_keys
 
 INFO_CLI = f"""
 ================================== POSCARKIT ==================================
@@ -150,7 +150,8 @@ class PoscarkitInteract:
             cfg_path = cfg_path.joinpath("config.toml")
         if cfg_path.is_file():
             with open(cfg_path, "r", encoding="utf-8") as tf:
-                self.config = Config(**tomllib.loads(tf.read()))
+                cfg_dict = normalize_config_keys(tomllib.loads(tf.read()))
+                self.config = Config(**cfg_dict)
                 logging.info(f"Read config from {str(cfg_path)}")
         else:
             logging.warning(f"Config file {str(cfg_path)} does not exist, using default one.")
@@ -247,15 +248,15 @@ class PoscarkitInteract:
         if force:
             prompt = "Enter phase to build unitcell (FCC, BCC, HCP, ...)\n> "
             phase = phase or input(prompt).strip()
-            while phase.lower() not in self.config:
+            while phase.upper() not in self.config:
                 logging.error(f"Phase {phase.upper()} not found. Please try again.")
                 phase = input(prompt).strip()
         else:
             prompt = "Enter phase to load sofs data or leave blank to shuffle atoms only[ ]\n> "
             phase = phase or input(prompt).strip()
-            if phase.lower() not in self.config:
+            if phase.upper() not in self.config:
                 logging.warning(f"Phase {phase.upper()} not found. Shuffle atoms only.")
-        return deepcopy(self.config.get(phase.lower(), {}))
+        return deepcopy(self.config.get(phase.upper(), {}))
 
     def _handle_factors(self, factors: list[int] = []) -> tuple[int, int, int]:
         """
@@ -351,6 +352,7 @@ class PoscarkitInteract:
         mult = self.config.get("cutoff_mult", 1.1)
         parallel = self.config.get("parallel", 2)
         by_ase = self.config.get("by_ase", False)
+        pbc = self.config.get("pbc", False)
 
         counter = CNCounter(name, posc)
         result = counter.countCN2files(
@@ -358,6 +360,7 @@ class PoscarkitInteract:
             cutoff_mult=mult,
             parallel=parallel,
             by_ase=by_ase,
+            pbc=pbc,
         )
         return result
 
@@ -389,11 +392,13 @@ class PoscarkitInteract:
         poscar = self._handle_poscar()
         outdir = self._handle_outdir()
         miller = self._handle_miller()
+        pbc = self.config.get("pbc", False)
         results = slice2files_with_countcn(
             name=name,
             poscar=poscar,
             outdir=outdir,
             miller_index=miller,
+            pbc=pbc,
         )
         return results
 

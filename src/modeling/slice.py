@@ -230,11 +230,11 @@ class Slicer:
         # Position annotation below the legend
         annotation = fig.text(
             0.92,
-            0.55,
+            0.60,
             annotation_text,
             ha="left",
             va="top",
-            fontsize=16,
+            fontsize=10,
             fontname="Times New Roman",
             weight="bold",
             bbox=dict(boxstyle="round", facecolor="white", alpha=0.7),
