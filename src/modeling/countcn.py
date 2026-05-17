@@ -175,7 +175,7 @@ class CNCounter:
         else:
             tree = KDTree(coords)
 
-        tolerance = cutoff * 0.1
+        tolerance = cutoff * 0.001
         for i, coord in progress(enumerate(coords), len(coords), desc="Calculating CN"):
             # Search for neighbors within the cutoff + tolerance
             indices = tree.query_ball_point(coord, cutoff + tolerance)
@@ -204,7 +204,7 @@ class CNCounter:
                     dist = np.linalg.norm(coords[j] - coord)
                     atom_nb = struct[j]
 
-                if (dist < tolerance) or (dist > cutoff + tolerance):
+                if (dist < tolerance) or (dist > cutoff):
                     continue
 
                 s_nb = atom_nb.symbol
