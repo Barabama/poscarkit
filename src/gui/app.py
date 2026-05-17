@@ -6,11 +6,12 @@ import threading
 import tkinter as tk
 from tkinter import ttk
 
-from src.gui.forms import FORMS
+from src.gui.forms import FORMS, DESCRIPTIONS
 from src.config import VERSION
 
 FUNC_NAMES = [
     ("Modeling", "#4A90D9"),
+    ("Import + Model", "#50B86C"),
     ("Count CN", "#E8A838"),
     ("Slice", "#D94A4A"),
     ("Slice + CN", "#9B59B6"),
@@ -117,6 +118,11 @@ class PoscaKitGUI:
             form_outer, text="", font=("Arial", 14, "bold"), anchor="w", pady=6, padx=12,
         )
         self._title_label.pack(fill=tk.X)
+        self._desc_label = tk.Label(
+            form_outer, text="", font=("Arial", 9), fg="gray",
+            anchor="w", justify=tk.LEFT, padx=12,
+        )
+        self._desc_label.pack(fill=tk.X)
 
         canvas = tk.Canvas(form_outer, highlightthickness=0)
         scrollbar = ttk.Scrollbar(form_outer, orient="vertical", command=canvas.yview)
@@ -125,20 +131,33 @@ class PoscaKitGUI:
 
         def _on_form_configure(event):
             canvas.configure(scrollregion=canvas.bbox("all"))
+            # Hide scrollbar when content fits
+            if canvas.bbox("all")[3] <= canvas.winfo_height():
+                scrollbar.pack_forget()
+            else:
+                scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
         self._form_frame.bind("<Configure>", _on_form_configure)
 
         def _on_canvas_configure(event):
             canvas.itemconfig(self._win_id, width=event.width)
+            # Re-check scrollbar visibility
+            if canvas.bbox("all") and canvas.bbox("all")[3] <= event.height:
+                scrollbar.pack_forget()
+            else:
+                scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
         canvas.bind("<Configure>", _on_canvas_configure)
 
         canvas.configure(yscrollcommand=scrollbar.set)
         canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
 
-        # Mousewheel scrolling
+        # Mousewheel scrolling — only when content overflows
         def _on_mousewheel(event):
-            canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
-        canvas.bind_all("<MouseWheel>", _on_mousewheel, add="+")
+            bbox = canvas.bbox("all")
+            if bbox and bbox[3] > canvas.winfo_height():
+                canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
+        canvas.bind("<MouseWheel>", _on_mousewheel)
+        self._form_frame.bind("<MouseWheel>", _on_mousewheel, add="+")
 
         pane.add(form_outer, stretch="always")
 
@@ -169,6 +188,7 @@ class PoscaKitGUI:
             btn.configure(bg="#34495E" if n != name else _color_for_name(name))
 
         self._title_label.configure(text=name)
+        self._desc_label.configure(text=DESCRIPTIONS.get(name, ""))
 
         # Clear old form
         for w in self._form_frame.winfo_children():
@@ -232,9 +252,11 @@ class PoscaKitGUI:
                     cmd_modeling, cmd_countcn, cmd_slice,
                     cmd_slice_to_countcn, cmd_supercell,
                     cmd_compare, cmd_merge, cmd_separate,
+                    cmd_import_to_modeling,
                 )
                 handlers = {
                     "Modeling": cmd_modeling,
+                    "Import + Model": cmd_import_to_modeling,
                     "Count CN": cmd_countcn,
                     "Slice": cmd_slice,
                     "Slice + CN": cmd_slice_to_countcn,

@@ -73,7 +73,7 @@ class CNCounter:
         if len_dists < 100:
             return float(dists_sorted[0])
 
-        # Use a more sophisticated approach for larger structure
+        # Use a more sophisticated approach for larger structurecutoff_mult 
         subset_size = min(len_dists // 20, 500)
         dists_subset = dists_sorted[:subset_size]
 
@@ -118,7 +118,7 @@ class CNCounter:
 
         Returns:
             expanded_coords: (N_total, 3) array of original + image positions
-            index_map: (N_total,) array mapping expanded index → original index
+            index_map: (N_total,) array mapping expanded index to original index
         """
         n_atoms = len(coords)
         # Compute how many replicas are needed in each direction

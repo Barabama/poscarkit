@@ -104,6 +104,21 @@ def _int_entries(parent, label, count, cfg, key, defaults):
     return vars_
 
 
+def _parse_temps(raw: str) -> list[float]:
+    """Parse temperature string tolerating K suffix, Chinese/ASCII separators."""
+    if not raw or not raw.strip():
+        return []
+    # Normalize separators to spaces
+    for ch in (",", "，", "；", ";", "、", "\n"):
+        raw = raw.replace(ch, " ")
+    result = []
+    for token in raw.split():
+        token = token.strip().rstrip("Kk")  # strip K/k suffix and whitespace
+        if token:
+            result.append(float(token))
+    return result
+
+
 # ------------------------------------------------------------------ #
 #  SOF editor                                                        #
 # ------------------------------------------------------------------ #
@@ -111,7 +126,7 @@ def _int_entries(parent, label, count, cfg, key, defaults):
 def _sof_editor(parent, phase, cfg):
     """Build an editable SOF table for the given phase.
 
-    Returns (editor_frame, collect_fn) where collect_fn() → {site: {elem: fraction}}.
+    Returns (editor_frame, collect_fn) where collect_fn() to {site: {elem: fraction}}.
     If phase not found in config, returns (None, lambda: {}).
     """
     phase_cfg = cfg.get(phase.upper(), {})
@@ -335,7 +350,7 @@ def modeling_form(parent, cfg: dict):
 #  Import SOFs                                                       #
 # ------------------------------------------------------------------ #
 
-def import_sofs_form(parent, cfg: dict):
+def import_to_modeling_form(parent, cfg: dict):
     csv_var = tk.StringVar()
     _file_row(parent, "CSV/XLSX file", csv_var, cfg, "")
     _, phase_var = _combo(parent, "Phase", ["", "FCC", "BCC", "HCP"], cfg, "phase")
@@ -358,9 +373,14 @@ def import_sofs_form(parent, cfg: dict):
     name_w, name_var = _entry(parent, cfg, "name", "modeling")
     factors_vars = _int_entries(parent, "Supercell factors", 3, cfg,
                                 "supercell_factors", (3, 3, 3))
+    _, seeds_var = _entry(parent, cfg, "shuffle_seeds", "")
+    _, batch_var = _entry(parent, cfg, "batch_size", "1")
+    sqs_var = _checkbox(parent, "Enable SQS", _cfg_get(cfg, "enable_sqs", False))
+    _, iter_var = _entry(parent, cfg, "SQS iterations", "10000000")
 
     def get_args():
-        temps = [float(t) for t in temps_var.get().split()] if temps_var.get().strip() else []
+        temps = _parse_temps(temps_var.get())
+        seeds_str = seeds_var.get().strip()
         return argparse.Namespace(
             csv=csv_var.get(),
             config="config.toml",
@@ -371,10 +391,10 @@ def import_sofs_form(parent, cfg: dict):
             name=name_var.get(),
             factors=[int(v.get()) for v in factors_vars],
             output="run",
-            seeds=None,
-            batch_size=1,
-            enable_sqs=False,
-            iterations=int(1e7),
+            seeds=[int(s.strip()) for s in seeds_str.replace("，", ",").split(",") if s.strip()] if seeds_str else None,
+            batch_size=int(batch_var.get() or "1"),
+            enable_sqs=sqs_var.get(),
+            iterations=int(float(iter_var.get() or "1e7")),
         )
 
     return get_args
@@ -567,8 +587,30 @@ def separate_form(parent, cfg: dict):
 #  Registry                                                          #
 # ------------------------------------------------------------------ #
 
+DESCRIPTIONS: dict[str, str] = {
+    "Modeling": "Generate supercell and allocate atoms based on SOFs.",
+    "Import + Model": (
+        "Import site-fraction data from ThermoCalc/Pandat CSV/XLSX\n"
+        "and run modeling at selected temperatures."
+    ),
+    "Count CN": (
+        "Count coordination numbers and nearest-neighbor pairs.\n"
+        "Supports KDTree and ASE backends, optional PBC."
+    ),
+    "Slice": "Slice a structure normal to a Miller index and export layers.",
+    "Slice + CN": "Slice a structure, then count CN for each layer separately.",
+    "Supercell": (
+        "Expand a unit cell along basis vectors.\n"
+        "Optionally use ASE's make_supercell."
+    ),
+    "Compare": "Compare two POSCAR files (cell, symbols, atom positions).",
+    "Merge": "Combine multiple POSCAR files into one.",
+    "Separate": "Split a POSCAR file by element, coordinate, or note.",
+}
+
 FORMS = {
     "Modeling": modeling_form,
+    "Import + Model": import_to_modeling_form,
     "Count CN": countcn_form,
     "Slice": slice_form,
     "Slice + CN": slice_to_countcn_form,
