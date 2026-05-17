@@ -31,7 +31,7 @@ class CNCounter:
         self.name = name
         self.poscar = poscar
 
-    def detect_cutoff(self, sample_size: int = 1000, pbc: bool = False) -> float:
+    def detect_cutoff(self, sample_size: int = 3000, pbc: bool = False) -> float:
         """
         Detect the cutoff distance for coordination number counting.
 
@@ -47,7 +47,7 @@ class CNCounter:
         len_coords = len(coords)
         if pbc:
             # Always sample for PBC — full N^2 MIC distances are expensive
-            n_sample = min(len_coords, max(sample_size, 200))
+            n_sample = min(len_coords, max(sample_size, 500))
             if len_coords > n_sample:
                 indices = np.random.choice(len_coords, size=n_sample, replace=False)
                 coords = coords[indices]
@@ -291,6 +291,33 @@ class CNCounter:
 
         return cn_structs
 
+    def generate_cn_cumulative_structs(self) -> dict[tuple[str, str, str], Struct]:
+        """Generate cumulative Struct for each (center, neighbor) pair at each CN threshold.
+
+        Each cumulative struct contains all center atoms with CN >= threshold
+        for that (s_ct, s_nb) pair, plus their neighbors, using cndata_list directly.
+
+        Returns:
+            Dict[Tuple[str, str, str], Struct]: {(s_ct, s_nb, f"{cn}+"): Struct}
+        """
+        struct = self.struct
+        grouped = defaultdict(list)
+        for cd in self.cndata_list:
+            grouped[cd.symbols].append(cd)
+
+        cumulative_structs = {}
+        for (s_ct, s_nb), group in grouped.items():
+            cn_values = sorted(set(cd.cn for cd in group), reverse=True)
+            for cn_threshold in cn_values:
+                all_atoms = []
+                for cd in group:
+                    if cd.cn >= cn_threshold:
+                        all_atoms.append(cd.center)
+                        all_atoms.extend(cd.neighbors)
+                cumulative_structs[(s_ct, s_nb, f"{cn_threshold}+")] = \
+                    struct.copy(atom_list=all_atoms)
+        return cumulative_structs
+
     def generate_poscar(self, cn_structs: dict[tuple[str, str, int], Struct], outdir: Path):
         """
         Generate POSCAR files for each (center, neighbor, coordination number).
@@ -345,16 +372,21 @@ class CNCounter:
         cndata_list = self.cndata_list
         # group cndata
         cndata_dict = defaultdict(list)
+        cndata_by_pair = defaultdict(list)
         for cndata in cndata_list:
             s_ct, s_nb = cndata.symbols
             cn = cndata.cn
             cndata_dict[(s_ct, s_nb, cn)].append(cndata)
+            cndata_by_pair[(s_ct, s_nb)].append(cn)
 
         # Save to CSV
         data = defaultdict(list)
         for (s_ct, s_nb, cn), cndata_items in sorted(cndata_dict.items()):
             data["CN"].append(f"{s_ct}*-{cn}{s_nb}")
             data["Count"].append(len(cndata_items))
+            data["Cumulative"].append(
+                sum(1 for c in cndata_by_pair[(s_ct, s_nb)] if c >= cn)
+            )
 
         output = outdir.joinpath(f"{self.name}-d1nn-cn-count.csv")
         df = pd.DataFrame(data)
@@ -413,6 +445,13 @@ class CNCounter:
                         hatch=symbol2hatch[s_nb],
                         align="left",
                     )
+                    unique_cn = sorted(set(data))
+                    cum_counts = [sum(1 for d in data if d >= cn_val) for cn_val in unique_cn]
+                    ax2 = ax.twinx()
+                    ax2.step(unique_cn, cum_counts, where="mid", color="red",
+                             linewidth=1.5, alpha=0.8)
+                    ax2.set_ylabel("Cumulative", color="red", fontsize=8)
+                    ax2.tick_params(axis="y", labelcolor="red", labelsize=7)
 
                 ax.text(
                     0.98,
@@ -484,6 +523,19 @@ class CNCounter:
                 stacked=True,
                 align="left",
             )
+            ax = plt.gca()
+            ax2 = ax.twinx()
+            for idx, (s_nb, values) in enumerate(data_nb.items()):
+                if not values:
+                    continue
+                unique_cn = sorted(set(values))
+                cum_counts = [sum(1 for v in values if v >= cn_val) for cn_val in unique_cn]
+                ax2.step(unique_cn, cum_counts, where="mid", linestyle="--",
+                         linewidth=1.5, alpha=0.7, color=f"C{idx}",
+                         label=f"Cum. {s_nb}")
+            ax2.set_ylabel("Cumulative", color="red")
+            ax2.tick_params(axis="y", labelcolor="red")
+            ax2.legend(loc="upper right", fontsize=7)
             plt.title(f"Coordination Number of Center {s_ct}")
             plt.xlabel("Coordination Number")
             plt.ylabel("Frequency")
@@ -606,6 +658,17 @@ class CNCounter:
         with ThreadPoolExecutor(max_workers=avail_parallel) as exe:
             list(exe.map(write_single, cn_structs.items()))
             list(exe.map(write_by_cn, cn_groups.items()))
+
+        # Generate cumulative POSCAR
+        cn_cumulative_structs = self.generate_cn_cumulative_structs()
+
+        def write_cumulative(args: tuple[tuple[str, str, str], Struct]):
+            (s_ct, s_nb, cn_str), substruct = args
+            output = outdir.joinpath(f"{name}-d1nn-{s_ct}-{s_nb}-{cn_str}.vasp")
+            SimplePoscar.write_poscar(output, substruct, comment=output.stem)
+
+        with ThreadPoolExecutor(max_workers=avail_parallel) as exe2:
+            list(exe2.map(write_cumulative, cn_cumulative_structs.items()))
 
         # Save to CSV
         self.save_dataframe(outdir=outdir)
