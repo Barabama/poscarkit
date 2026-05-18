@@ -1,7 +1,6 @@
 """Tkinter GUI — sidebar navigation + dynamic form + log area."""
 
 import logging
-import sys
 import threading
 import tkinter as tk
 from tkinter import ttk
@@ -10,6 +9,7 @@ from src.gui.forms import FORMS, DESCRIPTIONS
 from src.config import VERSION
 
 FUNC_NAMES = [
+    ("Config", "#7F8C8D"),
     ("Modeling", "#4A90D9"),
     ("Import + Model", "#50B86C"),
     ("Count CN", "#E8A838"),
@@ -25,6 +25,8 @@ FUNC_NAMES = [
 class _LogHandler(logging.Handler):
     """Redirect logging to a tk.Text widget (thread-safe)."""
 
+    _MAX_LOG_LINES = 5000
+
     def __init__(self, widget: tk.Text):
         super().__init__()
         self.widget = widget
@@ -37,6 +39,9 @@ class _LogHandler(logging.Handler):
 
     def _append(self, msg):
         self.widget.insert(tk.END, msg)
+        line_count = int(self.widget.index("end-1c").split(".")[0])
+        if line_count > self._MAX_LOG_LINES:
+            self.widget.delete("1.0", f"{line_count - self._MAX_LOG_LINES}.0")
         self.widget.see(tk.END)
 
 
@@ -61,6 +66,8 @@ class PoscaKitGUI:
         self._current_form = None
         self._func_buttons: dict[str, tk.Button] = {}
         self._running = False
+        self._form_cache: dict[str, tuple[tk.Frame, object]] = {}
+        self._form_state: dict[str, dict] = {}
 
         # Layout frames
         self._build_sidebar()
@@ -127,12 +134,15 @@ class PoscaKitGUI:
         canvas = tk.Canvas(form_outer, highlightthickness=0)
         scrollbar = ttk.Scrollbar(form_outer, orient="vertical", command=canvas.yview)
         self._form_frame = tk.Frame(canvas, padx=12, pady=6)
+        self._canvas = canvas
         self._win_id = canvas.create_window((0, 0), window=self._form_frame, anchor="nw")
 
         def _on_form_configure(event):
-            canvas.configure(scrollregion=canvas.bbox("all"))
-            # Hide scrollbar when content fits
-            if canvas.bbox("all")[3] <= canvas.winfo_height():
+            bbox = canvas.bbox("all")
+            if bbox is None:
+                return
+            canvas.configure(scrollregion=bbox)
+            if bbox[3] <= canvas.winfo_height():
                 scrollbar.pack_forget()
             else:
                 scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
@@ -151,13 +161,23 @@ class PoscaKitGUI:
         canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
 
-        # Mousewheel scrolling — only when content overflows
+        # Mousewheel scrolling — bind_all so child widgets don't swallow the event
         def _on_mousewheel(event):
+            w = event.widget
+            try:
+                while w is not None:
+                    if w is canvas:
+                        break
+                    w = w.master
+                else:
+                    return
+            except (AttributeError, tk.TclError):
+                return
             bbox = canvas.bbox("all")
             if bbox and bbox[3] > canvas.winfo_height():
                 canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
-        canvas.bind("<MouseWheel>", _on_mousewheel)
-        self._form_frame.bind("<MouseWheel>", _on_mousewheel, add="+")
+
+        self.root.bind_all("<MouseWheel>", _on_mousewheel)
 
         pane.add(form_outer, stretch="always")
 
@@ -190,42 +210,72 @@ class PoscaKitGUI:
         self._title_label.configure(text=name)
         self._desc_label.configure(text=DESCRIPTIONS.get(name, ""))
 
-        # Clear old form
-        for w in self._form_frame.winfo_children():
-            w.destroy()
+        # Hide current form
+        if self._current_form and self._current_form in self._form_cache:
+            frame, _ = self._form_cache[self._current_form]
+            frame.pack_forget()
 
-        # Build new form
-        builder = FORMS.get(name)
-        if builder is None:
-            tk.Label(self._form_frame, text="(not implemented yet)").pack()
-            return
+        self._current_form = name
 
-        get_args = builder(self._form_frame, self._cfg)
+        # Show cached form or build new one
+        if name in self._form_cache:
+            frame, get_args = self._form_cache[name]
+            frame.pack(fill=tk.BOTH, expand=True)
+        else:
+            frame = tk.Frame(self._form_frame, padx=12, pady=6)
+            builder = FORMS.get(name)
+            if builder is None:
+                tk.Label(frame, text="(not implemented yet)").pack()
+                frame.pack(fill=tk.BOTH, expand=True)
+                self._form_cache[name] = (frame, lambda: None)
+                return
 
-        # Run button
-        btn_frame = tk.Frame(self._form_frame)
-        btn_frame.pack(fill=tk.X, pady=(12, 0))
+            get_args = builder(frame, self._cfg)
 
-        self._run_btn = tk.Button(
-            btn_frame, text=f"Run {name}", bg="#27AE60", fg="white",
-            font=("Arial", 11, "bold"), padx=24, pady=4,
-            command=lambda: self._run_task(name, get_args),
-        )
-        self._run_btn.pack(side=tk.LEFT, padx=(0, 8))
+            # Action buttons
+            btn_frame = tk.Frame(frame)
+            btn_frame.pack(fill=tk.X, pady=(12, 0))
 
-        # Save checkbox + Load button
-        self._save_var = tk.BooleanVar(value=False)
-        tk.Checkbutton(
-            btn_frame, text="Save as defaults", variable=self._save_var,
-        ).pack(side=tk.LEFT, padx=8)
+            if name == "Config":
+                run_btn = tk.Button(
+                    btn_frame, text="Save Config", bg="#2980B9", fg="white",
+                    font=("Arial", 11, "bold"), padx=24, pady=4,
+                    command=lambda: self._save_config_form(get_args),
+                )
+                run_btn.pack(side=tk.LEFT, padx=(0, 8))
+            else:
+                run_btn = tk.Button(
+                    btn_frame, text=f"Run {name}", bg="#27AE60", fg="white",
+                    font=("Arial", 11, "bold"), padx=24, pady=4,
+                    command=lambda: self._run_task(name, get_args),
+                )
+                run_btn.pack(side=tk.LEFT, padx=(0, 8))
 
-        tk.Button(
-            btn_frame, text="Load from config",
-            command=lambda: self._load_config_and_rebuild(name),
-        ).pack(side=tk.LEFT, padx=8)
+            tk.Button(
+                btn_frame, text="Load from config",
+                command=lambda n=name: self._reload_form(n),
+            ).pack(side=tk.LEFT, padx=8)
 
-    def _load_config_and_rebuild(self, name: str):
+            frame.pack(fill=tk.BOTH, expand=True)
+            self._form_cache[name] = (frame, get_args)
+            self._form_state[name] = {"run_btn": run_btn}
+
+        # Update references for _run_task / _task_done
+        state = self._form_state.get(name, {})
+        self._run_btn = state.get("run_btn")
+
+        # Reset scroll to top when switching forms
+        self._canvas.yview_moveto(0)
+
+    def _reload_form(self, name: str):
+        """Reload config and rebuild a specific form."""
         self._load_config()
+        if name in self._form_cache:
+            frame, _ = self._form_cache[name]
+            frame.destroy()
+            del self._form_cache[name]
+        if name in self._form_state:
+            del self._form_state[name]
         self._switch_form(name)
 
     # ------------------------------------------------------------------ #
@@ -243,11 +293,11 @@ class PoscaKitGUI:
             return
 
         self._running = True
-        self._run_btn.configure(text="Running...", state=tk.DISABLED, bg="#95A5A6")
+        if self._run_btn:
+            self._run_btn.configure(text="Running...", state=tk.DISABLED, bg="#95A5A6")
 
         def target():
             try:
-                # Lazy-import the handler
                 from src.cli.poscarkit import (
                     cmd_modeling, cmd_countcn, cmd_slice,
                     cmd_slice_to_countcn, cmd_supercell,
@@ -268,8 +318,6 @@ class PoscaKitGUI:
                 handler = handlers.get(name)
                 if handler:
                     code = handler(args)
-                    if code == 0 and self._save_var.get():
-                        self._save_to_config(args)
                     logging.info(f"Task '{name}' finished (exit {code}).")
                 else:
                     logging.error(f"No handler for '{name}'")
@@ -282,10 +330,20 @@ class PoscaKitGUI:
 
     def _task_done(self, name: str):
         self._running = False
-        if hasattr(self, "_run_btn"):
+        if self._run_btn is not None:
             self._run_btn.configure(
                 text=f"Run {name}", state=tk.NORMAL, bg="#27AE60"
             )
+
+    def _save_config_form(self, get_args):
+        """Save all Config form fields to config.toml."""
+        try:
+            args = get_args()
+        except Exception as e:
+            logging.error(f"Invalid parameters: {e}")
+            return
+        self._save_to_config(args)
+        logging.info("Config saved to: " + getattr(args, "config_path", "config.toml"))
 
     # ------------------------------------------------------------------ #
     #  Config I/O                                                        #
@@ -294,74 +352,100 @@ class PoscaKitGUI:
     def _load_config(self):
         import tomllib
         from pathlib import Path
-        from src.config import normalize_config_keys
+        from src.config import normalize_config_keys, DEFAULT_CONFIG
 
         cfg_path = Path("config.toml")
-        if cfg_path.is_file():
+        if not cfg_path.is_file():
+            with open(cfg_path, "w", encoding="utf-8") as f:
+                f.write(DEFAULT_CONFIG)
+            logging.info("Generated default config.toml")
+
+        try:
             with open(cfg_path, "rb") as f:
                 self._cfg = normalize_config_keys(tomllib.load(f))
-        else:
+        except Exception as e:
+            logging.error(f"Failed to parse config.toml: {e}")
             self._cfg = {}
 
     def _save_to_config(self, args):
-        """Naive key=value update of config.toml from namespace fields."""
+        """Update top-level keys in config.toml from namespace fields."""
         from pathlib import Path
-        from src.config import normalize_config_keys
+        import re
 
-        # Map arg names to config keys
         key_map = {
             "name": "name", "poscar": "poscar", "outdir": "outdir",
             "phase": "phase", "factors": "supercell_factors",
             "seeds": "shuffle_seeds", "batch_size": "batch_size",
-            "enable_sqs": "enable_sqs", "cutoff_mult": "cutoff_mult",
+            "enable_sqs": "enable_sqs", "iterations": "iterations",
+            "cutoff_mult": "cutoff_mult", "parallel": "parallel",
             "by_ase": "by_ase", "pbc": "pbc",
+            "slice_direction": "slice_direction",
         }
 
         updates = {}
         for arg_k, cfg_k in key_map.items():
             val = getattr(args, arg_k, None)
-            if val is not None:
-                if isinstance(val, tuple):
-                    val = list(val)
-                updates[cfg_k] = val
+            if val is None:
+                continue
+            if isinstance(val, tuple):
+                val = list(val)
+            updates[cfg_k] = val
 
-        # Read current file, replace matching lines
         cfg_path = Path("config.toml")
         if not cfg_path.is_file():
-            # Write a minimal config
             with open(cfg_path, "w", encoding="utf-8") as f:
                 for k, v in updates.items():
-                    f.write(f"{k} = {v!r}\n")
+                    f.write(f"{k} = {_toml_value(v)}\n")
             self._load_config()
             logging.info("Config saved.")
             return
 
-        import re
         with open(cfg_path, "r", encoding="utf-8") as f:
             lines = f.readlines()
 
         written = set()
         new_lines = []
+        first_section_idx = None
+
         for line in lines:
-            m = re.match(r"^(\w+)\s*=", line.strip())
-            if m and m.group(1) in updates:
+            stripped = line.strip()
+            # Track where the first [section] header is
+            if first_section_idx is None and re.match(r"^\[", stripped):
+                first_section_idx = len(new_lines)
+
+            # Match uncommented top-level key = value (only before first section or if already top-level)
+            m = re.match(r"^(\w+)\s*=", stripped)
+            if m and m.group(1) in updates and (first_section_idx is None):
                 key = m.group(1)
-                val = updates[key]
-                new_lines.append(f"{key} = {_toml_value(val)}\n")
+                new_lines.append(f"{key} = {_toml_value(updates[key])}\n")
                 written.add(key)
                 continue
+
+            # Also match commented-out keys and uncomment them with new value
+            cm = re.match(r"^#\s*(\w+)\s*=", stripped)
+            if cm and cm.group(1) in updates and cm.group(1) not in written and (first_section_idx is None):
+                key = cm.group(1)
+                new_lines.append(f"{key} = {_toml_value(updates[key])}\n")
+                written.add(key)
+                continue
+
             new_lines.append(line)
 
-        # Append keys not yet written
-        for k, v in updates.items():
-            if k not in written:
-                new_lines.append(f"{k} = {_toml_value(v)}\n")
+        # Insert remaining keys before the first section header
+        remaining = [f"{k} = {_toml_value(v)}\n" for k, v in updates.items() if k not in written]
+        if remaining:
+            insert_at = first_section_idx if first_section_idx is not None else len(new_lines)
+            for line in remaining:
+                new_lines.insert(insert_at, line)
+                insert_at += 1
+            if first_section_idx is not None:
+                new_lines.insert(insert_at, "\n")
 
         with open(cfg_path, "w", encoding="utf-8") as f:
             f.writelines(new_lines)
 
         self._load_config()
-        logging.info("Config saved.")
+        logging.info(f"Config saved. Updated keys: {list(updates.keys())}")
 
     # ------------------------------------------------------------------ #
     #  Public API                                                        #
@@ -386,7 +470,15 @@ def _toml_value(val) -> str:
     if isinstance(val, bool):
         return "true" if val else "false"
     if isinstance(val, list):
-        return "[" + ", ".join(str(v) for v in val) + "]"
+        parts = []
+        for v in val:
+            if isinstance(v, bool):
+                parts.append("true" if v else "false")
+            elif isinstance(v, str):
+                parts.append(f'"{v}"')
+            else:
+                parts.append(str(v))
+        return "[" + ", ".join(parts) + "]"
     if isinstance(val, str):
         return f'"{val}"'
     return str(val)

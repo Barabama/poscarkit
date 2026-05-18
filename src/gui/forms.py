@@ -10,33 +10,25 @@ from pathlib import Path
 #  Shared widget helpers                                             #
 # ------------------------------------------------------------------ #
 
-def _cfg_get(cfg: dict, key: str, default=None):
-    return cfg.get(key, default)
-
-
-def _row(parent, label, widget, **pack_kw):
-    """Place a label+widget row in a frame."""
+def _entry(parent, label, cfg, key, default=""):
+    """Labelled Entry row — self-packing."""
     f = tk.Frame(parent)
-    f.pack(fill=tk.X, pady=2, **pack_kw)
+    f.pack(fill=tk.X, pady=2)
     tk.Label(f, text=label, width=16, anchor="e").pack(side=tk.LEFT, padx=(0, 6))
-    widget.pack(side=tk.LEFT, fill=tk.X, expand=True)
-    return f
+    raw = cfg.get(key, default)
+    if isinstance(raw, list):
+        raw = " ".join(str(x) for x in raw)
+    var = tk.StringVar(value=str(raw))
+    tk.Entry(f, textvariable=var).pack(side=tk.LEFT, fill=tk.X, expand=True)
+    return var
 
 
-def _entry(parent, cfg, key, default=""):
-    """Create a labelled Entry with value from config or default."""
-    var = tk.StringVar(value=str(_cfg_get(cfg, key, default)))
-    w = tk.Entry(parent, textvariable=var)
-    return w, var
-
-
-def _file_row(parent, label, var, cfg, key):
+def _file_row(parent, label, var):
     """Entry + Browse button row."""
     f = tk.Frame(parent)
     f.pack(fill=tk.X, pady=2)
     tk.Label(f, text=label, width=16, anchor="e").pack(side=tk.LEFT, padx=(0, 6))
-    e = tk.Entry(f, textvariable=var)
-    e.pack(side=tk.LEFT, fill=tk.X, expand=True)
+    tk.Entry(f, textvariable=var).pack(side=tk.LEFT, fill=tk.X, expand=True)
     tk.Button(
         f, text="Browse", command=lambda: _browse_file(var)
     ).pack(side=tk.LEFT, padx=(4, 0))
@@ -59,7 +51,7 @@ def _dir_row(parent, label, var):
 def _browse_file(var: tk.StringVar):
     path = filedialog.askopenfilename(
         title="Select file",
-        filetypes=[("VASP/CSV/XLSX files", "*.vasp *.csv *.xlsx"),
+        filetypes=[("Config/Data files", "*.toml *.vasp *.csv *.xlsx"),
                    ("All files", "*.*")],
     )
     if path:
@@ -72,9 +64,9 @@ def _browse_dir(var: tk.StringVar):
         var.set(path)
 
 
-def _checkbox(parent, label, var, default=False):
-    """Create a checkbox."""
-    v = tk.BooleanVar(value=default)
+def _checkbox(parent, label, default=False):
+    """Create a self-packing checkbox."""
+    v = tk.BooleanVar(value=bool(default))
     tk.Checkbutton(parent, text=label, variable=v).pack(anchor="w")
     return v
 
@@ -84,7 +76,7 @@ def _combo(parent, label, values, cfg, key, default=""):
     f = tk.Frame(parent)
     f.pack(fill=tk.X, pady=2)
     tk.Label(f, text=label, width=16, anchor="e").pack(side=tk.LEFT, padx=(0, 6))
-    var = tk.StringVar(value=str(_cfg_get(cfg, key, default)))
+    var = tk.StringVar(value=str(cfg.get(key, default)))
     cb = ttk.Combobox(f, textvariable=var, values=values, state="readonly")
     cb.pack(side=tk.LEFT, fill=tk.X, expand=True)
     return cb, var
@@ -95,7 +87,7 @@ def _int_entries(parent, label, count, cfg, key, defaults):
     f = tk.Frame(parent)
     f.pack(fill=tk.X, pady=2)
     tk.Label(f, text=label, width=16, anchor="e").pack(side=tk.LEFT, padx=(0, 6))
-    vals = _cfg_get(cfg, key, list(defaults))
+    vals = cfg.get(key, list(defaults))
     vars_ = []
     for i in range(count):
         v = tk.StringVar(value=str(vals[i] if i < len(vals) else defaults[i]))
@@ -108,15 +100,28 @@ def _parse_temps(raw: str) -> list[float]:
     """Parse temperature string tolerating K suffix, Chinese/ASCII separators."""
     if not raw or not raw.strip():
         return []
-    # Normalize separators to spaces
     for ch in (",", "，", "；", ";", "、", "\n"):
         raw = raw.replace(ch, " ")
     result = []
     for token in raw.split():
-        token = token.strip().rstrip("Kk")  # strip K/k suffix and whitespace
+        token = token.strip().rstrip("Kk")
         if token:
             result.append(float(token))
     return result
+
+
+def _parse_seeds(raw: str) -> list[int] | None:
+    """Parse seeds string tolerating various separators. Returns None if empty."""
+    if not raw or not raw.strip():
+        return None
+    for ch in (",", "，", "；", ";", "、", "\n"):
+        raw = raw.replace(ch, " ")
+    result = []
+    for token in raw.split():
+        token = token.strip()
+        if token:
+            result.append(int(token))
+    return result or None
 
 
 # ------------------------------------------------------------------ #
@@ -283,10 +288,10 @@ def modeling_form(parent, cfg: dict):
     import tomllib
     from src.config import normalize_config_keys
 
-    name_w, name_var = _entry(parent, cfg, "name", "modeling")
-    poscar_var = tk.StringVar(value=str(_cfg_get(cfg, "poscar", "")))
-    _file_row(parent, "POSCAR file", poscar_var, cfg, "poscar")
-    outdir_var = tk.StringVar(value=str(_cfg_get(cfg, "outdir", "output")))
+    name_var = _entry(parent, "Name", cfg, "name", "modeling")
+    poscar_var = tk.StringVar(value=str(cfg.get("poscar", "")))
+    _file_row(parent, "POSCAR file", poscar_var)
+    outdir_var = tk.StringVar(value=str(cfg.get("outdir", "output")))
     _dir_row(parent, "Output dir", outdir_var)
     _, phase_var = _combo(parent, "Phase", ["", "FCC", "BCC", "HCP"], cfg, "phase")
     config_var = tk.StringVar(value="config.toml")
@@ -310,15 +315,15 @@ def modeling_form(parent, cfg: dict):
         _sof_collect = collect if editor else (lambda: {})
 
     phase_var.trace_add("write", _reload_sof)
-    _file_row(parent, "Config file", config_var, cfg, "config")
+    _file_row(parent, "Config file", config_var)
     config_var.trace_add("write", _reload_sof)
 
     factors_vars = _int_entries(parent, "Supercell factors", 3, cfg,
                                 "supercell_factors", (3, 3, 3))
-    _, seeds_var = _entry(parent, cfg, "shuffle_seeds", "42")
-    batch_w, batch_var = _entry(parent, cfg, "batch_size", "1")
-    sqs_var = _checkbox(parent, "Enable SQS", _cfg_get(cfg, "enable_sqs", False))
-    iter_w, iter_var = _entry(parent, cfg, "iterations", "10000000")
+    seeds_var = _entry(parent, "Seeds (space-sep)", cfg, "shuffle_seeds", "")
+    batch_var = _entry(parent, "Batch size", cfg, "batch_size", "1")
+    sqs_var = _checkbox(parent, "Enable SQS", cfg.get("enable_sqs", False))
+    iter_var = _entry(parent, "SQS iterations", cfg, "iterations", "10000000")
 
     def get_args():
         sofs_by_site = _sof_collect()
@@ -333,7 +338,7 @@ def modeling_form(parent, cfg: dict):
             phase=phase,
             config=cp or None,
             factors=[int(v.get()) for v in factors_vars],
-            seeds=[int(s.strip()) for s in seeds_var.get().split(",") if s.strip()] or [None],
+            seeds=_parse_seeds(seeds_var.get()),
             batch_size=int(batch_var.get() or "1"),
             enable_sqs=sqs_var.get(),
             iterations=int(float(iter_var.get() or "1e7")),
@@ -352,7 +357,7 @@ def modeling_form(parent, cfg: dict):
 
 def import_to_modeling_form(parent, cfg: dict):
     csv_var = tk.StringVar()
-    _file_row(parent, "CSV/XLSX file", csv_var, cfg, "")
+    _file_row(parent, "CSV/XLSX file", csv_var)
     _, phase_var = _combo(parent, "Phase", ["", "FCC", "BCC", "HCP"], cfg, "phase")
     temps_var = tk.StringVar()
     f_t = tk.Frame(parent)
@@ -368,19 +373,19 @@ def import_to_modeling_form(parent, cfg: dict):
     tk.Entry(f_m, textvariable=map_var).pack(side=tk.LEFT, fill=tk.X, expand=True)
     tk.Label(f_m, text="e.g. 1:1a,2:3c", fg="gray").pack(side=tk.LEFT, padx=(4, 0))
 
+    _, output_var = _combo(parent, "Output mode", ["run", "save-config", "print"], cfg, "output", "run")
     outdir_var = tk.StringVar(value="output")
     _dir_row(parent, "Output dir", outdir_var)
-    name_w, name_var = _entry(parent, cfg, "name", "modeling")
+    name_var = _entry(parent, "Name", cfg, "name", "modeling")
     factors_vars = _int_entries(parent, "Supercell factors", 3, cfg,
                                 "supercell_factors", (3, 3, 3))
-    _, seeds_var = _entry(parent, cfg, "shuffle_seeds", "")
-    _, batch_var = _entry(parent, cfg, "batch_size", "1")
-    sqs_var = _checkbox(parent, "Enable SQS", _cfg_get(cfg, "enable_sqs", False))
-    _, iter_var = _entry(parent, cfg, "SQS iterations", "10000000")
+    seeds_var = _entry(parent, "Seeds (space-sep)", cfg, "shuffle_seeds", "")
+    batch_var = _entry(parent, "Batch size", cfg, "batch_size", "1")
+    sqs_var = _checkbox(parent, "Enable SQS", cfg.get("enable_sqs", False))
+    iter_var = _entry(parent, "SQS iterations", cfg, "iterations", "10000000")
 
     def get_args():
         temps = _parse_temps(temps_var.get())
-        seeds_str = seeds_var.get().strip()
         return argparse.Namespace(
             csv=csv_var.get(),
             config="config.toml",
@@ -390,8 +395,8 @@ def import_to_modeling_form(parent, cfg: dict):
             outdir=outdir_var.get(),
             name=name_var.get(),
             factors=[int(v.get()) for v in factors_vars],
-            output="run",
-            seeds=[int(s.strip()) for s in seeds_str.replace("，", ",").split(",") if s.strip()] if seeds_str else None,
+            output=output_var.get(),
+            seeds=_parse_seeds(seeds_var.get()),
             batch_size=int(batch_var.get() or "1"),
             enable_sqs=sqs_var.get(),
             iterations=int(float(iter_var.get() or "1e7")),
@@ -405,16 +410,15 @@ def import_to_modeling_form(parent, cfg: dict):
 # ------------------------------------------------------------------ #
 
 def countcn_form(parent, cfg: dict):
-    name_w, name_var = _entry(parent, cfg, "name", "countcn")
-    poscar_var = tk.StringVar(value=str(_cfg_get(cfg, "poscar", "")))
-    _file_row(parent, "POSCAR file", poscar_var, cfg, "poscar")
-    outdir_var = tk.StringVar(value=str(_cfg_get(cfg, "outdir", "output")))
+    name_var = _entry(parent, "Name", cfg, "name", "countcn")
+    poscar_var = tk.StringVar(value=str(cfg.get("poscar", "")))
+    _file_row(parent, "POSCAR file", poscar_var)
+    outdir_var = tk.StringVar(value=str(cfg.get("outdir", "output")))
     _dir_row(parent, "Output dir", outdir_var)
-    mult_w, mult_var = _entry(parent, cfg, "cutoff_mult", "1.1")
-    par_w, par_var = _entry(parent, cfg, "parallel", "2")
-    ase_var = _checkbox(parent, "Use ASE backend", _cfg_get(cfg, "by_ase", False))
-    pbc_var = _checkbox(parent, "Periodic boundary (PBC)", _cfg_get(cfg, "pbc", False))
-    # ASE always includes PBC — link checkboxes
+    mult_var = _entry(parent, "Cutoff multiplier", cfg, "cutoff_mult", "1.1")
+    par_var = _entry(parent, "Parallel workers", cfg, "parallel", "2")
+    ase_var = _checkbox(parent, "Use ASE backend", cfg.get("by_ase", False))
+    pbc_var = _checkbox(parent, "Periodic boundary (PBC)", cfg.get("pbc", False))
     _link_ase_pbc(ase_var, pbc_var)
 
     def get_args():
@@ -436,10 +440,10 @@ def countcn_form(parent, cfg: dict):
 # ------------------------------------------------------------------ #
 
 def slice_form(parent, cfg: dict):
-    name_w, name_var = _entry(parent, cfg, "name", "slice")
-    poscar_var = tk.StringVar(value=str(_cfg_get(cfg, "poscar", "")))
-    _file_row(parent, "POSCAR file", poscar_var, cfg, "poscar")
-    outdir_var = tk.StringVar(value=str(_cfg_get(cfg, "outdir", "output")))
+    name_var = _entry(parent, "Name", cfg, "name", "slice")
+    poscar_var = tk.StringVar(value=str(cfg.get("poscar", "")))
+    _file_row(parent, "POSCAR file", poscar_var)
+    outdir_var = tk.StringVar(value=str(cfg.get("outdir", "output")))
     _dir_row(parent, "Output dir", outdir_var)
     miller_vars = _int_entries(parent, "Miller index", 3, cfg,
                                "slice_direction", (0, 0, 1))
@@ -460,15 +464,15 @@ def slice_form(parent, cfg: dict):
 # ------------------------------------------------------------------ #
 
 def slice_to_countcn_form(parent, cfg: dict):
-    name_w, name_var = _entry(parent, cfg, "name", "slice-to-countcn")
-    poscar_var = tk.StringVar(value=str(_cfg_get(cfg, "poscar", "")))
-    _file_row(parent, "POSCAR file", poscar_var, cfg, "poscar")
-    outdir_var = tk.StringVar(value=str(_cfg_get(cfg, "outdir", "output")))
+    name_var = _entry(parent, "Name", cfg, "name", "slice-to-countcn")
+    poscar_var = tk.StringVar(value=str(cfg.get("poscar", "")))
+    _file_row(parent, "POSCAR file", poscar_var)
+    outdir_var = tk.StringVar(value=str(cfg.get("outdir", "output")))
     _dir_row(parent, "Output dir", outdir_var)
     miller_vars = _int_entries(parent, "Miller index", 3, cfg,
                                "slice_direction", (0, 0, 1))
-    ase_var = _checkbox(parent, "Use ASE backend", _cfg_get(cfg, "by_ase", False))
-    pbc_var = _checkbox(parent, "Periodic boundary (PBC)", _cfg_get(cfg, "pbc", False))
+    ase_var = _checkbox(parent, "Use ASE backend", cfg.get("by_ase", False))
+    pbc_var = _checkbox(parent, "Periodic boundary (PBC)", cfg.get("pbc", False))
     _link_ase_pbc(ase_var, pbc_var)
 
     def get_args():
@@ -489,13 +493,13 @@ def slice_to_countcn_form(parent, cfg: dict):
 # ------------------------------------------------------------------ #
 
 def supercell_form(parent, cfg: dict):
-    poscar_var = tk.StringVar(value=str(_cfg_get(cfg, "poscar", "")))
-    _file_row(parent, "POSCAR file", poscar_var, cfg, "poscar")
-    outdir_var = tk.StringVar(value=str(_cfg_get(cfg, "outdir", "output")))
+    poscar_var = tk.StringVar(value=str(cfg.get("poscar", "")))
+    _file_row(parent, "POSCAR file", poscar_var)
+    outdir_var = tk.StringVar(value=str(cfg.get("outdir", "output")))
     _dir_row(parent, "Output dir", outdir_var)
     factors_vars = _int_entries(parent, "Supercell factors", 3, cfg,
                                 "supercell_factors", (3, 3, 3))
-    ase_var = _checkbox(parent, "Use ASE backend", _cfg_get(cfg, "by_ase", False))
+    ase_var = _checkbox(parent, "Use ASE backend", cfg.get("by_ase", False))
 
     def get_args():
         return argparse.Namespace(
@@ -514,9 +518,9 @@ def supercell_form(parent, cfg: dict):
 
 def compare_form(parent, cfg: dict):
     p1_var = tk.StringVar()
-    _file_row(parent, "POSCAR 1", p1_var, cfg, "")
+    _file_row(parent, "POSCAR 1", p1_var)
     p2_var = tk.StringVar()
-    _file_row(parent, "POSCAR 2", p2_var, cfg, "")
+    _file_row(parent, "POSCAR 2", p2_var)
 
     def get_args():
         return argparse.Namespace(poscar1=p1_var.get(), poscar2=p2_var.get())
@@ -529,7 +533,7 @@ def compare_form(parent, cfg: dict):
 # ------------------------------------------------------------------ #
 
 def merge_form(parent, cfg: dict):
-    outdir_var = tk.StringVar(value=str(_cfg_get(cfg, "outdir", "output")))
+    outdir_var = tk.StringVar(value=str(cfg.get("outdir", "output")))
     _dir_row(parent, "Output dir", outdir_var)
 
     tk.Label(parent, text="POSCAR files to merge:").pack(anchor="w", pady=(8, 2))
@@ -568,8 +572,8 @@ def merge_form(parent, cfg: dict):
 
 def separate_form(parent, cfg: dict):
     poscar_var = tk.StringVar()
-    _file_row(parent, "POSCAR file", poscar_var, cfg, "")
-    outdir_var = tk.StringVar(value=str(_cfg_get(cfg, "outdir", "output")))
+    _file_row(parent, "POSCAR file", poscar_var)
+    outdir_var = tk.StringVar(value=str(cfg.get("outdir", "output")))
     _dir_row(parent, "Output dir", outdir_var)
     _, key_var = _combo(parent, "Group by", ["note", "symbol", "x", "y", "z"], cfg, "separate_key", "note")
 
@@ -584,10 +588,103 @@ def separate_form(parent, cfg: dict):
 
 
 # ------------------------------------------------------------------ #
+#  Config editor                                                     #
+# ------------------------------------------------------------------ #
+
+def config_form(parent, cfg: dict):
+    """Edit all config.toml parameters directly."""
+    import tomllib
+    from src.config import normalize_config_keys
+
+    config_var = tk.StringVar(value="config.toml")
+    _file_row(parent, "Config file", config_var)
+
+    tk.Label(parent, text="General", font=("Arial", 10, "bold"),
+             anchor="w").pack(fill=tk.X, pady=(10, 2))
+    name_var = _entry(parent, "Name", cfg, "name", "modeling")
+    poscar_var = tk.StringVar(value=str(cfg.get("poscar", "")))
+    _file_row(parent, "POSCAR file", poscar_var)
+    outdir_var = tk.StringVar(value=str(cfg.get("outdir", "output")))
+    _dir_row(parent, "Output dir", outdir_var)
+    _, phase_var = _combo(parent, "Phase", ["", "FCC", "BCC", "HCP"], cfg, "phase")
+
+    # SOF editor container (rebuilt on phase/config change)
+    sof_container = tk.Frame(parent)
+    sof_container.pack(fill=tk.X)
+    _sof_collect = lambda: {}
+
+    def _reload_sof(*_):
+        nonlocal _sof_collect
+        for w in sof_container.winfo_children():
+            w.destroy()
+        p = phase_var.get().strip()
+        cp = config_var.get().strip()
+        if not p or not cp or not Path(cp).is_file():
+            _sof_collect = lambda: {}
+            return
+        with open(cp, "rb") as f:
+            cfg2 = normalize_config_keys(tomllib.load(f))
+        editor, collect = _sof_editor(sof_container, p, cfg2)
+        _sof_collect = collect if editor else (lambda: {})
+
+    phase_var.trace_add("write", _reload_sof)
+    config_var.trace_add("write", _reload_sof)
+
+    tk.Label(parent, text="Supercell & Modeling", font=("Arial", 10, "bold"),
+             anchor="w").pack(fill=tk.X, pady=(10, 2))
+    factors_vars = _int_entries(parent, "Supercell factors", 3, cfg,
+                                "supercell_factors", (3, 3, 3))
+    seeds_var = _entry(parent, "Seeds (space-sep)", cfg, "shuffle_seeds", "")
+    batch_var = _entry(parent, "Batch size", cfg, "batch_size", "1")
+    sqs_var = _checkbox(parent, "Enable SQS", cfg.get("enable_sqs", False))
+    iter_var = _entry(parent, "SQS iterations", cfg, "iterations", "10000000")
+
+    tk.Label(parent, text="Analysis", font=("Arial", 10, "bold"),
+             anchor="w").pack(fill=tk.X, pady=(10, 2))
+    mult_var = _entry(parent, "Cutoff multiplier", cfg, "cutoff_mult", "1.1")
+    par_var = _entry(parent, "Parallel workers", cfg, "parallel", "2")
+    ase_var = _checkbox(parent, "Use ASE backend", cfg.get("by_ase", False))
+    pbc_var = _checkbox(parent, "Periodic boundary (PBC)", cfg.get("pbc", False))
+    miller_vars = _int_entries(parent, "Miller index", 3, cfg,
+                               "slice_direction", (0, 0, 1))
+
+    # Trigger initial load if phase is pre-filled
+    if phase_var.get().strip():
+        _reload_sof()
+
+    def get_args():
+        sofs_by_site = _sof_collect()
+        cp = config_var.get().strip()
+        phase = phase_var.get()
+        if sofs_by_site and cp and Path(cp).is_file():
+            _write_sofs_to_config(cp, phase, sofs_by_site)
+        return argparse.Namespace(
+            config_path=cp,
+            name=name_var.get(),
+            poscar=poscar_var.get(),
+            outdir=outdir_var.get(),
+            phase=phase,
+            factors=[int(v.get()) for v in factors_vars],
+            seeds=_parse_seeds(seeds_var.get()),
+            batch_size=int(batch_var.get() or "1"),
+            enable_sqs=sqs_var.get(),
+            iterations=int(float(iter_var.get() or "1e7")),
+            cutoff_mult=float(mult_var.get() or "1.1"),
+            parallel=int(par_var.get() or "2"),
+            by_ase=ase_var.get(),
+            pbc=pbc_var.get(),
+            slice_direction=[int(v.get()) for v in miller_vars],
+        )
+
+    return get_args
+
+
+# ------------------------------------------------------------------ #
 #  Registry                                                          #
 # ------------------------------------------------------------------ #
 
 DESCRIPTIONS: dict[str, str] = {
+    "Config": "View and edit all config.toml parameters. Load/Save configuration.",
     "Modeling": "Generate supercell and allocate atoms based on SOFs.",
     "Import + Model": (
         "Import site-fraction data from ThermoCalc/Pandat CSV/XLSX\n"
@@ -609,6 +706,7 @@ DESCRIPTIONS: dict[str, str] = {
 }
 
 FORMS = {
+    "Config": config_form,
     "Modeling": modeling_form,
     "Import + Model": import_to_modeling_form,
     "Count CN": countcn_form,

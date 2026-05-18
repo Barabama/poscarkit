@@ -10,19 +10,18 @@ CONTACT = "Email: wubo@fzu.edu.cn | Phone: +86 130 2381 9517"
 
 def normalize_config_keys(cfg: dict) -> dict:
     """Merge case-variant phase keys so [BCC] and [bcc] resolve to the
-    same lowercase entry.  Sub-tables like [BCC.1a.sofs] are merged
-    recursively into their lowercase equivalents (bcc.1a.sofs).
+    same uppercase entry.  Only dict-valued keys (TOML sections) are
+    uppercased; scalar keys like 'name', 'poscar' are left as-is.
     """
     for key in list(cfg.keys()):
         if not isinstance(key, str):
+            continue
+        if not isinstance(cfg[key], dict):
             continue
         upper = key.upper()
         if upper == key:
             continue
         if upper in cfg:
-            logging.info(
-                f"Merging config section [{key}] into [{upper}]"
-            )
             _deep_update(cfg[upper], cfg.pop(key))
         else:
             cfg[upper] = cfg.pop(key)
