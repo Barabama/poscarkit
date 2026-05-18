@@ -3,7 +3,7 @@
 **A toolkit for modeling VASP POSCAR files based on Sublattice Occupying Fractions (SOFs).**
 **基于亚晶格占位分数 (SOFs) 的 VASP POSCAR 结构建模工具包.**
 
-[![Version](https://img.shields.io/badge/version-0.10.0-blue)](./pyproject.toml)
+[![Version](https://img.shields.io/badge/version-0.10.1-blue)](./pyproject.toml)
 [![Python](https://img.shields.io/badge/python-≥3.10-blue)](./pyproject.toml)
 [![License](https://img.shields.io/badge/license-MIT-green)](./LICENSE)
 
@@ -210,8 +210,8 @@ nuitka --standalone --onefile --output-dir=dist --jobs=4 --lto=yes \
     --nofollow-import-to=matplotlib.tests --nofollow-import-to=pandas.tests \
     --nofollow-import-to=pytest --nofollow-import-to=setuptools.tests \
     --windows-icon-from-ico="src/gui/poscarkit.ico" \
-    --output-filename=poscarkit-0.10.0.exe \
-    --file-version=0.10.0 \
+    --output-filename=poscarkit-0.10.1.exe \
+    --file-version=0.10.1 \
     --copyright="(C) 2025 MCMF, Fuzhou University" \
     main.py
 ```
