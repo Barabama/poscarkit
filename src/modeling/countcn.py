@@ -6,6 +6,7 @@ import shutil
 from pathlib import Path
 from collections import defaultdict
 from dataclasses import dataclass
+from itertools import product
 from concurrent.futures import ThreadPoolExecutor
 
 import numpy as np
@@ -146,7 +147,7 @@ class CNCounter:
         return expanded, index_map
 
     def calculate_cn(
-        self, cutoff: float, cutoff_mult: float = 1.1, pbc: bool = False
+        self, cutoff: float, cutoff_mult: float = 1.05, pbc: bool = False
     ) -> tuple[list[CNData], dict[frozenset, int]]:
         """
         Calculate each atom's coordination number within a given cutoff distance.
@@ -175,10 +176,8 @@ class CNCounter:
         else:
             tree = KDTree(coords)
 
-        tolerance = cutoff * 0.1
         for i, coord in progress(enumerate(coords), len(coords), desc="Calculating CN"):
-            # Search for neighbors within the cutoff + tolerance
-            indices = tree.query_ball_point(coord, cutoff + tolerance)
+            indices = tree.query_ball_point(coord, cutoff)
             if not indices:
                 continue
 
@@ -186,29 +185,33 @@ class CNCounter:
             s_ct = atom_ct.symbol
             nn_map = defaultdict(list)
 
-            for j in indices:
-                if pbc:
+            if pbc:
+                # Deduplicate periodic images: keep only the closest image per original atom
+                best_dist: dict[int, float] = {}
+                for j in indices:
                     orig_j = int(index_map[j])
                     if orig_j == i:
                         continue
+                    diff = expanded_coords[j] - coord
+                    dist = np.linalg.norm(diff)
+                    if dist < 0.1:
+                        continue
+                    if orig_j not in best_dist or dist < best_dist[orig_j]:
+                        best_dist[orig_j] = float(dist)
+                for orig_j, dist in best_dist.items():
+                    if dist > cutoff:
+                        continue
                     atom_nb = struct[orig_j]
-                    # Compute MIC distance for accurate filtering
-                    diff = coords[orig_j] - coord
-                    diff_frac = diff @ np.linalg.inv(cell)
-                    diff_frac -= np.round(diff_frac)
-                    diff_mic = diff_frac @ cell
-                    dist = np.linalg.norm(diff_mic)
-                else:
+                    nn_map[atom_nb.symbol].append(atom_nb)
+            else:
+                for j in indices:
                     if j == i:
                         continue
                     dist = np.linalg.norm(coords[j] - coord)
+                    if dist < 0.1 or dist > cutoff:
+                        continue
                     atom_nb = struct[j]
-
-                if (dist < tolerance) or (dist > cutoff + tolerance):
-                    continue
-
-                s_nb = atom_nb.symbol
-                nn_map[s_nb].append(atom_nb)
+                    nn_map[atom_nb.symbol].append(atom_nb)
 
             for s_nb, nn_list in nn_map.items():
                 cndata_list.append(
@@ -225,7 +228,7 @@ class CNCounter:
         return cndata_list, pair_counts
 
     def calculate_cn_ase(
-        self, cutoff_mult: float = 1.2
+        self, cutoff_mult: float = 1.05
     ) -> tuple[list[CNData], dict[frozenset, int]]:
         """
         Calculate each atom's coordination number by ASE within a given cutoff multiplier.

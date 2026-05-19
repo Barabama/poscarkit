@@ -78,7 +78,7 @@ DEFAULT_CONFIG = """# config.toml
 # enable_sqs = false
 
 # CountCN cutoff multiplier
-# cutoff_mult = 1.1
+# cutoff_mult = 1.05
 # CountCN by ASE
 # by_ase = false
 # CountCN applying periodic boundary conditions
