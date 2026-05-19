@@ -3,6 +3,7 @@
 import logging
 import threading
 import tkinter as tk
+from collections.abc import Callable
 from tkinter import ttk
 
 from src.gui.forms import FORMS, DESCRIPTIONS
@@ -60,13 +61,14 @@ class PoscaKitGUI:
 
         # Config
         self._cfg: dict = {}
+        self._cfg_path: str = "config.toml"
         self._load_config()
 
         # State (init before building widgets that reference these)
         self._current_form = None
         self._func_buttons: dict[str, tk.Button] = {}
         self._running = False
-        self._form_cache: dict[str, tuple[tk.Frame, object]] = {}
+        self._form_cache: dict[str, tuple[tk.Frame, Callable]] = {}
         self._form_state: dict[str, dict] = {}
 
         # Layout frames
@@ -269,13 +271,21 @@ class PoscaKitGUI:
 
     def _reload_form(self, name: str):
         """Reload config and rebuild a specific form."""
-        self._load_config()
         if name in self._form_cache:
+            _, get_args = self._form_cache[name]
+            try:
+                args = get_args()
+                cp = getattr(args, "config_path", None)
+                if cp:
+                    self._cfg_path = cp
+            except Exception:
+                pass
             frame, _ = self._form_cache[name]
             frame.destroy()
             del self._form_cache[name]
         if name in self._form_state:
             del self._form_state[name]
+        self._load_config()
         self._switch_form(name)
 
     # ------------------------------------------------------------------ #
@@ -336,14 +346,16 @@ class PoscaKitGUI:
             )
 
     def _save_config_form(self, get_args):
-        """Save all Config form fields to config.toml."""
+        """Save all Config form fields to the config file."""
         try:
             args = get_args()
         except Exception as e:
             logging.error(f"Invalid parameters: {e}")
             return
+        config_path = getattr(args, "config_path", None) or "config.toml"
+        self._cfg_path = config_path
         self._save_to_config(args)
-        logging.info("Config saved to: " + getattr(args, "config_path", "config.toml"))
+        logging.info("Config saved to: " + config_path)
 
     # ------------------------------------------------------------------ #
     #  Config I/O                                                        #
@@ -354,21 +366,21 @@ class PoscaKitGUI:
         from pathlib import Path
         from src.config import normalize_config_keys, DEFAULT_CONFIG
 
-        cfg_path = Path("config.toml")
+        cfg_path = Path(self._cfg_path)
         if not cfg_path.is_file():
             with open(cfg_path, "w", encoding="utf-8") as f:
                 f.write(DEFAULT_CONFIG)
-            logging.info("Generated default config.toml")
+            logging.info(f"Generated default {cfg_path}")
 
         try:
             with open(cfg_path, "rb") as f:
                 self._cfg = normalize_config_keys(tomllib.load(f))
         except Exception as e:
-            logging.error(f"Failed to parse config.toml: {e}")
+            logging.error(f"Failed to parse {cfg_path}: {e}")
             self._cfg = {}
 
     def _save_to_config(self, args):
-        """Update top-level keys in config.toml from namespace fields."""
+        """Update top-level keys in config file from namespace fields."""
         from pathlib import Path
         import re
 
@@ -391,7 +403,7 @@ class PoscaKitGUI:
                 val = list(val)
             updates[cfg_k] = val
 
-        cfg_path = Path("config.toml")
+        cfg_path = Path(self._cfg_path)
         if not cfg_path.is_file():
             with open(cfg_path, "w", encoding="utf-8") as f:
                 for k, v in updates.items():

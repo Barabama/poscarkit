@@ -184,6 +184,7 @@ class TestSaveToConfig(unittest.TestCase):
         from src.gui.app import PoscaKitGUI
         stub = object.__new__(PoscaKitGUI)
         stub._cfg = {}
+        stub._cfg_path = "config.toml"
         stub.root = MagicMock()
         return stub
 
@@ -472,6 +473,7 @@ class TestLoadConfig(unittest.TestCase):
         from src.gui.app import PoscaKitGUI
         stub = object.__new__(PoscaKitGUI)
         stub._cfg = {}
+        stub._cfg_path = "config.toml"
         stub.root = MagicMock()
         return stub
 
