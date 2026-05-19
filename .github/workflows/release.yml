@@ -121,14 +121,14 @@ jobs:
           mode: onefile
           onefile-tempdir-spec: "{CACHE_DIR}/nuitka/onefile"
           output-dir: dist
-          output-filename: poscarkit-${{ steps.version.outputs.version }}-win-x64.exe
+          output-file: poscarkit-${{ steps.version.outputs.version }}-win-x64.exe
           product-name: poscarkit
           product-version: ${{ steps.version.outputs.version }}
           file-description: POSCAR modeling tool
           company-name: MCMF, Fuzhou University
           copyright: "(C) 2025 MCMF, Fuzhou University"
           windows-icon-from-ico: src/gui/poscarkit.ico
-          enable-plugin: tk-inter,no-qt
+          enable-plugins: tk-inter
           include-package: pandas
           windows-console-mode: false
           nofollow-import-to: matplotlib.tests,pandas.tests,pytest,setuptools.tests
@@ -177,12 +177,12 @@ jobs:
           mode: onefile
           onefile-tempdir-spec: "{CACHE_DIR}/nuitka/onefile"
           output-dir: dist
-          output-filename: poscarkit-${{ steps.version.outputs.version }}-linux-x64
+          output-file: poscarkit-${{ steps.version.outputs.version }}-linux-x64
           product-name: poscarkit
           product-version: ${{ steps.version.outputs.version }}
           file-description: POSCAR modeling tool
           company-name: MCMF, Fuzhou University
-          enable-plugin: tk-inter,no-qt
+          enable-plugins: tk-inter
           include-package: pandas
           windows-console-mode: false
           nofollow-import-to: matplotlib.tests,pandas.tests,pytest,setuptools.tests

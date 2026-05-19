@@ -222,11 +222,11 @@ Packaged with Nuitka · 用 Nuitka 打包:
 ```bash
 pip install nuitka
 nuitka --standalone --onefile --output-dir=dist --jobs=4 --lto=yes \
-    --follow-imports --enable-plugin=tk-inter,no-qt --include-package=pandas  \
+    --follow-imports --enable-plugins=tk-inter --include-package=pandas  \
     --nofollow-import-to=matplotlib.tests --nofollow-import-to=pandas.tests \
     --nofollow-import-to=pytest --nofollow-import-to=setuptools.tests \
     --windows-icon-from-ico="src/gui/poscarkit.ico" --windows-console-mode=disable \
-    --output-filename=poscarkit-0.10.2.exe \
+    --output-file=poscarkit-0.10.2.exe \
     --file-version=0.10.2 \
     --copyright="(C) 2025 MCMF, Fuzhou University" \
     main.py
