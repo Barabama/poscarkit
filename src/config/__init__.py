@@ -4,7 +4,14 @@ import logging
 
 # Application metadata
 DEVELOPER = "Author: Gao Min-Liang, Qiao Yang, Yang Su-wen, Wu Bo*, et al."
-VERSION = "Version: 0.10.2 | © 2025 MCMF, Fuzhou University"
+
+try:
+    import importlib.metadata
+    __version__ = importlib.metadata.version("poscarkit")
+except Exception:
+    __version__ = "x.x.x"  # fallback for standalone/onefile builds
+
+VERSION = f"Version: {__version__} | © 2025 MCMF, Fuzhou University"
 CONTACT = "Email: wubo@fzu.edu.cn | Phone: +86 130 2381 9517"
 
 
