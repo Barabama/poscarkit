@@ -22,10 +22,21 @@ _RE_MAP_SPEC = re.compile(r"(\d+):(\w+)")
 
 
 def parse_sublattice_map(spec: str) -> dict[int, str]:
-    """Parse a sublattice-map string like '1:1a,2:3c' into {1: '1a', 2: '3c'}."""
+    """Parse a sublattice-map string like '1:1a,2:3c' into {1: '1a', 2: '3c'}.
+
+    Tolerates common input variations:
+    Chinese punctuation (：，) to ASCII (: ,), extra whitespace.
+    """
+    # Normalize: Chinese to ASCII punctuation, strip whitespace
+    spec = spec.replace("：", ":").replace("，", ",")  # ：to:  ，to,
+    spec = spec.replace("．", ".").replace("、", ",")  # ．to.  、to,
+    spec = re.sub(r"\s+", "", spec)  # remove all whitespace
+
     result: dict[int, str] = {}
     for part in spec.split(","):
-        m = _RE_MAP_SPEC.search(part.strip())
+        if not part:
+            continue  # skip empty from trailing commas
+        m = _RE_MAP_SPEC.search(part)
         if not m:
             raise ValueError(f"Invalid sublattice mapping '{part}'. Expected 'N:name'")
         result[int(m.group(1))] = m.group(2)
@@ -73,7 +84,7 @@ def get_sofs_at(
     Args:
         ir: SOFData from a reader.
         T: Target temperature.
-        sublattice_map: CALPHAD sub-lattice # → Wyckoff name. Defaults to
+        sublattice_map: CALPHAD sub-lattice # to Wyckoff name. Defaults to
             PHASE_SUBLATTICE_MAP[phase].
 
     Returns:

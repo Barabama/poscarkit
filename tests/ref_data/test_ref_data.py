@@ -79,6 +79,50 @@ class TestParseSublatticeMap(unittest.TestCase):
         with self.assertRaises(ValueError):
             parse_sublattice_map("abc")
 
+    # -- edge cases for real-world user input variations --
+
+    def test_chinese_colon_and_comma(self):
+        # Chinese punctuation ：to:  ，to,
+        self.assertEqual(
+            parse_sublattice_map("1：1a，2：3c"),
+            {1: "1a", 2: "3c"},
+        )
+
+    def test_spaces_around_separators(self):
+        self.assertEqual(
+            parse_sublattice_map("1: 1a, 2: 3c"),
+            {1: "1a", 2: "3c"},
+        )
+        self.assertEqual(
+            parse_sublattice_map("  1 : 1a , 2 : 3c  "),
+            {1: "1a", 2: "3c"},
+        )
+
+    def test_whitespace_only(self):
+        # Empty/whitespace input to empty dict (harmless default)
+        self.assertEqual(parse_sublattice_map(""), {})
+        self.assertEqual(parse_sublattice_map("   "), {})
+
+    def test_trailing_comma(self):
+        self.assertEqual(
+            parse_sublattice_map("1:1a,2:3c,"),
+            {1: "1a", 2: "3c"},
+        )
+
+    def test_missing_colon(self):
+        with self.assertRaises(ValueError):
+            parse_sublattice_map("1,2")
+        with self.assertRaises(ValueError):
+            parse_sublattice_map("1:")
+        with self.assertRaises(ValueError):
+            parse_sublattice_map(":1a")
+
+    def test_extra_commas(self):
+        self.assertEqual(
+            parse_sublattice_map("1:1a,,2:3c"),
+            {1: "1a", 2: "3c"},
+        )
+
 
 class TestGetSofsAt(unittest.TestCase):
 

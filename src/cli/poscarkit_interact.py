@@ -15,8 +15,6 @@ from src.modeling.slice import Slicer
 from src.modeling.supercell import unitcell2file, supercell2file
 from src.workflow.modeling import run_modeling
 from src.workflow.slice_to_countcn import slice2files_with_countcn
-from src.io.readers import detect_format, read as read_sof_data
-from src.io.ir import get_sofs_at, build_structure_info, parse_sublattice_map
 from src.config import VERSION, CONTACT, DEVELOPER, DEFAULT_CONFIG, normalize_config_keys
 
 INFO_CLI = f"""
@@ -39,7 +37,7 @@ INFO_OPTIONS = """
   8) Compare         : Compare two POSCAR files.
   9) Merge           : Merge multiple POSCAR files.
  10) Separate        : Separate a POSCAR file by groups.
- 11) Import SOFs     : Import SOFs from ThermoCalc/Pandat data files.
+ 11) Import+Model   : Import SOFs from CSV/XLSX and run modeling.
 """
 INFO_HELP = f"""
 ============================= How to use POSCARKIT ============================
@@ -129,7 +127,7 @@ class PoscarkitInteract:
             8: self.run_compare,
             9: self.run_merge,
             10: self.run_separate,
-            11: self.run_import_sofs,
+            11: self.run_import_to_modeling,
         }
         self.config = self.read_config(cfg_path, cfg)
 
@@ -397,12 +395,14 @@ class PoscarkitInteract:
         outdir = self._handle_outdir()
         miller = self._handle_miller()
         pbc = self.config.get("pbc", False)
+        by_ase = self.config.get("by_ase", False)
         results = slice2files_with_countcn(
             name=name,
             poscar=poscar,
             outdir=outdir,
             miller_index=miller,
             pbc=pbc,
+            by_ase=by_ase,
         )
         return results
 
@@ -467,8 +467,12 @@ class PoscarkitInteract:
         outputs = SimplePoscar.separate_poscar(poscar, outdir, key)
         return outputs
 
-    def run_import_sofs(self):
+    def run_import_to_modeling(self):
         """Import SOFs from CSV/XLSX and run modeling."""
+        from src.io.readers import detect_format, read as read_sof_data
+        from src.io.ir import get_sofs_at, parse_sublattice_map
+        from src.workflow.import_to_modeling import run_import_to_modeling as run_wf
+
         csv_path = Path(input("Enter CSV/XLSX file path\n> ").strip())
         while not csv_path.is_file():
             csv_path = Path(input(f"File not found. Enter valid path\n> ").strip())
@@ -476,63 +480,43 @@ class PoscarkitInteract:
         fmt = detect_format(str(csv_path))
         print(f"Detected format: {fmt}")
 
-        phase = input("Enter phase name (fcc, bcc, hcp, ...)\n> ").strip().lower()
+        phase = input("Enter phase name\n> ").strip().upper()
         while phase not in self.config:
-            print(f"Phase '{phase}' not found in config. Available phases: "
-                  f"{[k for k in self.config.keys() if k not in ('cell',) and not k.startswith('_')]}")
-            phase = input("Enter phase name\n> ").strip().lower()
+            print(f"Phase '{phase}' not found in config. Available: "
+                  f"{[k for k in self.config if k.isalpha()]}")
+            phase = input("Enter phase name\n> ").strip().upper()
 
         ir = read_sof_data(str(csv_path), phase_hint=phase)
         avail_temps = sorted(ir.T.astype(float))
         print(f"Available temperatures: {avail_temps}")
-        temp_input = input("Enter temperatures (space-separated)\n> ").strip()
-        temps = [float(t) for t in temp_input.split()]
+        temp_input = input("Enter temperatures\n> ").strip()
+        for ch in (",", "，", "；", ";", "、", "\n"):
+            temp_input = temp_input.replace(ch, " ")
+        temps = [float(t.strip().rstrip("Kk"))
+                 for t in temp_input.split() if t.strip().rstrip("Kk")]
 
         map_input = input(
             "Sublattice map (e.g. '1:1a,2:3c') or Enter for default\n> "
         ).strip()
-        sublattice_map = parse_sublattice_map(map_input) if map_input else None
 
-        for T in temps:
-            sofs_by_site = get_sofs_at(ir, T, sublattice_map)
-            print(f"\n--- T={T} K ---")
-            for site, sofs in sofs_by_site.items():
-                print(f"  {site}: {sofs}")
+        action = input("Run, save-config, or print? (r/s/p)\n> ").strip().lower()
+        mode = {"s": "save-config", "p": "print"}.get(action, "run")
 
-            action = input(
-                "Run modeling, save config, or skip? (r/s/S)\n> "
-            ).strip().lower()
-            if action == "r":
-                phase_cfg = self.config[phase]
-                structure_info = build_structure_info(phase_cfg, sofs_by_site)
-                poscar = self._handle_poscar(force=False)
-                outdir = self._handle_outdir()
-                factrs = self._handle_factors()
-                seeds = self._handle_seeds()
-                batch_size = self.config.get("batch_size", 1)
-                enable_sqs = self.config.get("enable_sqs", False)
-                name = f"{phase}_{int(T)}K"
-                results = run_modeling(
-                    name=name,
-                    poscar=poscar,
-                    outdir=outdir,
-                    supercell_factors=factrs,
-                    structure_info=structure_info,
-                    shuffle_seeds=seeds,
-                    batch_size=batch_size,
-                    enable_sqs=enable_sqs,
-                )
-                print(f"Modeling completed. Files: {len(results)}")
-            elif action == "s":
-                out_config = WORKDIR / f"config_{int(T)}K.toml"
-                # naively rebuild config: append SOF sections
-                with open(out_config, "w", encoding="utf-8") as f:
-                    f.write(DEFAULT_CONFIG)
-                    for site, sofs in sofs_by_site.items():
-                        f.write(f"\n[{phase}.{site}.sofs]\n")
-                        for elem, frac in sorted(sofs.items()):
-                            f.write(f"{elem} = {frac:.6g}\n")
-                print(f"Config saved to {out_config}")
+        results = run_wf(
+            csv_path=str(csv_path),
+            config_path=str(WORKDIR / "config.toml"),
+            phase=phase,
+            temperatures=temps,
+            sublattice_map=map_input or None,
+            outdir=str(self._handle_outdir()),
+            name=self._handle_name(),
+            factors=self._handle_factors(),
+            seeds=self._handle_seeds(),
+            batch_size=self.config.get("batch_size", 1),
+            enable_sqs=self.config.get("enable_sqs", False),
+            output_mode=mode,
+        )
+        print(f"Import-to-modeling completed. Files: {len(results)}")
 
     def run(self):
         print(INFO_CLI)

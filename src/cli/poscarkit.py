@@ -13,8 +13,6 @@ from src.modeling.slice import Slicer
 from src.workflow.modeling import run_modeling
 from src.modeling.supercell import unitcell2file, supercell2file
 from src.workflow.slice_to_countcn import slice2files_with_countcn
-from src.io.readers import detect_format, read as read_sof_data
-from src.io.ir import get_sofs_at, build_structure_info, parse_sublattice_map
 from src.config import VERSION, CONTACT, DEVELOPER, normalize_config_keys
 
 
@@ -47,7 +45,7 @@ COMMANDS:
   compare       Compare two POSCAR files
   merge         Merge two POSCAR files
   separate      Separate a POSCAR file by groups
-  import-sofs   Import SOFs from ThermoCalc/Pandat data files
+  import-to-modeling  Import SOFs from CSV/XLSX and run modeling
 
 EXAMPLES:
   poscarkit help
@@ -59,8 +57,8 @@ EXAMPLES:
   poscarkit compare --poscar1 POSCAR1.vasp --poscar2 POSCAR2.vasp
   poscarkit merge --poscars POSCAR1.vasp POSCAR2.vasp POSCAR3.vasp --outdir output/
   poscarkit separate --poscar POSCAR.vasp --key note --outdir output/
-  poscarkit import-sofs --csv tc_exps.csv --phase fcc -t 473 873 1273
-  poscarkit import-sofs --csv pandat-data.csv --phase fcc -t 873 -o print
+  poscarkit import-to-modeling --csv tc_exps.csv --phase fcc -t 473 873 1273
+  poscarkit import-to-modeling --csv pandat-data.csv --phase fcc -t 873 -o print
 """
     )
     return 0
@@ -170,6 +168,7 @@ def cmd_slice_to_countcn(args: argparse.Namespace) -> int:
     outdir = Path(args.outdir) if args.outdir else Path("output")
     miller_index = tuple(args.miller_index)
     pbc = getattr(args, "pbc", False)
+    by_ase = getattr(args, "by_ase", False)
 
     if not poscar or not poscar.is_file():
         logging.error(f"POSCAR file not found: {poscar}")
@@ -178,7 +177,8 @@ def cmd_slice_to_countcn(args: argparse.Namespace) -> int:
     outdir.mkdir(parents=True, exist_ok=True)
 
     results = slice2files_with_countcn(
-        name=name, poscar=poscar, outdir=outdir, miller_index=miller_index, pbc=pbc
+        name=name, poscar=poscar, outdir=outdir, miller_index=miller_index,
+        pbc=pbc, by_ase=by_ase,
     )
 
     logging.info(f"Slice to CN count completed. Results saved to:")
@@ -259,139 +259,41 @@ def cmd_separate(args: argparse.Namespace) -> int:
     return 0
 
 
-def cmd_import_sofs(args: argparse.Namespace) -> int:
+def cmd_import_to_modeling(args: argparse.Namespace) -> int:
     csv_path = Path(args.csv)
     if not csv_path.is_file():
         logging.error(f"CSV/XLSX file not found: {csv_path}")
         return 1
 
-    config_path = Path(args.config) if args.config else WORKDIR / "config.toml"
-    if not config_path.is_file():
+    config_path = args.config or str(WORKDIR / "config.toml")
+    if not Path(config_path).is_file():
         logging.error(f"Config file not found: {config_path}")
         return 1
-    with open(config_path, "rb") as f:
-        cfg = normalize_config_keys(tomllib.load(f))
-
-    phase = args.phase.upper()
-    phase_cfg = cfg.get(phase, {})
-    if not phase_cfg:
-        logging.error(f"Phase '{phase}' not found in config.toml")
-        return 1
-
-    sublattice_map = (
-        parse_sublattice_map(args.sublattice_map)
-        if args.sublattice_map
-        else None
-    )
-
-    fmt = detect_format(str(csv_path))
-    logging.info(f"Detected format: {fmt}")
-    ir = read_sof_data(str(csv_path), phase_hint=phase)
 
     temperatures = args.temperatures or []
     if not temperatures:
-        available = sorted(ir.T.astype(float))
-        logging.info(f"Available temperatures: {available}")
         logging.error("No temperatures specified. Use --temperatures / -t")
         return 1
 
-    name_base = args.name or "modeling"
-    outdir = Path(args.outdir) if args.outdir else WORKDIR / "output"
-    factors = tuple(args.factors) if args.factors else (3, 3, 3)
-    seeds = args.seeds if args.seeds else [None]
-    batch_size = args.batch_size or 1
-    enable_sqs = args.enable_sqs or False
-    iterations = args.iterations or int(1e7)
+    from src.workflow.import_to_modeling import run_import_to_modeling
 
-    for T in temperatures:
-        sofs_by_site = get_sofs_at(ir, T, sublattice_map)
-        logging.info(f"T={T} K: {sofs_by_site}")
-
-        structure_info = build_structure_info(phase_cfg, sofs_by_site)
-
-        if args.output == "print":
-            import json
-            print(json.dumps({"T": T, "structure_info": structure_info}, indent=2))
-        elif args.output == "save-config":
-            out_config = outdir / f"config_{int(T)}K.toml"
-            _write_config_snippet(config_path, phase, sofs_by_site, out_config)
-            logging.info(f"Config saved to {out_config}")
-        elif args.output == "run":
-            name = f"{name_base}_{int(T)}K"
-            poscar_path = unitcell2file(
-                structure_info=structure_info, outdir=outdir / name
-            )
-            results = run_modeling(
-                name=name,
-                poscar=poscar_path,
-                outdir=outdir,
-                supercell_factors=factors,
-                structure_info=structure_info,
-                shuffle_seeds=seeds,
-                batch_size=batch_size,
-                enable_sqs=enable_sqs,
-                iterations=iterations,
-            )
-            logging.info(f"Modeling completed for T={T}K. Files: {len(results)}")
-
+    results = run_import_to_modeling(
+        csv_path=str(csv_path),
+        config_path=config_path,
+        phase=args.phase,
+        temperatures=list(temperatures),
+        sublattice_map=args.sublattice_map,
+        outdir=args.outdir or str(WORKDIR / "output"),
+        name=args.name or "modeling",
+        factors=tuple(args.factors) if args.factors else (3, 3, 3),
+        seeds=args.seeds,
+        batch_size=args.batch_size or 1,
+        enable_sqs=args.enable_sqs or False,
+        iterations=args.iterations or int(1e7),
+        output_mode=args.output or "run",
+    )
+    logging.info(f"Import-to-modeling completed. Files: {len(results)}")
     return 0
-
-
-def _write_config_snippet(
-    config_path: Path,
-    phase: str,
-    sofs_by_site: dict[str, dict[str, float]],
-    out_path: Path,
-):
-    """Write a modified config.toml with updated SOF sections."""
-    with open(config_path, "r", encoding="utf-8") as f:
-        lines = f.readlines()
-
-    new_lines = []
-    skip_until_next_section = False
-    current_section = ""
-
-    for line in lines:
-        stripped = line.strip()
-        # Track current section
-        if stripped.startswith("[") and stripped.endswith("]"):
-            # Extract section name
-            section = stripped[1:-1].strip().split(".", 1)
-            if len(section) == 3 and section[0] == phase:
-                current_section = section[2]
-            else:
-                current_section = ""
-            skip_until_next_section = False
-            new_lines.append(line)
-            continue
-
-        # Skip existing SOF lines for our phase
-        if current_section in sofs_by_site:
-            if stripped and not stripped.startswith("#"):
-                # This is a SOF value line — skip it
-                continue
-            if not stripped:
-                # Empty line after SOFs — inject new SOFs
-                sofs = sofs_by_site[current_section]
-                for elem, frac in sorted(sofs.items()):
-                    new_lines.append(f"{elem} = {frac:.6g}\n")
-                new_lines.append("\n")
-                del sofs_by_site[current_section]
-                current_section = ""
-                continue
-            new_lines.append(line)
-        else:
-            new_lines.append(line)
-
-    # Append remaining SOF sections that didn't exist yet
-    for site_name, sofs in sofs_by_site.items():
-        new_lines.append(f"\n[{phase}.{site_name}.sofs]\n")
-        for elem, frac in sorted(sofs.items()):
-            new_lines.append(f"{elem} = {frac:.6g}\n")
-
-    out_path.parent.mkdir(parents=True, exist_ok=True)
-    with open(out_path, "w", encoding="utf-8") as f:
-        f.writelines(new_lines)
 
 
 def main() -> int:
@@ -601,6 +503,12 @@ def main() -> int:
         action="store_true",
         help="Enable periodic boundary conditions for CN counting in layers",
     )
+    parser_slice_to_countcn.add_argument(
+        "--by-ase",
+        "-a",
+        action="store_true",
+        help="Use ASE backend for CN counting (default: False)",
+    )
     parser_slice_to_countcn.set_defaults(func=cmd_slice_to_countcn)
 
     # Supercell command
@@ -696,7 +604,7 @@ def main() -> int:
 
     # Import SOFs command
     parser_import = subparsers.add_parser(
-        "import-sofs",
+        "import-to-modeling",
         help="Import SOFs from ThermoCalc/Pandat CSV/XLSX files",
     )
     parser_import.add_argument(
@@ -724,7 +632,7 @@ def main() -> int:
     parser_import.add_argument(
         "--sublattice-map",
         type=str,
-        help="Override CALPHAD→Wyckoff mapping (e.g. '1:1a,2:3c')",
+        help="Override CALPHAD to Wyckoff mapping (e.g. '1:1a,2:3c')",
     )
     parser_import.add_argument(
         "--output",
@@ -775,7 +683,7 @@ def main() -> int:
         default=int(1e7),
         help="SQS iterations (default: 1e7)",
     )
-    parser_import.set_defaults(func=cmd_import_sofs)
+    parser_import.set_defaults(func=cmd_import_to_modeling)
 
     args = parser.parse_args()
 

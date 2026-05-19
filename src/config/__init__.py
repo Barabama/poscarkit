@@ -9,7 +9,7 @@ try:
     import importlib.metadata
     __version__ = importlib.metadata.version("poscarkit")
 except Exception:
-    __version__ = "0.10.1"  # fallback for standalone/onefile builds
+    __version__ = "x.x.x"  # fallback for standalone/onefile builds
 
 VERSION = f"Version: {__version__} | © 2025 MCMF, Fuzhou University"
 CONTACT = "Email: wubo@fzu.edu.cn | Phone: +86 130 2381 9517"
@@ -17,19 +17,18 @@ CONTACT = "Email: wubo@fzu.edu.cn | Phone: +86 130 2381 9517"
 
 def normalize_config_keys(cfg: dict) -> dict:
     """Merge case-variant phase keys so [BCC] and [bcc] resolve to the
-    same lowercase entry.  Sub-tables like [BCC.1a.sofs] are merged
-    recursively into their lowercase equivalents (bcc.1a.sofs).
+    same uppercase entry.  Only dict-valued keys (TOML sections) are
+    uppercased; scalar keys like 'name', 'poscar' are left as-is.
     """
     for key in list(cfg.keys()):
         if not isinstance(key, str):
+            continue
+        if not isinstance(cfg[key], dict):
             continue
         upper = key.upper()
         if upper == key:
             continue
         if upper in cfg:
-            logging.info(
-                f"Merging config section [{key}] into [{upper}]"
-            )
             _deep_update(cfg[upper], cfg.pop(key))
         else:
             cfg[upper] = cfg.pop(key)
@@ -86,7 +85,7 @@ DEFAULT_CONFIG = """# config.toml
 # enable_sqs = false
 
 # CountCN cutoff multiplier
-# cutoff_mult = 1.1
+# cutoff_mult = 1.05
 # CountCN by ASE
 # by_ase = false
 # CountCN applying periodic boundary conditions

@@ -3,7 +3,7 @@
 **A toolkit for modeling VASP POSCAR files based on Sublattice Occupying Fractions (SOFs).**
 **基于亚晶格占位分数 (SOFs) 的 VASP POSCAR 结构建模工具包.**
 
-[![Version](https://img.shields.io/badge/version-0.10.1-blue)](./pyproject.toml)
+[![Version](https://img.shields.io/badge/version-0.10.2-blue)](./pyproject.toml)
 [![Python](https://img.shields.io/badge/python-≥3.10-blue)](./pyproject.toml)
 [![License](https://img.shields.io/badge/license-MIT-green)](./LICENSE)
 
@@ -30,7 +30,7 @@
 ### Run executable · 运行可执行文件
 
 ```bash
-POSCARKIT.exe                           # interactive mode · 交互模式
+POSCARKIT.exe                           # launch GUI · 启动图形界面
 POSCARKIT.exe -p POSCAR.vasp -c config.toml
 ```
 
@@ -40,8 +40,24 @@ POSCARKIT.exe -p POSCAR.vasp -c config.toml
 git clone https://github.com/Barabama/POSCARKIT.git
 cd poscarkit
 pip install -e .
-python main.py                          # no args → interactive · 无参数→交互模式
+python main.py                          # no args → GUI · 无参数→图形界面
+python main.py modeling --help          # with args → CLI · 带参数→命令行
 ```
+
+---
+
+## GUI · 图形界面
+
+`python main.py` (no arguments) opens a Tkinter GUI window with sidebar navigation.
+`python main.py`（无参数）打开 Tkinter 图形界面，左侧导航栏切换功能。
+
+- **Sidebar · 侧边栏**: Modeling / Count CN / Slice / Slice+CN / Supercell / Compare / Merge / Separate
+- **Form area · 表单区**: each function shows a parameter form pre-filled from `config.toml`
+- **SOF editor · 占位编辑器**: Modeling form includes an inline SOF table (add/remove elements, real-time sum check)
+- **Log area · 日志区**: real-time logging output at the bottom
+- **Run in background · 后台运行**: tasks execute in a separate thread, UI stays responsive
+- **Save as defaults · 保存配置**: checkbox to persist current form values to `config.toml`
+- Scrollable form area with draggable form/log divider · 表单区可滚动，表单/日志分隔线可拖拽
 
 ---
 
@@ -210,8 +226,8 @@ nuitka --standalone --onefile --output-dir=dist --jobs=4 --lto=yes \
     --nofollow-import-to=matplotlib.tests --nofollow-import-to=pandas.tests \
     --nofollow-import-to=pytest --nofollow-import-to=setuptools.tests \
     --windows-icon-from-ico="src/gui/poscarkit.ico" \
-    --output-filename=poscarkit-0.10.1.exe \
-    --file-version=0.10.1 \
+    --output-filename=poscarkit-0.10.2.exe \
+    --file-version=0.10.2 \
     --copyright="(C) 2025 MCMF, Fuzhou University" \
     main.py
 ```
