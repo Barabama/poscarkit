@@ -128,8 +128,9 @@ jobs:
           company-name: MCMF, Fuzhou University
           copyright: "(C) 2025 MCMF, Fuzhou University"
           windows-icon-from-ico: src/gui/poscarkit.ico
-          enable-plugin: no-qt
+          enable-plugin: tk-inter,no-qt
           include-package: pandas
+          windows-console-mode: false
           nofollow-import-to: matplotlib.tests,pandas.tests,pytest,setuptools.tests
 
       - name: Upload Windows executable
@@ -181,8 +182,9 @@ jobs:
           product-version: ${{ steps.version.outputs.version }}
           file-description: POSCAR modeling tool
           company-name: MCMF, Fuzhou University
-          enable-plugin: no-qt
+          enable-plugin: tk-inter,no-qt
           include-package: pandas
+          windows-console-mode: false
           nofollow-import-to: matplotlib.tests,pandas.tests,pytest,setuptools.tests
 
       - name: Upload Linux executable
