@@ -130,7 +130,7 @@ jobs:
           windows-icon-from-ico: src/gui/poscarkit.ico
           enable-plugins: tk-inter
           include-package: pandas
-          windows-console-mode: false
+          windows-console-mode: disable
           nofollow-import-to: matplotlib.tests,pandas.tests,pytest,setuptools.tests
 
       - name: Upload Windows executable
@@ -184,7 +184,7 @@ jobs:
           company-name: MCMF, Fuzhou University
           enable-plugins: tk-inter
           include-package: pandas
-          windows-console-mode: false
+          windows-console-mode: disable
           nofollow-import-to: matplotlib.tests,pandas.tests,pytest,setuptools.tests
 
       - name: Upload Linux executable
