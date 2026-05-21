@@ -436,7 +436,8 @@ class SimplePoscar:
         # Sort by symbol first, then by shuffle-order meta within each symbol
         struct.atom_list.sort(key=lambda a: (
             a.symbol,
-            int(a.meta[1:]) if isinstance(a.meta, str) and a.meta.startswith('s') else 0
+            a.note,
+            int(a.meta[1:]) if isinstance(a.meta, str) and a.meta.startswith('s') else 0,
         ))
 
         # Write atoms (coordinates, constraint, note)
@@ -448,7 +449,7 @@ class SimplePoscar:
                 else ""
             )
             meta = atom.meta if atom.meta is not None else ""
-            note_str = f"# {atom.note}-" if atom.note is not None else ""
+            note_str = f"# {atom.note}-" if atom.note else ""
             comment_str = f" {note_str}#{atom.index + 1:0{len(str(len(struct)))}d} {meta}"
             lines.append(f" {coord_str}{constr_str}{comment_str}")
 

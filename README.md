@@ -15,7 +15,6 @@
 |---|---|
 | Modeling · 建模 | Generate supercell and allocate atoms based on SOFs · 基于 SOFs 生成超胞并分配原子 |
 | Count CN · 配位数统计 | Coordination number & nearest-neighbor pair counting · 配位数和最近邻原子对统计 |
-| PBC support · 周期性 | Optional periodic boundary conditions for CN counting · 可选的周期性边界条件配位数统计 |
 | Slice · 切片 | Slice structure normal to a Miller index · 沿晶面指数切片 |
 | Slice + CN · 切片配位 | Slice then count CN per layer · 切片后逐层统计配位数 |
 | Supercell · 超胞 | Expand unit cell along basis vectors · 沿基矢方向扩展超胞 |
