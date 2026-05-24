@@ -2,6 +2,7 @@
 
 import os
 import re
+
 import pandas as pd
 
 from src.io.ir import SOFData
@@ -55,8 +56,10 @@ def detect_format(path: str) -> str:
     """Detect upstream format: 'tc_exps' | 'pandat' | 'teacher'.
 
     Logic:
-      1. Multi-sheet xlsx where every sheet has a T column → merge on T → re-detect.
-      2. Column pattern: y(...@...) → pandat, Y(...,...) → tc_exps, else teacher.
+      1. Multi-sheet xlsx: collect columns from ALL sheets, detect by pattern.
+         If every sheet has a T column → merge on T (for Pandat-like flat tables).
+         Otherwise, the reader will read the sheets individually (tc_exps style).
+      2. Column pattern: y(...@...) → pandat, X/Y(...,...) → tc_exps, else teacher.
     """
     if not os.path.isfile(path):
         raise FileNotFoundError(f"File not found: {path}")
@@ -68,6 +71,12 @@ def detect_format(path: str) -> str:
             if all_have_T:
                 df = _merge_sheets_on_T(xl)
                 return _detect_from_columns([str(c) for c in df.columns])
+            # Collect column names from all sheets for pattern detection
+            all_cols: list[str] = []
+            for s in xl.sheet_names:
+                df = pd.read_excel(xl, sheet_name=s, nrows=0)
+                all_cols.extend(str(c) for c in df.columns)
+            return _detect_from_columns(all_cols)
         df = pd.read_excel(path, nrows=0)
     else:
         df = pd.read_csv(path, nrows=0, dtype=str)

@@ -9,10 +9,11 @@ Column conventions:
 """
 
 import re
+
 import numpy as np
 import pandas as pd
 
-from src.io.ir import SOFData, PHASE_SITE_RATIOS
+from src.io.ir import SOFData, get_site_ratios
 
 
 def read_pandat(path: str, phase_hint: str | None = None) -> SOFData:
@@ -23,13 +24,12 @@ def read_pandat(path: str, phase_hint: str | None = None) -> SOFData:
         df = pd.read_excel(path)
     df.columns = [str(c).strip() for c in df.columns]
 
-    # Detect phase from phase_name column or column patterns
     phase = _detect_phase(df)
     if phase_hint:
         phase = phase_hint
     phase = phase.upper()
 
-    site_ratios = PHASE_SITE_RATIOS.get(phase, [0.5, 0.5])
+    site_ratios = get_site_ratios(phase)
 
     T = df["T"].values.astype(float)
 
@@ -57,7 +57,6 @@ def _detect_phase(df: pd.DataFrame) -> str:
     if "phase_name" in df.columns:
         val = df["phase_name"].dropna().iloc[0]
         return str(val).strip().upper()
-    # Fallback: extract from y(ELEM#N@PHASE) column
     for col in df.columns:
         m = re.search(r"@(\w+)\)", str(col), re.IGNORECASE)
         if m:
@@ -66,7 +65,10 @@ def _detect_phase(df: pd.DataFrame) -> str:
 
 
 def _extract_composition(df: pd.DataFrame) -> dict[str, float]:
-    """Extract nominal composition from x(ELEM) columns."""
+    """Extract nominal composition from x(ELEM) columns.
+
+    Handles both mole fractions and percentages automatically.
+    """
     comp: dict[str, float] = {}
     for col in df.columns:
         m = re.match(r"x\((\w+)\)", str(col), re.IGNORECASE)
@@ -77,6 +79,12 @@ def _extract_composition(df: pd.DataFrame) -> dict[str, float]:
                 comp[elem] = val
     if not comp:
         raise ValueError("No x(ELEM) columns found in Pandat data")
+
+    total = sum(comp.values())
+    if abs(total - 100.0) < 50.0:
+        comp = {e: v / 100.0 for e, v in comp.items()}
+    elif total > 1.5:
+        comp = {e: v / total for e, v in comp.items()}
     return comp
 
 
@@ -95,7 +103,7 @@ def _extract_Y_columns(
         elem = m.group(1).upper()
         if elem not in elements:
             continue
-        subl_idx = int(m.group(2)) - 1  # #1 → 0, #2 → 1
+        subl_idx = int(m.group(2)) - 1
         subl_cols.setdefault(subl_idx, {})[elem] = col
 
     n_subl = max(subl_cols.keys()) + 1 if subl_cols else 0

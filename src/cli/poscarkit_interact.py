@@ -37,7 +37,8 @@ INFO_OPTIONS = """
   8) Compare         : Compare two POSCAR files.
   9) Merge           : Merge multiple POSCAR files.
  10) Separate        : Separate a POSCAR file by groups.
- 11) Import+Model   : Import SOFs from CSV/XLSX and run modeling.
+ 11) Import to Model : Import SOFs from CSV/XLSX and run modeling.
+ 12) Thermo Analysis : Calculate Sconf and DeltaG from SOF data + TDB.
 """
 INFO_HELP = f"""
 ============================= How to use POSCARKIT ============================
@@ -89,7 +90,7 @@ INFO_HELP = f"""
 """
 
 
-OPTIONS = (1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11)
+OPTIONS = (1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12)
 WORKDIR = Path.cwd()
 logging.basicConfig(
     level=logging.INFO,
@@ -128,6 +129,7 @@ class PoscarkitInteract:
             9: self.run_merge,
             10: self.run_separate,
             11: self.run_import_to_modeling,
+            12: self.run_thermo,
         }
         self.config = self.read_config(cfg_path, cfg)
 
@@ -308,7 +310,7 @@ class PoscarkitInteract:
         """
 
         seeds = seeds or self.config.get("shuffle_seeds", [None])
-        seeds = [ord(s) if not (isinstance(s, int) or s is None) else s for s in seeds]
+        seeds = [int(s) if not (isinstance(s, int) or s is None) else s for s in seeds]
         return seeds
 
     def run_modeling(self) -> list[Path]:
@@ -423,12 +425,11 @@ class PoscarkitInteract:
         by_ase = self.config.get("by_ase", False)
         if poscar.is_file():
             logging.info(f"Using POSCAR file {poscar}")
-            poscar = self._handle_poscar(force=True)
         else:
-            logging.warning(f"POSCAR file {poscar} not found, using structure_info")
+            logging.warning(f"POSCAR file {str(poscar)} not found, using structure_info")
             structure_info = self._handle_structure(force=True)
             poscar = unitcell2file(structure_info=structure_info, outdir=outdir)
-        factrs = self._handle_factors(factors)
+        factrs = self._handle_factors()
         supercell = supercell2file(poscar=poscar, outdir=outdir, factors=factrs, by_ase=by_ase)
         return supercell
 
@@ -471,7 +472,7 @@ class PoscarkitInteract:
         """Import SOFs from CSV/XLSX and run modeling."""
         from src.io.readers import detect_format, read as read_sof_data
         from src.io.ir import get_sofs_at, parse_sublattice_map
-        from src.workflow.import_to_modeling import run_import_to_modeling as run_wf
+        from workflow.import_to_model import run_import_to_model as run_wf
 
         csv_path = Path(input("Enter CSV/XLSX file path\n> ").strip())
         while not csv_path.is_file():
@@ -516,7 +517,37 @@ class PoscarkitInteract:
             enable_sqs=self.config.get("enable_sqs", False),
             output_mode=mode,
         )
-        print(f"Import-to-modeling completed. Files: {len(results)}")
+        print(f"Import-to-model completed. Files: {len(results)}")
+
+    def run_thermo(self):
+        """Calculate Sconf and DeltaG from SOF data + TDB."""
+        from src.workflow.thermo import run_thermo as run_t
+
+        data_path = Path(
+            input("Enter data file path (xlsx/csv)\n> ").strip()
+        )
+        while not data_path.is_file():
+            data_path = Path(
+                input(f"File not found. Enter valid path\n> ").strip()
+            )
+
+        tdb_path = Path(
+            input("Enter TDB file path\n> ").strip()
+        )
+        while not tdb_path.is_file():
+            tdb_path = Path(
+                input(f"File not found. Enter valid path\n> ").strip()
+            )
+
+        name = self._handle_name()
+        outdir = self._handle_outdir()
+        csv_path, png_path = run_t(
+            data_path=str(data_path),
+            tdb_path=str(tdb_path),
+            name=name,
+            outdir=str(outdir),
+        )
+        print(f"Results: {csv_path}, {png_path}")
 
     def run(self):
         print(INFO_CLI)
