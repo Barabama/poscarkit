@@ -61,7 +61,7 @@ class TestSlice(unittest.TestCase):
             self.assertTrue(result_dir.exists())
 
             # Check that transformed structure file was created
-            transformed_file = result_dir / "Transformed(001).vasp"
+            transformed_file = result_dir / "Transformed-(001).vasp"
             self.assertTrue(transformed_file.exists())
 
             # Check that layer files were created
@@ -96,7 +96,7 @@ class TestSlice(unittest.TestCase):
             self.assertTrue(result_dir.exists())
 
             # Check that transformed structure file was created
-            transformed_file = result_dir / "Transformed(110).vasp"
+            transformed_file = result_dir / "Transformed-(110).vasp"
             self.assertTrue(transformed_file.exists())
 
             # Check that layer files were created
@@ -131,7 +131,7 @@ class TestSlice(unittest.TestCase):
             self.assertTrue(result_dir.exists())
 
             # Check that transformed structure file was created
-            transformed_file = result_dir / "Transformed(111).vasp"
+            transformed_file = result_dir / "Transformed-(111).vasp"
             self.assertTrue(transformed_file.exists())
 
             # Check that layer files were created

@@ -4,6 +4,7 @@ import sys
 import argparse
 import logging
 import tomllib
+import traceback
 from pathlib import Path
 from typing import Any
 
@@ -13,15 +14,11 @@ from src.modeling.slice import Slicer
 from src.workflow.modeling import run_modeling
 from src.modeling.supercell import unitcell2file, supercell2file
 from src.workflow.slice_to_countcn import slice2files_with_countcn
+from src.workflow.thermo import run_thermo
 from src.config import VERSION, CONTACT, DEVELOPER, normalize_config_keys
 
 
 WORKDIR = Path.cwd()
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s[%(levelname)s]%(message)s",
-    datefmt="%Y-%m-%d %H:%M:%S",
-)
 
 
 def cmd_help(args: argparse.Namespace) -> int:
@@ -45,7 +42,8 @@ COMMANDS:
   compare       Compare two POSCAR files
   merge         Merge two POSCAR files
   separate      Separate a POSCAR file by groups
-  import-to-modeling  Import SOFs from CSV/XLSX and run modeling
+  import-to-model  Import SOFs from CSV/XLSX and run modeling
+  thermo        Calculate Sconf and DeltaG from SOF data + TDB
 
 EXAMPLES:
   poscarkit help
@@ -57,8 +55,9 @@ EXAMPLES:
   poscarkit compare --poscar1 POSCAR1.vasp --poscar2 POSCAR2.vasp
   poscarkit merge --poscars POSCAR1.vasp POSCAR2.vasp POSCAR3.vasp --outdir output/
   poscarkit separate --poscar POSCAR.vasp --key note --outdir output/
-  poscarkit import-to-modeling --csv tc_exps.csv --phase fcc -t 473 873 1273
-  poscarkit import-to-modeling --csv pandat-data.csv --phase fcc -t 873 -o print
+  poscarkit import-to-model --csv tc_exps.csv --phase fcc -t 473 873 1273
+  poscarkit import-to-model --csv pandat-data.csv --phase fcc -t 873 -o print
+  poscarkit thermo --data sof_data.xlsx --tdb database.TDB --outdir output/
 """
     )
     return 0
@@ -181,7 +180,7 @@ def cmd_slice_to_countcn(args: argparse.Namespace) -> int:
         pbc=pbc, by_ase=by_ase,
     )
 
-    logging.info(f"Slice to CN count completed. Results saved to:")
+    logging.info(f"Slice to CountCN completed. Results saved to:")
     for result in results:
         logging.info(f"  - {result}")
     return 0
@@ -259,7 +258,33 @@ def cmd_separate(args: argparse.Namespace) -> int:
     return 0
 
 
-def cmd_import_to_modeling(args: argparse.Namespace) -> int:
+def cmd_thermo(args: argparse.Namespace) -> int:
+    data_path = Path(args.data) if args.data else None
+    tdb_path = Path(args.tdb) if args.tdb else None
+    outdir = Path(args.outdir) if args.outdir else Path("output")
+    name = args.name or "thermo"
+
+    if not data_path or not data_path.is_file():
+        logging.error(f"Data file not found: {data_path}")
+        return 1
+    if not tdb_path or not tdb_path.is_file():
+        logging.error(f"TDB file not found: {tdb_path}")
+        return 1
+
+    outdir.mkdir(parents=True, exist_ok=True)
+
+    csv_path, png_path = run_thermo(
+        data_path=str(data_path),
+        tdb_path=str(tdb_path),
+        name=name,
+        outdir=str(outdir),
+    )
+
+    logging.info(f"Results saved: {csv_path}, {png_path}")
+    return 0
+
+
+def cmd_import_to_model(args: argparse.Namespace) -> int:
     csv_path = Path(args.csv)
     if not csv_path.is_file():
         logging.error(f"CSV/XLSX file not found: {csv_path}")
@@ -275,9 +300,9 @@ def cmd_import_to_modeling(args: argparse.Namespace) -> int:
         logging.error("No temperatures specified. Use --temperatures / -t")
         return 1
 
-    from src.workflow.import_to_modeling import run_import_to_modeling
+    from workflow.import_to_model import run_import_to_model
 
-    results = run_import_to_modeling(
+    results = run_import_to_model(
         csv_path=str(csv_path),
         config_path=config_path,
         phase=args.phase,
@@ -292,11 +317,17 @@ def cmd_import_to_modeling(args: argparse.Namespace) -> int:
         iterations=args.iterations or int(1e7),
         output_mode=args.output or "run",
     )
-    logging.info(f"Import-to-modeling completed. Files: {len(results)}")
+    logging.info(f"Import-to-model completed. Files: {len(results)}")
     return 0
 
 
 def main() -> int:
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s[%(levelname)s]%(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+    )
+
     parser = argparse.ArgumentParser(
         prog="poscarkit",
         description="A tool for modeling structure POSCAR files based on SOFs",
@@ -473,7 +504,7 @@ def main() -> int:
         "-n",
         type=str,
         default="slice-to-countcn",
-        help="Name for the slice to CN count analysis (default: slice-to-countcn)",
+        help="Name for the slice to CountCN analysis (default: slice-to-countcn)",
     )
     parser_slice_to_countcn.add_argument(
         "--poscar",
@@ -604,7 +635,7 @@ def main() -> int:
 
     # Import SOFs command
     parser_import = subparsers.add_parser(
-        "import-to-modeling",
+        "import-to-model",
         help="Import SOFs from ThermoCalc/Pandat CSV/XLSX files",
     )
     parser_import.add_argument(
@@ -683,7 +714,33 @@ def main() -> int:
         default=int(1e7),
         help="SQS iterations (default: 1e7)",
     )
-    parser_import.set_defaults(func=cmd_import_to_modeling)
+    parser_import.set_defaults(func=cmd_import_to_model)
+
+    # Thermo command
+    parser_thermo = subparsers.add_parser(
+        "thermo", help="Calculate Sconf and DeltaG from SOF data + TDB"
+    )
+    parser_thermo.add_argument(
+        "--data", "-d", type=str, required=True, help="Path to data file (xlsx/csv)"
+    )
+    parser_thermo.add_argument(
+        "--tdb", "-t", type=str, required=True, help="Path to TDB thermodynamic database"
+    )
+    parser_thermo.add_argument(
+        "--name",
+        "-n",
+        type=str,
+        default="thermo",
+        help="Work name for output subdirectory (default: thermo)",
+    )
+    parser_thermo.add_argument(
+        "--outdir",
+        "-o",
+        type=str,
+        default="output",
+        help="Output directory (default: output)",
+    )
+    parser_thermo.set_defaults(func=cmd_thermo)
 
     args = parser.parse_args()
 
@@ -699,8 +756,6 @@ def main() -> int:
         return 130
     except Exception as e:
         logging.error(f"Error: {e}")
-        import traceback
-
         traceback.print_exc()
         return 1
 

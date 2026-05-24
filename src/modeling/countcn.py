@@ -32,16 +32,19 @@ class CNCounter:
         self.name = name
         self.poscar = poscar
 
-    def detect_cutoff(self, sample_size: int = 3000, pbc: bool = False) -> float:
+    def detect_cutoff(self, sample_size: int = 3000, pbc: bool = False,
+                      seed: int = 42) -> float:
         """
         Detect the cutoff distance for coordination number counting.
 
         Args:
             sample_size: Number of atoms to sample to avoid large memory usage
             pbc: Whether to apply periodic boundary conditions
+            seed: Random seed for reproducible sampling
         Returns:
             float: Cutoff distance
         """
+        rng = np.random.default_rng(seed)
         struct = self.struct
         coords = struct.get_coords(direct=False)
         # Sample for a large structure
@@ -50,12 +53,12 @@ class CNCounter:
             # Always sample for PBC — full N^2 MIC distances are expensive
             n_sample = min(len_coords, max(sample_size, 500))
             if len_coords > n_sample:
-                indices = np.random.choice(len_coords, size=n_sample, replace=False)
+                indices = rng.choice(len_coords, size=n_sample, replace=False)
                 coords = coords[indices]
             distances = self._pdist_mic(coords, struct.cell)
         elif len_coords > sample_size:
             logging.info(f"Sampling atoms {sample_size}/{len_coords}")
-            indices = np.random.choice(len_coords, size=sample_size, replace=False)
+            indices = rng.choice(len_coords, size=sample_size, replace=False)
             coords = coords[indices]
             distances = pdist(coords)
         else:
@@ -614,6 +617,10 @@ class CNCounter:
         outdir = Path(outdir) if isinstance(outdir, str) else outdir
         outdir = outdir.joinpath(f"{name}-cn-count")
         if outdir.exists():
+            if not outdir.name.endswith("-cn-count"):
+                raise RuntimeError(
+                    f"Refusing to delete unexpected directory: {outdir}"
+                )
             shutil.rmtree(outdir)
         outdir.mkdir(parents=True, exist_ok=True)
 

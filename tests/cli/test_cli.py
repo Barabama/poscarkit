@@ -276,7 +276,7 @@ class TestCLI(unittest.TestCase):
         """Test merge command."""
         outdir = self.test_dir / "output"
         args = argparse.Namespace(
-            poscar1=str(self.poscar_file), poscar2=str(self.poscar_file3), outdir=str(outdir)
+            poscars=[str(self.poscar_file), str(self.poscar_file3)], outdir=str(outdir)
         )
 
         cmd_merge(args)
@@ -290,8 +290,7 @@ class TestCLI(unittest.TestCase):
         """Test merge command with invalid first POSCAR file."""
         outdir = self.test_dir / "output"
         args = argparse.Namespace(
-            poscar1=str(self.test_dir / "nonexistent1.vasp"),
-            poscar2=str(self.poscar_file),
+            poscars=[str(self.test_dir / "nonexistent1.vasp"), str(self.poscar_file)],
             outdir=str(outdir),
         )
 
@@ -302,8 +301,7 @@ class TestCLI(unittest.TestCase):
         """Test merge command with invalid second POSCAR file."""
         outdir = self.test_dir / "output"
         args = argparse.Namespace(
-            poscar1=str(self.poscar_file),
-            poscar2=str(self.test_dir / "nonexistent2.vasp"),
+            poscars=[str(self.poscar_file), str(self.test_dir / "nonexistent2.vasp")],
             outdir=str(outdir),
         )
 

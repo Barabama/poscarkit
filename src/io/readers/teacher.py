@@ -8,10 +8,11 @@ Column convention:
 """
 
 import re
+
 import numpy as np
 import pandas as pd
 
-from src.io.ir import SOFData, PHASE_SITE_RATIOS
+from src.io.ir import SOFData, get_site_ratios
 
 _NON_SOF_COLS = frozenset(
     c.upper() for c in ("T", "G", "H", "S", "NP", "P", "n_kg", "n_mole")
@@ -28,13 +29,15 @@ def read_teacher(path: str, phase_hint: str | None = None) -> SOFData:
     df.columns = [str(c).strip() for c in df.columns]
 
     phase = (phase_hint or "FCC").upper()
-    site_ratios = PHASE_SITE_RATIOS.get(phase, [0.5, 0.5])
+    site_ratios = get_site_ratios(phase)
 
     T = df["T"].values.astype(float)
 
     Y_subl, elements = _parse_Y_columns(df)
 
     composition = _derive_composition(Y_subl, site_ratios, elements)
+
+    G_real = _find_G_column(df)
 
     return SOFData(
         source_path=path,
@@ -44,6 +47,7 @@ def read_teacher(path: str, phase_hint: str | None = None) -> SOFData:
         Y_subl=Y_subl,
         composition=composition,
         elements=elements,
+        G_real=G_real,
     )
 
 
@@ -99,3 +103,21 @@ def _derive_composition(
     if total > 0:
         comp = {e: v / total for e, v in comp.items()}
     return comp
+
+
+def _find_G_column(df: pd.DataFrame) -> np.ndarray | None:
+    """Attempt to locate a Gibbs free energy column.
+
+    Looks for: 'G', 'G()', 'G(@)', 'gibbs', 'deltaG' patterns.
+    """
+    for col in df.columns:
+        col_str = str(col).strip()
+        if col_str.upper() == "G":
+            return df[col].values.astype(float)
+        if col_str.upper().startswith("G("):
+            return df[col].values.astype(float)
+        if col_str.upper().startswith("G(@"):
+            return df[col].values.astype(float)
+        if "gibbs" in col_str.lower() or "deltaG" in col_str.lower():
+            return df[col].values.astype(float)
+    return None

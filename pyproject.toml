@@ -1,6 +1,6 @@
 [project]
 name = "poscarkit"
-version = "0.10.2"
+version = "0.10.3"
 description = "A tool for modeling structure POSCAR files, based on Sublattice Occupying Fractions (SOFs)."
 authors = [
     { name="Gao Min-Liang", email="barabama@qq.com" },
@@ -34,6 +34,7 @@ dependencies = [
     "ase>=3.23",
     "seaborn>=0.13",
     "sqsgenerator>=0.1",
+    "sympy>=1.12",
 ]
 
 [project.optional-dependencies]

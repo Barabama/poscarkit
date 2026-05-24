@@ -9,39 +9,50 @@ Column convention (single-sheet or after merge):
 """
 
 import re
+
 import numpy as np
 import pandas as pd
 
-from src.io.ir import SOFData, PHASE_SITE_RATIOS
+from src.io.ir import SOFData, get_site_ratios
+
+_RE_COL_HAS_PHASE = re.compile(r"[YGHX]\((\w+)", re.IGNORECASE)
 
 
 def read_tc_exps(path: str, phase_hint: str | None = None) -> SOFData:
     """Read Thermo-Calc exported data (XLSX or CSV) into SOFData.
 
-    Handles both:
-      - Single-sheet XLSX/CSV with all columns in one table.
-      - Multi-sheet XLSX (merge-on-T handled by detect_format → re-read path).
+    Handles:
+      - Multi-sheet XLSX: finds Y, G, X sheets by column patterns, aligns T.
+      - Single-sheet XLSX/CSV: all columns in one table.
     """
     if path.endswith(".csv"):
         df = pd.read_csv(path)
+        df.columns = [str(c).strip() for c in df.columns]
+        df_y = df_g = df_x = df
     else:
-        df = pd.read_excel(path)
-    df.columns = [str(c).strip() for c in df.columns]
+        xl = pd.ExcelFile(path)
+        if len(xl.sheet_names) > 1:
+            df_y = _find_and_read(xl, path, "Y(")
+            df_g = _find_and_read(xl, path, "G(")
+            df_x = _find_and_read(xl, path, "X(")
+        else:
+            df = pd.read_excel(path)
+            df.columns = [str(c).strip() for c in df.columns]
+            df_y = df_g = df_x = df
 
-    # Detect phase from column headers (e.g. "G(FCC)" or "Y(FCC,CO)")
-    phase = phase_hint or _detect_phase_from_columns(df)
+    phase = phase_hint or _detect_phase_from_columns(df_g)
     phase = phase.upper()
 
-    site_ratios = PHASE_SITE_RATIOS.get(phase, [0.5, 0.5])
+    site_ratios = get_site_ratios(phase)
 
-    T = df["T"].values.astype(float)
+    T = _align_and_extract_T(df_y, df_g)
 
-    composition = _extract_composition(df, phase)
+    composition = _extract_composition_from_x(df_x, phase)
     elements = sorted(composition.keys())
 
-    Y_subl = _extract_Y_columns(df, phase, elements)
+    Y_subl = _extract_Y_columns(df_y, phase, elements, T)
 
-    G_real = _extract_G_real(df, phase)
+    G_real = _extract_G_real(df_g, phase, T)
 
     return SOFData(
         source_path=path,
@@ -55,6 +66,43 @@ def read_tc_exps(path: str, phase_hint: str | None = None) -> SOFData:
     )
 
 
+def _find_and_read(xl: pd.ExcelFile, path: str, pattern: str) -> pd.DataFrame:
+    """Find a sheet whose columns contain the given pattern, and read it."""
+    for s in xl.sheet_names:
+        df = pd.read_excel(xl, sheet_name=s, nrows=0)
+        cols = [str(c).strip() for c in df.columns]
+        if any(pattern in c for c in cols):
+            result = pd.read_excel(path, sheet_name=s)
+            result.columns = [str(c).strip() for c in result.columns]
+            return result
+    # Fallback: return first sheet
+    df = pd.read_excel(path)
+    df.columns = [str(c).strip() for c in df.columns]
+    return df
+
+
+def _find_T_col(df: pd.DataFrame) -> str:
+    for col in df.columns:
+        if str(col).strip().upper() == "T":
+            return col
+    return df.columns[0]
+
+
+def _T_indices(df: pd.DataFrame, T_common: np.ndarray) -> np.ndarray:
+    t_col = _find_T_col(df)
+    return np.where(np.isin(df[t_col].values, T_common))[0]
+
+
+def _align_and_extract_T(
+    df_y: pd.DataFrame, df_g: pd.DataFrame
+) -> np.ndarray:
+    """Align T values between Y and G dataframes."""
+    t_y = df_y[_find_T_col(df_y)].values
+    t_g = df_g[_find_T_col(df_g)].values
+    common = np.intersect1d(np.round(t_y, 6), np.round(t_g, 6))
+    return np.sort(common)
+
+
 def _detect_phase_from_columns(df: pd.DataFrame) -> str:
     """Extract phase name from G(PHASE) or H(PHASE) column headers."""
     for col in df.columns:
@@ -64,31 +112,35 @@ def _detect_phase_from_columns(df: pd.DataFrame) -> str:
     return "FCC"
 
 
-def _extract_composition(df: pd.DataFrame, phase: str) -> dict[str, float]:
+def _extract_composition_from_x(
+    df_x: pd.DataFrame, phase: str
+) -> dict[str, float]:
     """Extract nominal composition from X(PHASE,EL) columns."""
     comp: dict[str, float] = {}
     pattern = re.compile(rf"X\({phase},\s*(\w+)\)", re.IGNORECASE)
-    for col in df.columns:
+    for col in df_x.columns:
         m = pattern.match(str(col))
         if m:
             elem = m.group(1).upper()
-            val = float(df[col].iloc[0])
+            val = float(df_x[col].iloc[0])
             if val > 1e-12:
                 comp[elem] = val
     if not comp:
-        raise ValueError(
-            f"No X({phase},ELEM) columns found in TC data"
-        )
+        raise ValueError(f"No X({phase},ELEM) columns found in TC data")
     return comp
 
 
 def _extract_Y_columns(
-    df: pd.DataFrame, phase: str, elements: list[str]
+    df_y: pd.DataFrame,
+    phase: str,
+    elements: list[str],
+    T: np.ndarray,
 ) -> list[dict[str, np.ndarray]]:
     """Extract Y site fractions from Y(PHASE,EL#N) columns."""
+    idx_y = _T_indices(df_y, T)
     subl_cols: dict[int, dict[str, str]] = {}
 
-    for col in df.columns:
+    for col in df_y.columns:
         m = re.match(
             rf"Y\({phase},\s*(\w+)(?:#(\d+))?\)", str(col), re.IGNORECASE
         )
@@ -98,7 +150,7 @@ def _extract_Y_columns(
         if elem not in elements:
             continue
         if m.group(2):
-            subl_idx = int(m.group(2)) - 1  # #2 → 1, #3 → 2
+            subl_idx = int(m.group(2)) - 1
         else:
             subl_idx = 0
         subl_cols.setdefault(subl_idx, {})[elem] = col
@@ -109,19 +161,26 @@ def _extract_Y_columns(
         d: dict[str, np.ndarray] = {}
         for elem in elements:
             if i in subl_cols and elem in subl_cols[i]:
-                d[elem] = df[subl_cols[i][elem]].values.astype(float)
+                d[elem] = df_y[subl_cols[i][elem]].values[idx_y]
         result.append(d)
 
     return result
 
 
-def _extract_G_real(df: pd.DataFrame, phase: str) -> np.ndarray | None:
-    """Extract Gibbs energy from G(PHASE) column."""
+def _extract_G_real(
+    df_g: pd.DataFrame, phase: str, T: np.ndarray
+) -> np.ndarray | None:
+    """Extract Gibbs energy from G(PHASE) column, aligned to T."""
     col_name = f"G({phase})"
-    if col_name in df.columns:
-        return df[col_name].values.astype(float)
-    for col in df.columns:
-        m = re.match(rf"G\({phase}\)", str(col), re.IGNORECASE)
-        if m:
-            return df[col].values.astype(float)
-    return None
+    target_col = None
+    if col_name in df_g.columns:
+        target_col = col_name
+    else:
+        for col in df_g.columns:
+            if re.match(rf"G\({phase}\)", str(col), re.IGNORECASE):
+                target_col = col
+                break
+    if target_col is None:
+        return None
+    idx_g = _T_indices(df_g, T)
+    return df_g[target_col].values[idx_g]

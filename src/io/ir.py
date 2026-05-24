@@ -3,9 +3,14 @@
 import logging
 import re
 from dataclasses import dataclass
+from pathlib import Path
 
 import numpy as np
+import pandas as pd
 
+# Fallback phase name → sublattice site ratios (must sum to 1.0).
+# When a TDB is provided, ratios are extracted from the TDB's PHASE records
+# and take precedence over this map via get_site_ratios().
 PHASE_SITE_RATIOS: dict[str, list[float]] = {
     "FCC": [0.25, 0.75],
     "BCC": [0.5, 0.5],
@@ -27,20 +32,35 @@ def parse_sublattice_map(spec: str) -> dict[int, str]:
     Tolerates common input variations:
     Chinese punctuation (：，) to ASCII (: ,), extra whitespace.
     """
-    # Normalize: Chinese to ASCII punctuation, strip whitespace
-    spec = spec.replace("：", ":").replace("，", ",")  # ：to:  ，to,
-    spec = spec.replace("．", ".").replace("、", ",")  # ．to.  、to,
-    spec = re.sub(r"\s+", "", spec)  # remove all whitespace
+    spec = spec.replace("：", ":").replace("，", ",")
+    spec = spec.replace("．", ".").replace("、", ",")
+    spec = re.sub(r"\s+", "", spec)
 
     result: dict[int, str] = {}
     for part in spec.split(","):
         if not part:
-            continue  # skip empty from trailing commas
+            continue
         m = _RE_MAP_SPEC.search(part)
         if not m:
             raise ValueError(f"Invalid sublattice mapping '{part}'. Expected 'N:name'")
         result[int(m.group(1))] = m.group(2)
     return result
+
+
+def get_site_ratios(
+    phase: str,
+    tdb_phase_ratios: dict[str, list[float]] | None = None,
+) -> list[float]:
+    """Resolve site ratios for a phase, preferring TDB data over fallback map."""
+    phase_up = phase.upper()
+    if tdb_phase_ratios and phase_up in tdb_phase_ratios:
+        return tdb_phase_ratios[phase_up]
+    if phase_up in PHASE_SITE_RATIOS:
+        return PHASE_SITE_RATIOS[phase_up]
+    raise KeyError(
+        f"Unknown phase '{phase}'. Add it to PHASE_SITE_RATIOS "
+        f"or ensure the TDB file contains a PHASE definition for it."
+    )
 
 
 @dataclass
@@ -75,6 +95,23 @@ class SOFData:
     def n_points(self) -> int:
         return len(self.T)
 
+    def dump_csv(self, path: str | Path) -> Path:
+        """Export SOFData as a flat CSV for inspection or downstream use."""
+        path = Path(path)
+        rows = []
+        for i in range(self.n_points):
+            row = {"T": self.T[i]}
+            for k, y_dict in enumerate(self.Y_subl):
+                for elem in self.elements:
+                    row[f"Y_subl{k+1}_{elem}"] = y_dict.get(elem, np.zeros(1))[i]
+            if self.G_real is not None:
+                row["G_real"] = self.G_real[i]
+            rows.append(row)
+
+        df = pd.DataFrame(rows)
+        df.to_csv(path, index=False)
+        return path
+
 
 def get_sofs_at(
     ir: SOFData, T: float, sublattice_map: dict[int, str] | None = None
@@ -89,12 +126,10 @@ def get_sofs_at(
 
     Returns:
         {wyckoff_site: {element: fraction, ...}, ...}
-        e.g. {"1a": {"CO": 0.16, "CU": 0.84}, "3c": {"CR": 0.213, ...}}
     """
     if sublattice_map is None:
         sublattice_map = PHASE_SUBLATTICE_MAP.get(ir.phase.upper(), {})
 
-    # Find exact or nearest temperature index
     available = ir.T
     if T in available:
         idx = np.where(available == T)[0][0]
@@ -107,16 +142,13 @@ def get_sofs_at(
 
     result: dict[str, dict[str, float]] = {}
     for calphad_idx, y_dict in enumerate(ir.Y_subl, start=1):
-        site_name = sublattice_map.get(
-            calphad_idx, f"subl{calphad_idx}"
-        )
+        site_name = sublattice_map.get(calphad_idx, f"subl{calphad_idx}")
         sofs: dict[str, float] = {}
         for elem in ir.elements:
             if elem in y_dict:
                 val = float(y_dict[elem][idx])
                 if val > 1e-12:
                     sofs[elem] = val
-        # Normalize
         total = sum(sofs.values())
         if total > 0 and abs(total - 1.0) > 1e-6:
             logging.warning(
@@ -134,7 +166,7 @@ def get_sofs_at(
 def build_structure_info(
     config_cfg: dict, sofs_by_site: dict[str, dict[str, float]]
 ) -> dict:
-    """Merge config geometry with CSV-derived SOFs into structure_info dict.
+    """Merge config geometry with SOF data into structure_info dict.
 
     Args:
         config_cfg: Full config dict (from config.toml).

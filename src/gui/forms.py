@@ -51,7 +51,7 @@ def _dir_row(parent, label, var):
 def _browse_file(var: tk.StringVar):
     path = filedialog.askopenfilename(
         title="Select file",
-        filetypes=[("Config/Data files", "*.toml *.vasp *.csv *.xlsx"),
+        filetypes=[("Config/Data files", "*.toml *.vasp *.csv *.xlsx *.tdb"),
                    ("All files", "*.*")],
     )
     if path:
@@ -460,7 +460,7 @@ def slice_form(parent, cfg: dict):
 
 
 # ------------------------------------------------------------------ #
-#  Slice + CN                                                        #
+#  Slice to CountCN                                                        #
 # ------------------------------------------------------------------ #
 
 def slice_to_countcn_form(parent, cfg: dict):
@@ -562,6 +562,30 @@ def merge_form(parent, cfg: dict):
     def get_args():
         paths = [listbox.get(i) for i in range(listbox.size())]
         return argparse.Namespace(poscars=paths, outdir=outdir_var.get())
+
+    return get_args
+
+
+# ------------------------------------------------------------------ #
+#  Thermo                                                            #
+# ------------------------------------------------------------------ #
+
+def thermo_form(parent, cfg: dict):
+    name_var = _entry(parent, "Name", cfg, "name", "thermo")
+    data_var = tk.StringVar()
+    _file_row(parent, "Data file (xlsx/csv)", data_var)
+    tdb_var = tk.StringVar()
+    _file_row(parent, "TDB file", tdb_var)
+    outdir_var = tk.StringVar(value=str(cfg.get("outdir", "output")))
+    _dir_row(parent, "Output dir", outdir_var)
+
+    def get_args():
+        return argparse.Namespace(
+            name=name_var.get(),
+            data=data_var.get(),
+            tdb=tdb_var.get(),
+            outdir=outdir_var.get(),
+        )
 
     return get_args
 
@@ -686,7 +710,7 @@ def config_form(parent, cfg: dict):
 DESCRIPTIONS: dict[str, str] = {
     "Config": "View and edit all config.toml parameters. Load/Save configuration.",
     "Modeling": "Generate supercell and allocate atoms based on SOFs.",
-    "Import + Model": (
+    "Import to Model": (
         "Import site-fraction data from ThermoCalc/Pandat CSV/XLSX\n"
         "and run modeling at selected temperatures."
     ),
@@ -695,7 +719,7 @@ DESCRIPTIONS: dict[str, str] = {
         "Supports KDTree and ASE backends, optional PBC."
     ),
     "Slice": "Slice a structure normal to a Miller index and export layers.",
-    "Slice + CN": "Slice a structure, then count CN for each layer separately.",
+    "Slice to CountCN": "Slice a structure, then count CN for each layer separately.",
     "Supercell": (
         "Expand a unit cell along basis vectors.\n"
         "Optionally use ASE's make_supercell."
@@ -703,17 +727,22 @@ DESCRIPTIONS: dict[str, str] = {
     "Compare": "Compare two POSCAR files (cell, symbols, atom positions).",
     "Merge": "Combine multiple POSCAR files into one.",
     "Separate": "Split a POSCAR file by element, coordinate, or note.",
+    "Thermo": (
+        "Calculate configurational entropy (Sconf) and Gibbs free energy\n"
+        "(DeltaG) from SOF data and TDB thermodynamic database."
+    ),
 }
 
 FORMS = {
     "Config": config_form,
     "Modeling": modeling_form,
-    "Import + Model": import_to_modeling_form,
+    "Import to Model": import_to_modeling_form,
     "Count CN": countcn_form,
     "Slice": slice_form,
-    "Slice + CN": slice_to_countcn_form,
+    "Slice to CountCN": slice_to_countcn_form,
     "Supercell": supercell_form,
     "Compare": compare_form,
     "Merge": merge_form,
     "Separate": separate_form,
+    "Thermo": thermo_form,
 }
