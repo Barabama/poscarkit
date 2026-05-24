@@ -11,7 +11,7 @@ from src.workflow.modeling import run_modeling
 from src.config import normalize_config_keys
 
 
-def run_import_to_modeling(
+def run_import_to_model(
     csv_path: str,
     config_path: str,
     phase: str,

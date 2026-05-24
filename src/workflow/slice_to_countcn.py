@@ -45,6 +45,10 @@ def slice2files_with_countcn(
     outdir = Path(outdir) if isinstance(outdir, str) else outdir
     outdir = outdir.joinpath(f"{name}-sliced-({miller_index_str})")
     if outdir.exists():
+        if "-sliced-" not in outdir.name:
+            raise RuntimeError(
+                f"Refusing to delete unexpected directory: {outdir}"
+            )
         shutil.rmtree(outdir)
     outdir.mkdir(parents=True, exist_ok=True)
 
