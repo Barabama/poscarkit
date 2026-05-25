@@ -131,7 +131,7 @@ jobs:
           enable-plugins: tk-inter
           include-package: pandas
           windows-console-mode: disable
-          nofollow-import-to: matplotlib.tests,pandas.tests,pytest,setuptools.tests
+          nofollow-import-to: matplotlib.tests,pandas.tests,pytest,setuptools.tests,sympy.polys,sympy.solvers
 
       - name: Upload Windows executable
         uses: actions/upload-artifact@v4
@@ -185,7 +185,7 @@ jobs:
           enable-plugins: tk-inter
           include-package: pandas
           windows-console-mode: disable
-          nofollow-import-to: matplotlib.tests,pandas.tests,pytest,setuptools.tests
+          nofollow-import-to: matplotlib.tests,pandas.tests,pytest,setuptools.tests,sympy.polys,sympy.solvers
 
       - name: Upload Linux executable
         uses: actions/upload-artifact@v4
