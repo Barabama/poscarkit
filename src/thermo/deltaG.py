@@ -9,8 +9,6 @@ G(phase, elem_1:elem_2:...:elem_N; 0) from the TDB.
 from itertools import product
 
 import numpy as np
-import sympy
-from sympy import symbols, lambdify, simplify
 
 from src.thermo.tdb import resolve_expression
 
@@ -67,15 +65,18 @@ def calc_deltaG_random(
     terms.append(f"{R:.15e}*T*{sconf_random:.15e}")
 
     expr_str = "+".join(terms)
-    expr = sympy_parse(expr_str)
-    expr = simplify(expr)
-
-    T_sym = symbols("T")
-    f = lambdify(T_sym, expr, "numpy")
-    return np.asarray(f(T_values), dtype=float)
+    return _eval_tdb_expr(expr_str, T_values)
 
 
-def sympy_parse(expr_str: str) -> sympy.Expr:
-    """Parse a string into a sympy expression."""
-    T = symbols("T")
-    return sympy.sympify(expr_str, locals={"T": T, "ln": sympy.log})
+def _eval_tdb_expr(expr_str: str, T: np.ndarray) -> np.ndarray:
+    """Evaluate a resolved TDB expression string at temperatures T.
+
+    Drops dependencies on sympy (~25 MB). Since resolve_expression() already
+    replaces all SER references, the result is a pure arithmetic string in T
+    with LN and EXP calls.  We replace LN/EXP with numpy log/exp and use a
+    restricted eval — the namespace contains only numpy arrays and math
+    functions, with no access to builtins.
+    """
+    expr = expr_str.replace("LN(", "log(").replace("EXP(", "exp(")
+    ns = {"T": T, "log": np.log, "exp": np.exp, "__builtins__": {}}
+    return eval(expr, ns)
