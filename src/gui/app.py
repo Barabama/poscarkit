@@ -21,6 +21,7 @@ FUNC_NAMES = [
     ("Compare", "#8E44AD"),
     ("Merge", "#3498DB"),
     ("Separate", "#95A5A6"),
+    ("About", "#546E7A"),
 ]
 
 
@@ -198,6 +199,79 @@ class PoscaKitGUI:
         scroll.pack(side=tk.RIGHT, fill=tk.Y)
 
     # ------------------------------------------------------------------ #
+    #  About panel                                                       #
+    # ------------------------------------------------------------------ #
+
+    def _build_about_panel(self) -> tk.Frame:
+        """Build the About info panel displayed in the main content area."""
+        import importlib.metadata
+
+        frame = tk.Frame(self._form_frame, padx=24, pady=18)
+
+        # --- gather metadata ---
+        try:
+            version = importlib.metadata.version("poscarkit")
+        except Exception:
+            version = "unknown"
+
+        # Authors / maintainers from package metadata
+        try:
+            meta = importlib.metadata.metadata("poscarkit")
+        except Exception:
+            meta = {}
+        summary = meta.get("Summary", "")
+        license_text = meta.get("License", "MIT")
+        author = meta.get("Author", "")
+        maintainer = meta.get("Maintainer", "")
+        homepage = meta.get("Project-URL", "")
+
+        # Fallback: if Author-email style is used, parse out just names
+        author_clean = author.replace(" <", " (").replace(">", ")") if author else ""
+
+        # --- title ---
+        title = tk.Label(
+            frame, text=f"POSCARKIT  v{version}",
+            font=("Arial", 18, "bold"), fg="#2C3E50",
+        )
+        title.pack(anchor="w")
+
+        if summary:
+            tk.Label(
+                frame, text=summary, font=("Arial", 10), fg="#555",
+                wraplength=580, justify=tk.LEFT,
+            ).pack(anchor="w", pady=(4, 16))
+
+        # --- separator ---
+        ttk.Separator(frame, orient=tk.HORIZONTAL).pack(fill=tk.X, pady=(0, 12))
+
+        # --- info rows ---
+        rows = [
+            ("License", license_text),
+            ("Homepage", homepage),
+            ("Authors", author_clean),
+            ("Maintainer", maintainer),
+            ("Contact", "wubo@fzu.edu.cn  |  +86 130 2381 9517"),
+            ("Institution", "MCMF, Fuzhou University"),
+            ("Copyright", "© 2025 MCMF, Fuzhou University"),
+        ]
+
+        for label, value in rows:
+            if not value:
+                continue
+            row_frame = tk.Frame(frame)
+            row_frame.pack(fill=tk.X, pady=2)
+            tk.Label(
+                row_frame, text=f"{label}:", font=("Arial", 10, "bold"),
+                fg="#2C3E50", width=12, anchor="w",
+            ).pack(side=tk.LEFT)
+            tk.Label(
+                row_frame, text=value, font=("Arial", 10), fg="#333",
+                wraplength=480, justify=tk.LEFT,
+            ).pack(side=tk.LEFT, padx=(4, 0))
+
+        return frame
+
+    # ------------------------------------------------------------------ #
     #  Form switching                                                    #
     # ------------------------------------------------------------------ #
 
@@ -219,6 +293,20 @@ class PoscaKitGUI:
             frame.pack_forget()
 
         self._current_form = name
+
+        # About page — no form, just display info
+        if name == "About":
+            if name in self._form_cache:
+                frame, _ = self._form_cache[name]
+                frame.pack(fill=tk.BOTH, expand=True)
+            else:
+                frame = self._build_about_panel()
+                frame.pack(fill=tk.BOTH, expand=True)
+                self._form_cache[name] = (frame, lambda: None)
+                self._form_state[name] = {}
+            self._run_btn = None
+            self._canvas.yview_moveto(0)
+            return
 
         # Show cached form or build new one
         if name in self._form_cache:

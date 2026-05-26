@@ -731,6 +731,7 @@ DESCRIPTIONS: dict[str, str] = {
         "Calculate configurational entropy (Sconf) and Gibbs free energy\n"
         "(DeltaG) from SOF data and TDB thermodynamic database."
     ),
+    "About": "Developer information, license, and project links.",
 }
 
 FORMS = {
