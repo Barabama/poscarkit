@@ -341,3 +341,65 @@ Direct
                 initial_atoms,
                 f"Total separated atoms should be {initial_atoms}",
             )
+
+
+class TestBridgeRoundtrip(unittest.TestCase):
+    """Test Struct <-> Atoms conversion preserves custom fields."""
+
+    def test_struct_atoms_roundtrip(self):
+        """Struct -> Atoms -> Struct preserves note, constr, meta."""
+        cell = np.array([[4.0, 0.0, 0.0], [0.0, 4.0, 0.0], [0.0, 0.0, 4.0]])
+
+        atoms = [
+            Atom(0, "Au", np.array([0.0, 0.0, 0.0]),
+                 constr=["T", "T", "T"], note="1a-Au", meta="s01"),
+            Atom(1, "Cu", np.array([0.5, 0.5, 0.5]),
+                 constr=["T", "T", "T"], note="3c-Cu", meta="s02"),
+            Atom(2, "Cu", np.array([0.0, 0.5, 0.5]),
+                 constr=["F", "F", "F"], note="3c-Cu", meta="s03"),
+        ]
+        original = Struct(cell=cell, is_direct=True, atom_list=atoms)
+
+        ase_atoms = SimplePoscar.struct2atoms(original)
+        restored = SimplePoscar.atoms2struct(ase_atoms)
+
+        self.assertEqual(len(restored), len(original))
+
+        for i, (orig, rest) in enumerate(zip(original, restored)):
+            self.assertEqual(rest.symbol, orig.symbol,
+                             f"Atom {i}: symbol mismatch")
+            np.testing.assert_array_almost_equal(
+                rest.coord, orig.coord,
+                err_msg=f"Atom {i}: coord mismatch")
+            self.assertEqual(rest.note, orig.note,
+                             f"Atom {i}: note mismatch {rest.note} != {orig.note}")
+            self.assertEqual(rest.meta, orig.meta,
+                             f"Atom {i}: meta mismatch")
+            self.assertEqual(rest.constr, orig.constr,
+                             f"Atom {i}: constr mismatch {rest.constr} != {orig.constr}")
+
+    def test_struct_atoms_roundtrip_no_constraints(self):
+        """Round-trip works when atoms have no constraints set."""
+        cell = np.array([[3.0, 0.0, 0.0], [0.0, 3.0, 0.0], [0.0, 0.0, 3.0]])
+        atoms = [
+            Atom(0, "Fe", np.array([0.0, 0.0, 0.0]),
+                 constr=[], note="1a-Fe", meta=None),
+        ]
+        original = Struct(cell=cell, is_direct=True, atom_list=atoms)
+        ase_atoms = SimplePoscar.struct2atoms(original)
+        restored = SimplePoscar.atoms2struct(ase_atoms)
+
+        self.assertEqual(restored[0].note, "1a-Fe")
+        self.assertEqual(restored[0].meta, None)
+        self.assertEqual(restored[0].constr, ["T", "T", "T"])
+
+    def test_atoms2struct_no_custom_arrays(self):
+        """atoms2struct works on bare ASE Atoms with no custom arrays."""
+        from ase import Atoms
+        atoms = Atoms("Cu", positions=[[0, 0, 0]], cell=[3.6, 3.6, 3.6], pbc=True)
+        struct = SimplePoscar.atoms2struct(atoms)
+
+        self.assertEqual(len(struct), 1)
+        self.assertEqual(struct[0].symbol, "Cu")
+        self.assertEqual(struct[0].note, "")
+        self.assertEqual(struct[0].constr, ["T", "T", "T"])
