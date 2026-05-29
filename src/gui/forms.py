@@ -704,6 +704,39 @@ def config_form(parent, cfg: dict):
 
 
 # ------------------------------------------------------------------ #
+#  Surface                                                           #
+# ------------------------------------------------------------------ #
+
+def surface_form(parent, cfg: dict):
+    name_var = _entry(parent, "Name", cfg, "name", "surface")
+    poscar_var = tk.StringVar(value=str(cfg.get("poscar", "")))
+    _file_row(parent, "POSCAR file", poscar_var)
+    outdir_var = tk.StringVar(value=str(cfg.get("outdir", "output")))
+    _dir_row(parent, "Output dir", outdir_var)
+    miller_vars = _int_entries(parent, "Miller index", 3, cfg,
+                               "slice_direction", (0, 0, 1))
+    layers_var = _entry(parent, "Layers (N)", cfg, "layers", "3")
+    vacuum_var = _entry(parent, "Vacuum (Å)", cfg, "vacuum", "15.0")
+    fix_layers_var = _entry(parent, "Fix layers (blank=auto)", cfg, "fix_layers", "")
+    fix_z_var = _checkbox(parent, "Fix z-only (TTF)", cfg.get("fix_z_only", False))
+
+    def get_args():
+        fix_raw = fix_layers_var.get().strip()
+        return argparse.Namespace(
+            name=name_var.get(),
+            poscar=poscar_var.get(),
+            outdir=outdir_var.get(),
+            miller=[int(v.get()) for v in miller_vars],
+            layers=int(layers_var.get() or "3"),
+            vacuum=float(vacuum_var.get() or "15.0"),
+            fix_layers=int(fix_raw) if fix_raw else None,
+            fix_z_only=fix_z_var.get(),
+        )
+
+    return get_args
+
+
+# ------------------------------------------------------------------ #
 #  Registry                                                          #
 # ------------------------------------------------------------------ #
 
@@ -732,6 +765,11 @@ DESCRIPTIONS: dict[str, str] = {
         "(DeltaG) from SOF data and TDB thermodynamic database."
     ),
     "About": "Developer information, license, and project links.",
+    "Surface": (
+        "Generate asymmetric surface slabs from a bulk POSCAR.\n"
+        "Select Miller index, number of layers (N and N+1 output),\n"
+        "vacuum thickness, and optional bottom-layer fixing."
+    ),
 }
 
 FORMS = {
@@ -741,6 +779,7 @@ FORMS = {
     "Count CN": countcn_form,
     "Slice": slice_form,
     "Slice to CountCN": slice_to_countcn_form,
+    "Surface": surface_form,
     "Supercell": supercell_form,
     "Compare": compare_form,
     "Merge": merge_form,

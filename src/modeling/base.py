@@ -460,21 +460,56 @@ class SimplePoscar:
 
     @staticmethod
     def struct2atoms(struct: Struct) -> Atoms:
-        """Convert Strcut to Atoms."""
+        """Convert Struct to Atoms, preserving note/constr/meta in arrays."""
         symbols = struct.symbols
         cell = struct.cell
         positions = struct.get_coords(False)
-        return Atoms(symbols=symbols, cell=cell, positions=positions, pbc=True)
+        atoms = Atoms(symbols=symbols, cell=cell, positions=positions, pbc=True)
+
+        notes = np.array([a.note or '' for a in struct])
+        atoms.new_array('note', notes)
+
+        metas = np.array([a.meta if a.meta is not None else '' for a in struct])
+        atoms.new_array('meta', metas)
+
+        # Encode constr as int mask: 0=free(T), 1=fixed(F)
+        def _constr_to_mask(constr):
+            if not constr:
+                return [0, 0, 0]
+            return [0 if c == 'T' else 1 for c in constr]
+
+        masks = np.array([_constr_to_mask(a.constr) for a in struct], dtype=int)
+        atoms.new_array('constr_mask', masks)
+        return atoms
 
     @staticmethod
     def atoms2struct(atoms: Atoms) -> Struct:
-        """Convert Atoms to Struct."""
+        """Convert Atoms to Struct, restoring note/constr/meta from arrays."""
         cell = np.array(atoms.get_cell().copy())
         symbols = atoms.get_chemical_symbols()
         positions = atoms.get_positions()
+
+        has_note = 'note' in atoms.arrays
+        has_meta = 'meta' in atoms.arrays
+        has_constr = 'constr_mask' in atoms.arrays
+
+        notes = atoms.get_array('note') if has_note else None
+        metas = atoms.get_array('meta') if has_meta else None
+        constr_masks = atoms.get_array('constr_mask') if has_constr else None
+
         atom_list = []
         for idx, (symbol, position) in enumerate(zip(symbols, positions)):
-            atom_list.append(Atom(index=idx, symbol=symbol, coord=position))
+            note = str(notes[idx]) if has_note and notes[idx] else ''
+            meta = metas[idx] if has_meta and metas[idx] != '' else None
+            if has_constr:
+                mask_row = constr_masks[idx]
+                constr = ['T' if v == 0 else 'F' for v in mask_row]
+            else:
+                constr = ['T', 'T', 'T']
+            atom_list.append(Atom(
+                index=idx, symbol=symbol, coord=position,
+                note=note, meta=meta, constr=constr,
+            ))
         struct = Struct(cell=cell, is_direct=False, atom_list=atom_list)
         return struct
 

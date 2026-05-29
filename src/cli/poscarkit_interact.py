@@ -39,6 +39,7 @@ INFO_OPTIONS = """
  10) Separate        : Separate a POSCAR file by groups.
  11) Import to Model : Import SOFs from CSV/XLSX and run modeling.
  12) Thermo Analysis : Calculate Sconf and DeltaG from SOF data + TDB.
+ 13) Surface Slab    : Generate surface slabs from bulk POSCAR with vacuum.
 """
 INFO_HELP = f"""
 ============================= How to use POSCARKIT ============================
@@ -86,11 +87,15 @@ INFO_HELP = f"""
   9) Merge           : Merge two POSCAR files.
 
  10) Separate        : Separate a POSCAR file by groups according to symbol,
-   coords, x, y, z, note. 
+   coords, x, y, z, note.
+
+ 13) Surface Slab    : Generate asymmetric surface slabs from a bulk POSCAR.
+   Specify Miller index, number of layers (N and N+1), vacuum thickness,
+   and optionally fix bottom layers with Selective Dynamics (FFF or TTF).
 """
 
 
-OPTIONS = (1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12)
+OPTIONS = (1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13)
 WORKDIR = Path.cwd()
 logging.basicConfig(
     level=logging.INFO,
@@ -130,6 +135,7 @@ class PoscarkitInteract:
             10: self.run_separate,
             11: self.run_import_to_modeling,
             12: self.run_thermo,
+            13: self.run_surface,
         }
         self.config = self.read_config(cfg_path, cfg)
 
@@ -548,6 +554,55 @@ class PoscarkitInteract:
             outdir=str(outdir),
         )
         print(f"Results: {csv_path}, {png_path}")
+
+    def run_surface(self) -> list[Path]:
+        """Generate surface slabs from bulk POSCAR.
+
+        Returns:
+            List: List of output file paths
+        """
+        from src.modeling.surface import SurfaceBuilder
+
+        name = self._handle_name()
+        poscar = self._handle_poscar()
+        outdir = self._handle_outdir()
+        miller = self._handle_miller()
+
+        layers_str = (
+            input("Enter number of layers (N, outputs N and N+1) [3]\n> ").strip()
+        )
+        layers = int(layers_str) if layers_str else 3
+
+        vacuum_str = (
+            input("Enter total vacuum thickness (A) [15.0]\n> ").strip()
+        )
+        vacuum = float(vacuum_str) if vacuum_str else 15.0
+
+        fix_str = (
+            input("Enter fix-layers override or leave blank for auto\n> ").strip()
+        )
+        fix_layers = int(fix_str) if fix_str else None
+
+        fix_z = input("Fix only z-direction? (y/n) [n]\n> ").strip().lower()
+        fix_z_only = fix_z == "y"
+
+        builder = SurfaceBuilder(
+            poscar=poscar,
+            miller=miller,
+            layers=layers,
+            vacuum=vacuum,
+            fix_layers=fix_layers,
+            fix_z_only=fix_z_only,
+            outdir=outdir,
+            name=name,
+        )
+        builder._transform_cell()
+        builder._identify_layers()
+        builder._find_gaps()
+        results = builder.build_all(outdir)
+
+        logging.info(f"Surface slab generation completed. Generated {len(results)} slabs.")
+        return results
 
     def run(self):
         print(INFO_CLI)
