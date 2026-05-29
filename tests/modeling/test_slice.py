@@ -156,3 +156,24 @@ class TestSlice(unittest.TestCase):
         for proj, layer in layers:
             self.assertIsInstance(proj, (int, float))
             self.assertIsInstance(layer, Struct)
+
+    def test_group_by_normal_periodic(self):
+        """Same-layer atoms across cell boundary grouped together."""
+        cell = np.array([[5.0, 0.0, 0.0], [0.0, 5.0, 0.0], [0.0, 0.0, 5.0]])
+        atom_list = [
+            Atom(0, "Au", np.array([0.0, 0.0, 0.001])),
+            Atom(1, "Au", np.array([0.0, 0.0, 0.999])),
+            Atom(2, "Au", np.array([0.5, 0.5, 0.500])),
+        ]
+        struct = Struct(cell=cell, is_direct=True, atom_list=atom_list)
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir)
+            poscar_p = temp_path / "periodic_test.vasp"
+            SimplePoscar.write_poscar(poscar_p, struct, "Periodic test")
+
+            s = Slicer("test_periodic", poscar_p, (0, 0, 1))
+            layers = list(s.group_by_normal())
+
+            self.assertEqual(len(layers), 2,
+                f"Expected 2 layers (periodic merge), got {len(layers)}")

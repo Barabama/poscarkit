@@ -4,7 +4,7 @@ import logging
 import shutil
 from pathlib import Path
 from collections import defaultdict
-from itertools import chain, groupby
+from itertools import chain
 
 import numpy as np
 from ase.build.tools import cut
@@ -70,25 +70,40 @@ class Slicer:
         return newstruct
 
     def group_by_normal(self, precision: int = 2):
-        """
-        Group atoms by distance to the normal vector.
+        """Group atoms by distance to the normal vector.
+
+        Uses fractional coordinates along the surface normal with circular
+        gap detection to correctly handle atoms near the periodic boundary.
 
         Args:
-            precision: Precision of distance
+            precision: Precision of distance (decimal places for rounding)
+
         Yields:
             Tuple: (Projection, Struct)
         """
         transfd = self.transformed
-        basis_norm = self.basis_norm
-        # Calculate projections rounded
-        coords = transfd.get_coords(direct=False)
-        projs = np.dot(coords, basis_norm[2])  # Projection onto normal
-        projs_rounded = np.round(projs, precision)
 
-        # Group atoms
-        indics_sorted = np.argsort(projs_rounded)
-        for proj, group in groupby(indics_sorted, key=lambda x: projs_rounded[x]):
-            layer = transfd.copy(atom_list=[transfd[i] for i in group])
+        # Use fractional coordinates along the c-axis (surface normal)
+        coords_direct = transfd.get_coords(direct=True)
+        projs = coords_direct[:, 2]
+
+        # Round and group by unique z
+        z_rounded = np.round(projs, decimals=precision)
+        unique_z = np.sort(np.unique(z_rounded))
+
+        # Merge top and bottom if they represent the same layer (periodic boundary)
+        if len(unique_z) >= 2:
+            wrap_gap = 1.0 - unique_z[-1] + unique_z[0]
+            if wrap_gap <= 1.5 * 10 ** (-precision):
+                z_rounded[z_rounded >= unique_z[-1] - 1e-10] = unique_z[0]
+                unique_z = unique_z[:-1]
+
+        # Yield groups
+        for zu in unique_z:
+            mask = np.isclose(z_rounded, zu, atol=0.5 * 10 ** (-precision))
+            indices = np.where(mask)[0]
+            proj = round(float(np.mean(projs[indices])), precision)
+            layer = transfd.copy(atom_list=[transfd[i] for i in indices])
             yield proj, layer
 
     def export_layer_xls(
@@ -231,7 +246,7 @@ class Slicer:
         # Position annotation below the legend
         annotation = fig.text(
             0.92,
-            0.60,
+            0.55,
             annotation_text,
             ha="left",
             va="top",
