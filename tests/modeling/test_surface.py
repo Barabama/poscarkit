@@ -154,5 +154,85 @@ class TestGapDetection(unittest.TestCase):
         self.assertIn("Reduce --layers", str(ctx.exception))
 
 
+class TestSlabAssembly(unittest.TestCase):
+
+    def setUp(self):
+        self.temp_dir = Path(tempfile.mkdtemp())
+
+    def tearDown(self):
+        import shutil
+        shutil.rmtree(self.temp_dir)
+
+    def test_build_slab_basic(self):
+        """Slab has correct cell shape and c-vector oriented along z."""
+        poscar = _make_fcc_bulk_poscar(self.temp_dir)
+        builder = SurfaceBuilder(
+            poscar=poscar, miller=(0, 0, 1), layers=1, vacuum=15.0,
+            outdir=self.temp_dir,
+        )
+        builder._transform_cell()
+        builder._identify_layers()
+        builder._find_gaps()
+
+        slabs = builder.build_all(self.temp_dir)
+        self.assertGreater(len(slabs), 0, "Should produce at least one slab")
+
+        for slab_path in slabs:
+            slab = SimplePoscar.read_poscar(slab_path)
+            self.assertEqual(slab.cell.shape, (3, 3))
+            # c-vector should be oriented purely in z for (001)
+            self.assertAlmostEqual(slab.cell[2, 0], 0.0)
+            self.assertAlmostEqual(slab.cell[2, 1], 0.0)
+            self.assertGreater(slab.cell[2, 2], 0.0)
+
+    def test_build_slab_n_plus_one(self):
+        """N+1 (2-layer) slabs are produced alongside N (1-layer) slabs."""
+        poscar = _make_fcc_bulk_poscar(self.temp_dir)
+        builder = SurfaceBuilder(
+            poscar=poscar, miller=(0, 0, 1), layers=1, vacuum=15.0,
+            outdir=self.temp_dir,
+        )
+        builder._transform_cell()
+        builder._identify_layers()
+        builder._find_gaps()
+
+        slabs = builder.build_all(self.temp_dir)
+        layer_counts = set()
+        for slab_path in slabs:
+            name = slab_path.stem
+            if "layers1" in name:
+                layer_counts.add(1)
+            elif "layers2" in name:
+                layer_counts.add(2)
+
+        self.assertIn(1, layer_counts, "Should produce 1-layer slabs")
+        self.assertIn(2, layer_counts, "Should produce 2-layer slabs (N+1)")
+
+    def test_note_preserved(self):
+        """note fields survive the full Struct -> Atoms -> cut -> Struct pipeline."""
+        poscar = _make_fcc_bulk_poscar(self.temp_dir)
+        original = SimplePoscar.read_poscar(poscar)
+        original_notes = set(a.note for a in original)
+
+        builder = SurfaceBuilder(
+            poscar=poscar, miller=(1, 1, 1), layers=2, vacuum=15.0,
+            outdir=self.temp_dir,
+        )
+        builder._transform_cell()
+        builder._identify_layers()
+        builder._find_gaps()
+
+        slabs = builder.build_all(self.temp_dir)
+        for slab_path in slabs:
+            slab = SimplePoscar.read_poscar(slab_path)
+            slab_notes = set(a.note for a in slab)
+            self.assertTrue(
+                slab_notes.issubset(original_notes) or slab_notes == original_notes,
+                f"Slab notes {slab_notes} not subset of original {original_notes}"
+            )
+            for atom in slab:
+                self.assertTrue(atom.note, f"Atom {atom.index} has empty note")
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -209,7 +209,7 @@ class SurfaceBuilder:
             raise RuntimeError("Must call _identify_layers() before validation")
 
         total_layers = len(self._layers)
-        if self.n_layers >= total_layers:
+        if self.n_layers > total_layers:
             raise ValueError(
                 f"Requested {self.n_layers} layers but bulk only has "
                 f"{total_layers} atomic layers after "
@@ -217,7 +217,164 @@ class SurfaceBuilder:
                 f"Reduce --layers or use a larger supercell."
             )
 
-    def build_all(self, outdir=None):
+    def _unwrap_zs(self, z_frac: np.ndarray, gap_z: float) -> np.ndarray:
+        """Unwrap fractional z-coordinates for continuity below gap_z.
+
+        Starting from gap_z going downward, adjust z by +/- 1 whenever
+        the sequence would cross the periodic boundary at z=0 or z=1.
+        Returns unwrapped fractional z values (monotonically decreasing
+        from gap_z downward).
+        """
+        n = len(z_frac)
+
+        # Initial offset: atoms with z > gap_z are "above" in direct space
+        # and need -1 to move below the gap
+        offsets = np.where(z_frac > gap_z, -1.0, 0.0)
+        adjusted_z = z_frac + offsets
+
+        # Sort descending from gap (highest adjusted z = closest to gap)
+        sort_idx = np.argsort(adjusted_z)[::-1]
+
+        unwrapped = np.zeros(n)
+        for rank, idx in enumerate(sort_idx):
+            if rank == 0:
+                unwrapped[idx] = adjusted_z[idx]
+            else:
+                prev_idx = sort_idx[rank - 1]
+                extra = 0.0
+                if adjusted_z[idx] > adjusted_z[prev_idx]:
+                    extra = -1.0
+                unwrapped[idx] = adjusted_z[idx] + extra
+
+        return unwrapped
+
+    def _build_slab(self, gap_z: float, n_layers: int) -> Struct:
+        """Build a single slab from a gap with n_layers below it."""
+        layers = self._layers
+        total_layers = len(layers)
+
+        # Find the layer just below the gap
+        gap_below_idx = None
+        min_dist = float('inf')
+        for i, layer in enumerate(layers):
+            dist = (gap_z - layer.z_centroid) % 1.0
+            if dist < min_dist:
+                min_dist = dist
+                gap_below_idx = i
+
+        # Select n_layers going downward from gap_below_idx
+        selected_layers = []
+        for offset in range(n_layers):
+            layer_idx = (gap_below_idx - offset) % total_layers
+            selected_layers.append(layers[layer_idx])
+
+        # Collect atoms with fractional coords from transformed cell
+        all_atoms = []
+        for layer in selected_layers:
+            for atom in layer.atoms:
+                all_atoms.append(Atom(
+                    index=len(all_atoms),
+                    symbol=atom.symbol,
+                    coord=atom.coord.copy(),
+                    note=atom.note,
+                    meta=atom.meta,
+                ))
+
+        if self._transformed is None:
+            raise RuntimeError("Must call _transform_cell() before _build_slab()")
+        xform_cell = self._transformed.cell
+
+        # 1. Unwrap fractional z-coordinates
+        z_frac = np.array([a.coord[2] for a in all_atoms])
+        z_unwrapped = self._unwrap_zs(z_frac, gap_z)
+
+        # 2. Replace fractional z with unwrapped value, convert to Cartesian
+        for atom, zw in zip(all_atoms, z_unwrapped):
+            frac = atom.coord.copy()
+            frac[2] = zw
+            atom.coord = np.dot(frac, xform_cell)
+
+        # 3. Build new cell: a, b unchanged; c = thickness + vacuum
+        a_vec = xform_cell[0].copy()
+        b_vec = xform_cell[1].copy()
+        c_dir = xform_cell[2]
+        c_dir_norm = c_dir / np.linalg.norm(c_dir)
+
+        z_cart = np.array([a.coord[2] for a in all_atoms])
+        slab_thickness = float(np.max(z_cart) - np.min(z_cart))
+        c_length = slab_thickness + self.vacuum_bottom + self.vacuum_top
+        c_vec = c_dir_norm * c_length
+
+        new_cell = np.array([a_vec, b_vec, c_vec])
+
+        # 4. Translate atoms: bottom of slab at z = vacuum_bottom
+        z_min = float(np.min(z_cart))
+        z_shift = self.vacuum_bottom - z_min
+        for atom in all_atoms:
+            atom.coord = atom.coord + c_dir_norm * z_shift
+
+        slab_struct = Struct(cell=new_cell, is_direct=False, atom_list=all_atoms)
+        slab_struct.get_coords(direct=True)
+
+        # 5. Apply constraints (stub for now, full impl in Task 5)
+        slab_struct = self._add_constraints(slab_struct)
+
+        return slab_struct
+
+    def _add_constraints(self, slab: Struct) -> Struct:
+        """Stub: apply no constraints. Full implementation in Task 5."""
+        for atom in slab:
+            atom.constr = ["T", "T", "T"]
+        return slab
+
+    def build_all(self, outdir: Path | None = None) -> list[Path]:
+        """Build all possible slabs from all gaps, with N and N+1 layers.
+
+        Returns list of output file paths.
+        """
         outdir = Path(outdir) if outdir else self.outdir
         self._validate_layer_count()
-        return []
+
+        all_slabs = []
+
+        name = self.poscar.stem
+        miller_str = "".join(str(d) for d in self.miller)
+
+        subdir = outdir / f"{name}-slab-{miller_str}"
+        subdir.mkdir(parents=True, exist_ok=True)
+
+        max_layers_needed = self.n_layers + 1
+        total_layers = len(self._layers)
+
+        for gap_idx, gap_z in enumerate(self._gaps):
+            # Find the layer just below this gap
+            gap_below_idx = None
+            min_dist = float('inf')
+            for i, layer in enumerate(self._layers):
+                dist = (gap_z - layer.z_centroid) % 1.0
+                if dist < min_dist:
+                    min_dist = dist
+                    gap_below_idx = i
+
+            term_id = f"term{gap_idx + 1:02d}"
+
+            for nl in (self.n_layers, self.n_layers + 1):
+                slab = self._build_slab(gap_z, nl)
+                filename = (
+                    f"{name}-slab-{miller_str}-{term_id}-layers{nl}.vasp"
+                )
+                slab_path = subdir / filename
+                SimplePoscar.write_poscar(
+                    poscar=slab_path, struct=slab,
+                    comment=f"Slab {miller_str} {term_id} {nl} layers"
+                )
+                all_slabs.append((slab_path, slab, gap_z, nl, term_id))
+
+        # Write summary CSV (placeholder, full impl in Task 6)
+        self._write_summary(all_slabs, subdir)
+
+        return [s[0] for s in all_slabs]
+
+    def _write_summary(self, all_slabs: list, outdir: Path) -> None:
+        """Placeholder: summary CSV (full impl in Task 6)."""
+        pass
