@@ -150,8 +150,11 @@ class SurfaceBuilder:
             mask = np.isclose(z_rounded, zu, atol=0.5 * 10 ** (-self.precision))
             indices = np.where(mask)[0]
             atoms_in_layer = [struct[i] for i in indices]
-            z_centroid = float(np.mean(z_vals[indices]))
-            z_centroid = z_centroid % 1.0
+            # Handle PBC merge: atoms near z=1.0 wrap to near z=0.0 for correct centroid
+            z_layer = z_vals[indices].copy()
+            if np.max(z_layer) - np.min(z_layer) > 0.5:
+                z_layer[z_layer > 0.5] -= 1.0
+            z_centroid = float(np.mean(z_layer)) % 1.0
 
             sym_counts = Counter(a.symbol for a in atoms_in_layer)
             comp = "".join(
@@ -175,11 +178,11 @@ class SurfaceBuilder:
         return result
 
     def _find_gaps(self) -> list[float]:
-        """Find gaps between consecutive layers.
+        """Find midpoints (cutting planes) between consecutive layers.
 
-        A gap is the midpoint in fractional z between two adjacent layers.
-        Returns list of gap z-values (same length as layers list).
-        gap[i] is between layer[i] and layer[(i+1) % n].
+        Returns list of midpoint z-values in fractional coordinates.
+        gap[i] is the midpoint between layer[i] and layer[(i+1) % n].
+        Called "gaps" because each midpoint defines where to cut between layers.
         """
         if not self._layers:
             raise RuntimeError("Must call _identify_layers() before _find_gaps()")
@@ -201,7 +204,7 @@ class SurfaceBuilder:
         return gaps
 
     def _validate_layer_count(self) -> None:
-        """Validate that requested layers <= available bulk layers."""
+        """Validate that requested layers < available bulk layers."""
         if not self._layers:
             raise RuntimeError("Must call _identify_layers() before validation")
 
