@@ -50,10 +50,20 @@ POSCAR → Struct
 
 ### 1. Bridge Fix: `struct2atoms` / `atoms2struct` (base.py)
 
-**struct2atoms:** Store `note`, `meta`, `constr` in `atoms.new_array()`.
+**struct2atoms:** Store `note` and `meta` as string arrays via `atoms.new_array()`.
+For `constr`, convert the list `['T','T','T']` to an integer mask (0=free, 1=fixed):
+`['F','F','F']` → `[1,1,1]`, `['T','T','T']` → `[0,0,0]`, `['T','T','F']` → `[0,0,1]`.
+Store as a 3-column int array `atoms.new_array('constr_mask', mask)`.
+ASE `Atoms` arrays are ndarray-backed; preserving string lists directly is fragile
+(ASE's `get_array` returns numpy string arrays). The integer mask avoids this.
 
-**atoms2struct:** Restore from `atoms.arrays` with fallback to defaults for
-backward compatibility with bare ASE Atoms objects.
+**atoms2struct:** Restore from `atoms.arrays`:
+- `note`: `str(x)` from `atoms.get_array('note')[i]`, fallback `''`
+- `meta`: from `atoms.get_array('meta')[i]`, fallback `None`
+- `constr`: decode mask back to list `['T' if v==0 else 'F' for v in row]`, fallback `['T','T','T']`
+
+All fallbacks are applied when the array key is absent, maintaining backward
+compatibility with bare ASE Atoms objects.
 
 ### 2. Layer Identification Algorithm
 
@@ -64,8 +74,22 @@ backward compatibility with bare ASE Atoms objects.
 5. Large gaps → layer boundaries; small gaps → intra-layer variation
 6. If wrap gap is small → merge first and last groups (same layer crossing boundary)
 7. Layers ordered by fractional z ascending
+8. Filter gaps: exclude any gap where the number of distinct layers reachable
+   from either side is less than N. In practice, since cyclic indexing makes all
+   layers reachable as long as N <= total_layers, this filter fires only when the
+   global N >= total_layers check in Slab Assembly would already reject the input.
+   For asymmetric slab construction, gaps at the "top" of the layer stack (small
+   z values) that would require wrapping past the last distinct bulk layer are
+   excluded — each slab must represent a physically contiguous downward cut.
 
 ### 3. Slab Assembly (per gap)
+
+**Precondition:** `--layers N` must be strictly less than the total number of
+identified atomic layers in the transformed bulk cell. If `N >= total_layers`,
+raise a clear error: `"Requested {N} layers but bulk only has {total_layers}
+atomic layers after (hkl) transformation. Reduce --layers or use a larger
+supercell."` This prevents the cyclic indexing from silently selecting duplicated
+or overlapping layer sets.
 
 For gap_i between layer_i and layer_{i+1}:
 
@@ -82,6 +106,10 @@ For gap_i between layer_i and layer_{i+1}:
 - `vacuum_top = user_vacuum - 2.0 Å`
 - User parameter `--vacuum` defaults to 15.0 Å
 
+**Minimum vacuum check:** If `user_vacuum < 2.0`, raise
+`ValueError("Total vacuum must be >= 2.0 Å (minimum 2 Å bottom gap). Got {vacuum} Å.")`.
+Negative or zero `vacuum_top` produces an invalid cell.
+
 ### 5. Selective Dynamics
 
 | `--fix-layers` | `--fix-z-only` | Constraint |
@@ -92,6 +120,9 @@ For gap_i between layer_i and layer_{i+1}:
 | explicit N | on | Bottom N layers: T T F |
 
 Auto-fix rule: floor((layers+1)/2) layers fixed (3→2, 4→2, 5→3, ...).
+
+**Bounds check:** If `--fix-layers N >= total_layers` (manual or auto),
+raise `ValueError("Cannot fix {N} layers in a {M}-layer slab. Reduce --fix-layers.")`.
 
 ### 6. Output
 
@@ -204,6 +235,10 @@ SurfaceBuilder layer identification.
 | `test_note_preserved` | note/field survives round-trip |
 | `test_layers_periodic_crossing` | Layer crossing cell boundary handled correctly |
 | `test_summary_csv` | All columns present, values in valid ranges |
+| `test_relaxed_hea_contcar` | Real 6-element HEA CONTCAR with ~0.3Å atomic displacements — layers still correctly identified |
+| `test_insufficient_layers_filtered` | Gaps with < N layers on either side excluded from output |
+| `test_vacuum_below_minimum` | `ValueError` raised when `--vacuum < 2.0` |
+| `test_fix_layers_exceeds_total` | `ValueError` raised when `--fix-layers >= total_layers` |
 
 ### Modified: `tests/modeling/test_base.py`
 
