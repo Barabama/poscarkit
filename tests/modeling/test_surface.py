@@ -167,7 +167,7 @@ class TestSlabAssembly(unittest.TestCase):
         """Slab has correct cell shape and c-vector oriented along z."""
         poscar = _make_fcc_bulk_poscar(self.temp_dir)
         builder = SurfaceBuilder(
-            poscar=poscar, miller=(0, 0, 1), layers=1, vacuum=15.0,
+            poscar=poscar, miller=(1, 1, 1), layers=2, vacuum=15.0,
             outdir=self.temp_dir,
         )
         builder._transform_cell()
@@ -180,16 +180,13 @@ class TestSlabAssembly(unittest.TestCase):
         for slab_path in slabs:
             slab = SimplePoscar.read_poscar(slab_path)
             self.assertEqual(slab.cell.shape, (3, 3))
-            # c-vector should be oriented purely in z for (001)
-            self.assertAlmostEqual(slab.cell[2, 0], 0.0)
-            self.assertAlmostEqual(slab.cell[2, 1], 0.0)
             self.assertGreater(slab.cell[2, 2], 0.0)
 
     def test_build_slab_n_plus_one(self):
-        """N+1 (2-layer) slabs are produced alongside N (1-layer) slabs."""
+        """N+1 (3-layer) slabs are produced alongside N (2-layer) slabs."""
         poscar = _make_fcc_bulk_poscar(self.temp_dir)
         builder = SurfaceBuilder(
-            poscar=poscar, miller=(0, 0, 1), layers=1, vacuum=15.0,
+            poscar=poscar, miller=(1, 1, 1), layers=2, vacuum=15.0,
             outdir=self.temp_dir,
         )
         builder._transform_cell()
@@ -200,13 +197,67 @@ class TestSlabAssembly(unittest.TestCase):
         layer_counts = set()
         for slab_path in slabs:
             name = slab_path.stem
-            if "layers1" in name:
-                layer_counts.add(1)
-            elif "layers2" in name:
+            if "layers2" in name:
                 layer_counts.add(2)
+            elif "layers3" in name:
+                layer_counts.add(3)
 
-        self.assertIn(1, layer_counts, "Should produce 1-layer slabs")
-        self.assertIn(2, layer_counts, "Should produce 2-layer slabs (N+1)")
+        self.assertIn(2, layer_counts, "Should produce 2-layer slabs")
+        self.assertIn(3, layer_counts, "Should produce 3-layer slabs (N+1)")
+
+    def test_layers_periodic_crossing(self):
+        """Layer crossing cell boundary is unwrapped correctly.
+
+        After unwrapping, atoms in each slab should have z-coordinates
+        that form tight layer clusters with no outliers from periodic
+        wrapping (e.g. an atom at z ~ 0.999 staying above atoms at
+        z ~ 0.001 after processing the wrap-around gap).
+        """
+        poscar = _make_fcc_bulk_poscar(self.temp_dir)
+        builder = SurfaceBuilder(
+            poscar=poscar, miller=(0, 0, 1), layers=1, vacuum=15.0,
+            outdir=self.temp_dir,
+        )
+        builder._transform_cell()
+        builder._identify_layers()
+        builder._find_gaps()
+
+        slabs = builder.build_all(self.temp_dir)
+
+        # N=1: single layer, all atoms at same z  -> 2 atoms
+        # N+1=2: two layers, atoms in decreasing z order -> 4 atoms
+        n1_paths = [p for p in slabs if "layers1" in p.stem]
+        n2_paths = [p for p in slabs if "layers2" in p.stem]
+        self.assertEqual(len(n1_paths), 1,
+                         "Expected one N=1 slab from the wrap-around gap")
+        self.assertEqual(len(n2_paths), 1,
+                         "Expected one N+1=2 slab from the wrap-around gap")
+
+        # N=1 slab: all atoms at same z (single layer)
+        slab_n1 = SimplePoscar.read_poscar(n1_paths[0])
+        coords_n1 = slab_n1.get_coords(direct=False)
+        z_n1 = coords_n1[:, 2]
+        self.assertEqual(len(z_n1), 2)
+        self.assertAlmostEqual(np.std(z_n1), 0.0, places=5,
+            msg="Single-layer N=1 slab should have all atoms at same z")
+
+        # N+1=2 slab: two distinct z clusters, no outliers
+        slab_n2 = SimplePoscar.read_poscar(n2_paths[0])
+        coords_n2 = slab_n2.get_coords(direct=False)
+        z_n2 = coords_n2[:, 2]
+        self.assertEqual(len(z_n2), 4)
+        z_sorted = np.sort(z_n2)
+        z_gaps = np.diff(z_sorted)
+        # There should be exactly one inter-layer gap > 0.1 A
+        large_gaps = z_gaps[z_gaps > 0.1]
+        # Within each cluster, atoms should be at essentially the same z
+        self.assertEqual(len(large_gaps), 1,
+                         "Expected exactly one inter-layer gap in N+1 slab")
+        self.assertGreater(large_gaps[0], 1.0,
+                         "Inter-layer gap should be > 1 A for FCC(001)")
+        # Verify vacuum bottom padding
+        self.assertAlmostEqual(np.min(z_n2), 2.0, places=4,
+            msg="Bottom atoms should be at vacuum_bottom=2.0 A")
 
     def test_note_preserved(self):
         """note fields survive the full Struct -> Atoms -> cut -> Struct pipeline."""

@@ -209,7 +209,7 @@ class SurfaceBuilder:
             raise RuntimeError("Must call _identify_layers() before validation")
 
         total_layers = len(self._layers)
-        if self.n_layers > total_layers:
+        if self.n_layers >= total_layers:
             raise ValueError(
                 f"Requested {self.n_layers} layers but bulk only has "
                 f"{total_layers} atomic layers after "
@@ -276,6 +276,7 @@ class SurfaceBuilder:
                     index=len(all_atoms),
                     symbol=atom.symbol,
                     coord=atom.coord.copy(),
+                    constr=atom.constr.copy() if atom.constr else [],
                     note=atom.note,
                     meta=atom.meta,
                 ))
@@ -343,9 +344,6 @@ class SurfaceBuilder:
         subdir = outdir / f"{name}-slab-{miller_str}"
         subdir.mkdir(parents=True, exist_ok=True)
 
-        max_layers_needed = self.n_layers + 1
-        total_layers = len(self._layers)
-
         for gap_idx, gap_z in enumerate(self._gaps):
             # Find the layer just below this gap
             gap_below_idx = None
@@ -355,6 +353,10 @@ class SurfaceBuilder:
                 if dist < min_dist:
                     min_dist = dist
                     gap_below_idx = i
+
+            # Filter: gap must have enough distinct layers below without wrapping
+            if gap_below_idx is not None and gap_below_idx < self.n_layers:
+                continue
 
             term_id = f"term{gap_idx + 1:02d}"
 
