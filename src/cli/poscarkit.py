@@ -43,6 +43,7 @@ COMMANDS:
   merge         Merge two POSCAR files
   separate      Separate a POSCAR file by groups
   import-to-model  Import SOFs from CSV/XLSX and run modeling
+  surface       Generate surface slabs from bulk POSCAR
   thermo        Calculate Sconf and DeltaG from SOF data + TDB
 
 EXAMPLES:
@@ -321,6 +322,49 @@ def cmd_import_to_model(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_surface(args: argparse.Namespace) -> int:
+    poscar = Path(args.poscar) if args.poscar else None
+    outdir = Path(args.outdir) if args.outdir else Path("output")
+    miller = tuple(args.miller)
+    layers = args.layers
+    vacuum = args.vacuum
+    fix_layers = args.fix_layers
+    fix_z_only = args.fix_z_only
+
+    if not poscar or not poscar.is_file():
+        logging.error(f"POSCAR file not found: {poscar}")
+        return 1
+
+    outdir.mkdir(parents=True, exist_ok=True)
+
+    from src.modeling.surface import SurfaceBuilder
+
+    builder = SurfaceBuilder(
+        poscar=poscar,
+        miller=miller,
+        layers=layers,
+        vacuum=vacuum,
+        fix_layers=fix_layers,
+        fix_z_only=fix_z_only,
+        outdir=outdir,
+        precision=getattr(args, "precision", 2),
+    )
+
+    try:
+        builder._transform_cell()
+        builder._identify_layers()
+        builder._find_gaps()
+        results = builder.build_all(outdir)
+
+        logging.info(f"Surface slab generation completed. Generated {len(results)} slabs:")
+        for r in results:
+            logging.info(f"  - {r}")
+        return 0
+    except ValueError as e:
+        logging.error(str(e))
+        return 1
+
+
 def main() -> int:
     logging.basicConfig(
         level=logging.INFO,
@@ -541,6 +585,65 @@ def main() -> int:
         help="Use ASE backend for CN counting (default: False)",
     )
     parser_slice_to_countcn.set_defaults(func=cmd_slice_to_countcn)
+
+    # Surface command
+    parser_surface = subparsers.add_parser(
+        "surface",
+        help="Generate surface slabs from bulk POSCAR",
+    )
+    parser_surface.add_argument(
+        "poscar",
+        type=str,
+        help="Path to bulk POSCAR file",
+    )
+    parser_surface.add_argument(
+        "--miller",
+        "-m",
+        type=int,
+        nargs=3,
+        default=(0, 0, 1),
+        metavar=("H", "K", "L"),
+        help="Miller indices (default: 0 0 1)",
+    )
+    parser_surface.add_argument(
+        "--layers",
+        "-l",
+        type=int,
+        default=3,
+        help="Number of slab layers, outputs N and N+1 (default: 3)",
+    )
+    parser_surface.add_argument(
+        "--vacuum",
+        "-v",
+        type=float,
+        default=15.0,
+        help="Total vacuum thickness in Angstrom (default: 15.0)",
+    )
+    parser_surface.add_argument(
+        "--fix-layers",
+        type=int,
+        default=None,
+        help="Manual override for fixed bottom layers (default: auto)",
+    )
+    parser_surface.add_argument(
+        "--fix-z-only",
+        action="store_true",
+        help="Fix only z-direction instead of all (default: FFF)",
+    )
+    parser_surface.add_argument(
+        "--outdir",
+        "-o",
+        type=str,
+        default="output",
+        help="Output directory (default: output)",
+    )
+    parser_surface.add_argument(
+        "--precision",
+        type=int,
+        default=2,
+        help="Decimal precision for z-coordinate grouping (default: 2)",
+    )
+    parser_surface.set_defaults(func=cmd_surface)
 
     # Supercell command
     parser_supercell = subparsers.add_parser("supercell", help="Generate supercell")
