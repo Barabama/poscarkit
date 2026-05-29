@@ -312,20 +312,62 @@ class SurfaceBuilder:
         z_min = float(np.min(z_cart))
         z_shift = self.vacuum_bottom - z_min
         for atom in all_atoms:
-            atom.coord = atom.coord + c_dir_norm * z_shift
+            atom.coord[2] += z_shift
 
         slab_struct = Struct(cell=new_cell, is_direct=False, atom_list=all_atoms)
         slab_struct.get_coords(direct=True)
 
-        # 5. Apply constraints (stub for now, full impl in Task 5)
-        slab_struct = self._add_constraints(slab_struct)
+        # 5. Apply constraints
+        slab_struct = self._add_constraints(slab_struct, n_layers)
 
         return slab_struct
 
-    def _add_constraints(self, slab: Struct) -> Struct:
-        """Stub: apply no constraints. Full implementation in Task 5."""
+    def _add_constraints(self, slab: Struct, n_layers: int | None = None) -> Struct:
+        """Apply Selective Dynamics to the slab.
+
+        Bottom N layers are fixed; top layers are free.
+        N determined by auto-fix rule or user override.
+        Raises ValueError if fix_layers >= total slab layers.
+
+        Parameters:
+            slab: The slab to apply constraints to.
+            n_layers: Number of atomic layers in the slab. If None, detected
+                      from unique Cartesian z-values (fallback for backward
+                      compatibility).
+        """
+        if self.fix_layers is not None:
+            n_fix = self.fix_layers
+        else:
+            n_fix = (self.n_layers + 1) // 2
+
+        coords = slab.get_coords(direct=False)
+        z_vals = coords[:, 2]
+        z_unique = np.sort(np.unique(np.round(z_vals, decimals=self.precision)))
+
+        slab_layers = n_layers if n_layers is not None else max(1, len(z_unique))
+
+        if n_fix > slab_layers:
+            raise ValueError(
+                f"Cannot fix {n_fix} layers in a {slab_layers}-layer slab. "
+                f"Reduce --fix-layers."
+            )
+
+        if slab_layers <= 1:
+            for atom in slab:
+                atom.constr = ["T", "T", "T"]
+            return slab
+
+        fix_threshold = z_unique[min(n_fix, len(z_unique) - 1)] + 0.01
+        fix_constr = ["T", "T", "F"] if self.fix_z_only else ["F", "F", "F"]
+        free_constr = ["T", "T", "T"]
+
         for atom in slab:
-            atom.constr = ["T", "T", "T"]
+            atom_z = atom.coord[2]
+            if atom_z <= fix_threshold:
+                atom.constr = fix_constr.copy()
+            else:
+                atom.constr = free_constr.copy()
+
         return slab
 
     def build_all(self, outdir: Path | None = None) -> list[Path]:

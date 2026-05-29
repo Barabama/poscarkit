@@ -285,5 +285,128 @@ class TestSlabAssembly(unittest.TestCase):
                 self.assertTrue(atom.note, f"Atom {atom.index} has empty note")
 
 
+class TestVacuumAndConstraints(unittest.TestCase):
+
+    def setUp(self):
+        self.temp_dir = Path(tempfile.mkdtemp())
+
+    def tearDown(self):
+        import shutil
+        shutil.rmtree(self.temp_dir)
+
+    def test_vacuum_distribution(self):
+        """Bottom vacuum = 2.0 A, top vacuum = total - 2.0 A."""
+        total_vacuum = 20.0
+        poscar = _make_fcc_bulk_poscar(self.temp_dir)
+        builder = SurfaceBuilder(
+            poscar=poscar, miller=(1, 1, 1), layers=2, vacuum=total_vacuum,
+            outdir=self.temp_dir,
+        )
+        self.assertEqual(builder.vacuum_bottom, 2.0)
+        self.assertEqual(builder.vacuum_top, total_vacuum - 2.0)
+
+        builder._transform_cell()
+        builder._identify_layers()
+        builder._find_gaps()
+
+        slabs = builder.build_all(self.temp_dir)
+        self.assertGreater(len(slabs), 0)
+
+        for slab_path in slabs:
+            slab = SimplePoscar.read_poscar(slab_path)
+            coords = slab.get_coords(direct=False)
+            z_vals = coords[:, 2]
+
+            cell_c = float(np.linalg.norm(slab.cell[2]))
+            self.assertGreaterEqual(float(np.min(z_vals)), 0.0)
+            self.assertLessEqual(float(np.max(z_vals)), cell_c)
+
+            # Bottom vacuum region: [0, 2A) should be empty
+            bottom_atoms = [z for z in z_vals if z < 2.0]
+            self.assertEqual(len(bottom_atoms), 0,
+                "No atoms should be in bottom vacuum region [0, 2A)")
+
+    def test_constraints_fff(self):
+        """Default: bottom layers fully fixed (F F F)."""
+        poscar = _make_fcc_bulk_poscar(self.temp_dir)
+        builder = SurfaceBuilder(
+            poscar=poscar, miller=(1, 1, 1), layers=2, vacuum=15.0,
+            outdir=self.temp_dir,
+        )
+        builder._transform_cell()
+        builder._identify_layers()
+        builder._find_gaps()
+
+        slabs = builder.build_all(self.temp_dir)
+        for slab_path in slabs:
+            slab = SimplePoscar.read_poscar(slab_path)
+            coords = slab.get_coords(direct=False)
+            z_vals = coords[:, 2]
+            z_unique = np.sort(np.unique(np.round(z_vals, decimals=2)))
+            threshold = z_unique[min(1, len(z_unique) - 1)] + 0.5
+
+            for atom in slab:
+                atom_z_cart = atom.coord[2]
+                if atom_z_cart < threshold:
+                    self.assertEqual(atom.constr, ["F", "F", "F"],
+                        f"Bottom atom {atom.index} should be FFF, got {atom.constr}")
+                else:
+                    self.assertEqual(atom.constr, ["T", "T", "T"],
+                        f"Top atom {atom.index} should be TTT, got {atom.constr}")
+
+    def test_constraints_ttf(self):
+        """--fix-z-only: bottom layers fixed in z only (T T F)."""
+        poscar = _make_fcc_bulk_poscar(self.temp_dir)
+        builder = SurfaceBuilder(
+            poscar=poscar, miller=(1, 1, 1), layers=2, vacuum=15.0,
+            fix_z_only=True, outdir=self.temp_dir,
+        )
+        builder._transform_cell()
+        builder._identify_layers()
+        builder._find_gaps()
+
+        slabs = builder.build_all(self.temp_dir)
+        for slab_path in slabs:
+            slab = SimplePoscar.read_poscar(slab_path)
+            coords = slab.get_coords(direct=False)
+            z_vals = coords[:, 2]
+            z_unique = np.sort(np.unique(np.round(z_vals, decimals=2)))
+            threshold = z_unique[min(1, len(z_unique) - 1)] + 0.5
+
+            found_fixed = False
+            for atom in slab:
+                atom_z_cart = atom.coord[2]
+                if atom_z_cart < threshold:
+                    found_fixed = True
+                    self.assertEqual(atom.constr, ["T", "T", "F"],
+                        f"Fixed-z atom {atom.index} should be TTF, got {atom.constr}")
+            self.assertTrue(found_fixed, "Should have at least one fixed atom")
+
+    def test_vacuum_below_minimum(self):
+        """ValueError when total vacuum < 2.0 A."""
+        with self.assertRaises(ValueError) as ctx:
+            SurfaceBuilder(
+                poscar=_make_fcc_bulk_poscar(self.temp_dir),
+                miller=(1, 1, 1), layers=2, vacuum=1.0,
+                outdir=self.temp_dir,
+            )
+        self.assertIn("2.0", str(ctx.exception))
+
+    def test_fix_layers_exceeds_total(self):
+        """ValueError when fix_layers >= total slab layers."""
+        poscar = _make_fcc_bulk_poscar(self.temp_dir)
+        builder = SurfaceBuilder(
+            poscar=poscar, miller=(1, 1, 1), layers=2, vacuum=15.0,
+            fix_layers=5, outdir=self.temp_dir,
+        )
+        builder._transform_cell()
+        builder._identify_layers()
+        builder._find_gaps()
+
+        with self.assertRaises(ValueError) as ctx:
+            builder.build_all(self.temp_dir)
+        self.assertIn("Cannot fix", str(ctx.exception))
+
+
 if __name__ == "__main__":
     unittest.main()
