@@ -4,6 +4,9 @@ from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
 
+import csv
+import logging
+
 import numpy as np
 from ase.build.tools import cut
 
@@ -419,6 +422,110 @@ class SurfaceBuilder:
 
         return [s[0] for s in all_slabs]
 
-    def _write_summary(self, all_slabs: list, outdir: Path) -> None:
-        """Placeholder: summary CSV (full impl in Task 6)."""
-        pass
+    def _compute_metrics(self, slab: Struct, n_layers: int, term_id: str) -> dict:
+        """Compute all metrics for a slab."""
+        coords = slab.get_coords(direct=False)
+        z_vals = coords[:, 2]
+
+        from collections import Counter
+        sym_counts = Counter(a.symbol for a in slab)
+        total = len(slab)
+        composition = "".join(
+            f"{s}{c}" if c > 1 else s
+            for s, c in sorted(sym_counts.items())
+        )
+
+        # Bulk composition for deviation
+        bulk_counts = Counter(a.symbol for a in self._bulk_struct)
+        bulk_total = len(self._bulk_struct)
+
+        all_elements = set(sym_counts.keys()) | set(bulk_counts.keys())
+        deviations = []
+        for elem in sorted(all_elements):
+            surf_frac = sym_counts.get(elem, 0) / total
+            bulk_frac = bulk_counts.get(elem, 0) / bulk_total
+            deviations.append(abs(surf_frac - bulk_frac))
+        composition_deviation = sum(deviations) / len(deviations) if deviations else 0.0
+
+        z_unique = np.sort(np.unique(np.round(z_vals, decimals=self.precision)))
+        if len(z_unique) >= 2:
+            top_threshold = z_unique[-2] + 0.01
+            top_atoms = int(np.sum(z_vals >= top_threshold))
+            surface_energy_est = top_atoms / max(total, 1)
+        else:
+            surface_energy_est = 1.0
+
+        z_center = (np.max(z_vals) + np.min(z_vals)) / 2.0
+        dipole = float(np.sum(z_vals - z_center))
+
+        if len(z_unique) >= 2:
+            top_threshold = z_unique[-2] + 0.01
+            top_zs = z_vals[z_vals >= top_threshold]
+            top_layer_z_std = float(np.std(top_zs)) if len(top_zs) > 0 else 0.0
+        else:
+            top_layer_z_std = 0.0
+
+        z_rounded = np.round(z_vals, decimals=self.precision)
+        z_unique_rounded = np.sort(np.unique(z_rounded))
+        layer_comps_list = []
+        for zu in z_unique_rounded:
+            mask = np.abs(z_rounded - zu) < 0.5 * (10 ** (-self.precision))
+            layer_syms = [
+                slab[i].symbol for i, m in enumerate(mask) if m
+            ]
+            layer_count = Counter(layer_syms)
+            layer_comps_list.append("".join(
+                f"{s}{c}" if c > 1 else s
+                for s, c in sorted(layer_count.items())
+            ))
+        layer_compositions = " | ".join(layer_comps_list)
+
+        fix_mode = "TTF" if self.fix_z_only else "FFF"
+        fix_n = self.fix_layers if self.fix_layers is not None else ((self.n_layers + 1) // 2)
+
+        return {
+            "n_layers": n_layers,
+            "n_atoms": total,
+            "composition": composition,
+            "layer_compositions": layer_compositions,
+            "composition_deviation": round(composition_deviation, 6),
+            "surface_energy_est": round(surface_energy_est, 6),
+            "dipole_moment": round(dipole, 6),
+            "top_layer_z_std": round(top_layer_z_std, 6),
+            "fix_layers": fix_n,
+            "fix_mode": fix_mode,
+            "vacuum_top": round(self.vacuum_top, 3),
+            "vacuum_bottom": round(self.vacuum_bottom, 3),
+        }
+
+    def _write_summary(
+        self,
+        all_slabs: list,
+        outdir: Path,
+    ) -> Path:
+        """Write summary CSV for all generated slabs."""
+        csv_path = outdir / "summary.csv"
+        fieldnames = [
+            "filename", "termination_id", "gap_position_z",
+            "n_layers", "n_atoms", "composition", "layer_compositions",
+            "composition_deviation", "surface_energy_est", "dipole_moment",
+            "top_layer_z_std", "fix_layers", "fix_mode",
+            "vacuum_top", "vacuum_bottom",
+        ]
+
+        with open(csv_path, "w", newline="") as f:
+            writer = csv.DictWriter(f, fieldnames=fieldnames)
+            writer.writeheader()
+
+            for slab_path, slab, gap_z, n_layers, term_id in all_slabs:
+                metrics = self._compute_metrics(slab, n_layers, term_id)
+                row = {
+                    "filename": slab_path.name,
+                    "termination_id": term_id,
+                    "gap_position_z": round(float(gap_z), 6),
+                }
+                row.update(metrics)
+                writer.writerow(row)
+
+        logging.info(f"Summary saved to {csv_path}")
+        return csv_path

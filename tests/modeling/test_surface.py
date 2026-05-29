@@ -408,5 +408,59 @@ class TestVacuumAndConstraints(unittest.TestCase):
         self.assertIn("Cannot fix", str(ctx.exception))
 
 
+class TestSummaryCSV(unittest.TestCase):
+
+    def setUp(self):
+        self.temp_dir = Path(tempfile.mkdtemp())
+
+    def tearDown(self):
+        import shutil
+        shutil.rmtree(self.temp_dir)
+
+    def test_summary_csv_columns(self):
+        """Summary CSV has all required columns with valid values."""
+        poscar = _make_fcc_bulk_poscar(self.temp_dir)
+        builder = SurfaceBuilder(
+            poscar=poscar, miller=(1, 1, 1), layers=2, vacuum=15.0,
+            outdir=self.temp_dir,
+        )
+        builder._transform_cell()
+        builder._identify_layers()
+        builder._find_gaps()
+
+        slabs = builder.build_all(self.temp_dir)
+        self.assertGreater(len(slabs), 0)
+
+        miller_str = "111"
+        name = poscar.stem
+        csv_path = self.temp_dir / f"{name}-slab-{miller_str}" / "summary.csv"
+        self.assertTrue(csv_path.exists(), f"Summary CSV not found at {csv_path}")
+
+        import csv as csv_mod
+        with open(csv_path, "r") as f:
+            reader = csv_mod.DictReader(f)
+            rows = list(reader)
+
+        self.assertEqual(len(rows), len(slabs),
+                         "CSV row count should match slab count")
+
+        expected_columns = {
+            "filename", "termination_id", "gap_position_z", "n_layers",
+            "n_atoms", "composition", "layer_compositions",
+            "composition_deviation", "surface_energy_est", "dipole_moment",
+            "top_layer_z_std", "fix_layers", "fix_mode",
+            "vacuum_top", "vacuum_bottom",
+        }
+        actual_columns = set(reader.fieldnames)
+        missing = expected_columns - actual_columns
+        self.assertEqual(len(missing), 0, f"Missing CSV columns: {missing}")
+
+        for row in rows:
+            self.assertGreater(int(row["n_atoms"]), 0)
+            self.assertGreater(float(row["vacuum_top"]), 0)
+            self.assertGreater(float(row["vacuum_bottom"]), 0)
+            self.assertIn(row["fix_mode"], ["FFF", "TTF"])
+
+
 if __name__ == "__main__":
     unittest.main()
