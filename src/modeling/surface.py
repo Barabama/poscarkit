@@ -72,6 +72,7 @@ class SurfaceBuilder:
         self._bulk_struct = SimplePoscar.read_poscar(self.poscar)
         self._transformed: Struct | None = None
         self._layers: list[Layer] = []
+        self._gaps: list[float] = []
 
     def _transform_cell(self) -> Struct:
         """Transform bulk cell so z-axis aligns with surface normal.
@@ -172,3 +173,48 @@ class SurfaceBuilder:
 
         self._layers = result
         return result
+
+    def _find_gaps(self) -> list[float]:
+        """Find gaps between consecutive layers.
+
+        A gap is the midpoint in fractional z between two adjacent layers.
+        Returns list of gap z-values (same length as layers list).
+        gap[i] is between layer[i] and layer[(i+1) % n].
+        """
+        if not self._layers:
+            raise RuntimeError("Must call _identify_layers() before _find_gaps()")
+
+        n = len(self._layers)
+        gaps = []
+        for i in range(n):
+            layer_i = self._layers[i]
+            layer_next = self._layers[(i + 1) % n]
+            if i < n - 1:
+                gap = (layer_i.z_centroid + layer_next.z_centroid) / 2.0
+            else:
+                # Wrap-around gap: midpoint with wrap adjustment
+                gap = (layer_i.z_centroid + layer_next.z_centroid + 1.0) / 2.0
+                gap = gap % 1.0
+            gaps.append(gap)
+
+        self._gaps = gaps
+        return gaps
+
+    def _validate_layer_count(self) -> None:
+        """Validate that requested layers <= available bulk layers."""
+        if not self._layers:
+            raise RuntimeError("Must call _identify_layers() before validation")
+
+        total_layers = len(self._layers)
+        if self.n_layers >= total_layers:
+            raise ValueError(
+                f"Requested {self.n_layers} layers but bulk only has "
+                f"{total_layers} atomic layers after "
+                f"({' '.join(str(d) for d in self.miller)}) transformation. "
+                f"Reduce --layers or use a larger supercell."
+            )
+
+    def build_all(self, outdir=None):
+        outdir = Path(outdir) if outdir else self.outdir
+        self._validate_layer_count()
+        return []

@@ -105,5 +105,54 @@ class TestLayerIdentification(unittest.TestCase):
                          "FCC(210) 4-atom cell should yield 10 distinct layers")
 
 
+class TestGapDetection(unittest.TestCase):
+
+    def setUp(self):
+        self.temp_dir = Path(tempfile.mkdtemp())
+
+    def tearDown(self):
+        import shutil
+        shutil.rmtree(self.temp_dir)
+
+    def test_find_gaps(self):
+        """Gap count equals layer count; positions between layers."""
+        poscar = _make_fcc_bulk_poscar(self.temp_dir)
+        builder = SurfaceBuilder(
+            poscar=poscar, miller=(1, 1, 1), layers=3, vacuum=15.0,
+            outdir=self.temp_dir,
+        )
+        builder._transform_cell()
+        layers = builder._identify_layers()
+        gaps = builder._find_gaps()
+
+        self.assertEqual(len(gaps), len(layers),
+                         "Gap count should equal layer count (one gap per layer)")
+
+        # Each gap should be between two adjacent layers
+        for i, gap_z in enumerate(gaps):
+            layer_i = layers[i]
+            layer_next = layers[(i + 1) % len(layers)]
+
+            if i < len(layers) - 1:
+                self.assertTrue(layer_i.z_centroid < gap_z < layer_next.z_centroid,
+                                f"Gap {i} ({gap_z:.4f}) not between layers "
+                                f"({layer_i.z_centroid:.4f}, {layer_next.z_centroid:.4f})")
+
+    def test_insufficient_layers_filtered(self):
+        """Gaps requiring wraparound with insufficient layers are excluded."""
+        poscar = _make_fcc_bulk_poscar(self.temp_dir)
+        builder = SurfaceBuilder(
+            poscar=poscar, miller=(1, 1, 1), layers=50, vacuum=15.0,
+            outdir=self.temp_dir,
+        )
+        with self.assertRaises(ValueError) as ctx:
+            builder._transform_cell()
+            builder._identify_layers()
+            builder._find_gaps()
+            builder._validate_layer_count()
+            builder.build_all(self.temp_dir)
+        self.assertIn("Reduce --layers", str(ctx.exception))
+
+
 if __name__ == "__main__":
     unittest.main()
