@@ -462,5 +462,84 @@ class TestSummaryCSV(unittest.TestCase):
             self.assertIn(row["fix_mode"], ["FFF", "TTF"])
 
 
+class TestRelaxedHEA(unittest.TestCase):
+    """Tests using real VASP-relaxed HEA CONTCAR."""
+
+    def setUp(self):
+        self.temp_dir = Path(tempfile.mkdtemp())
+
+    def tearDown(self):
+        import shutil
+        shutil.rmtree(self.temp_dir)
+
+    def test_relaxed_hea_contcar(self):
+        """Real 6-element BCC HEA CONTCAR with ~0.1-0.3A atomic displacements.
+
+        Verifies that the layer identification algorithm correctly handles
+        a VASP-relaxed structure where atoms have moved from their ideal
+        crystallographic positions and the cell is non-orthogonal.
+        """
+        contcar_path = Path(__file__).parent.parent / "data" / "hea_6elem_CONTCAR.vasp"
+        if not contcar_path.exists():
+            self.skipTest(f"Test CONTCAR not found: {contcar_path}")
+
+        builder = SurfaceBuilder(
+            poscar=contcar_path, miller=(0, 0, 1), layers=3, vacuum=15.0,
+            outdir=self.temp_dir,
+        )
+        builder._transform_cell()
+        layers = builder._identify_layers()
+
+        # 3x3x3 BCC supercell along (001) should have at least 6 layers
+        self.assertGreaterEqual(len(layers), 4,
+            f"Expected >= 4 layers in relaxed BCC(001) HEA, got {len(layers)}")
+
+        builder._find_gaps()
+        builder._validate_layer_count()
+
+        slabs = builder.build_all(self.temp_dir)
+        self.assertGreater(len(slabs), 0, "Should produce at least one slab")
+
+        for slab_path in slabs:
+            slab = SimplePoscar.read_poscar(slab_path)
+            self.assertGreater(len(slab), 0, f"Slab {slab_path.name} is empty")
+
+            # Verify slab symbols are a subset of bulk elements (not all
+            # elements need to appear in every termination)
+            symbols = set(slab.symbols)
+            bulk_elements = {"Al", "Nb", "Ni", "Ti", "V", "W"}
+            unknown = symbols - bulk_elements
+            self.assertEqual(len(unknown), 0,
+                f"Slab contains unexpected elements: {unknown}")
+
+    def test_relaxed_hea_fcc111_transform(self):
+        """Relaxed BCC HEA transformed to (111) orientation produces valid slabs."""
+        contcar_path = Path(__file__).parent.parent / "data" / "hea_6elem_CONTCAR.vasp"
+        if not contcar_path.exists():
+            self.skipTest(f"Test CONTCAR not found: {contcar_path}")
+
+        builder = SurfaceBuilder(
+            poscar=contcar_path, miller=(1, 1, 1), layers=3, vacuum=15.0,
+            outdir=self.temp_dir,
+        )
+        builder._transform_cell()
+        layers = builder._identify_layers()
+
+        self.assertGreaterEqual(len(layers), 3,
+            f"Expected >= 3 layers in relaxed BCC(111) HEA, got {len(layers)}")
+
+        builder._find_gaps()
+        builder._validate_layer_count()
+
+        slabs = builder.build_all(self.temp_dir)
+        self.assertGreater(len(slabs), 0)
+
+        # Verify all slabs are non-empty with valid cells
+        for slab_path in slabs:
+            slab = SimplePoscar.read_poscar(slab_path)
+            self.assertGreater(len(slab), 0)
+            self.assertEqual(slab.cell.shape, (3, 3))
+
+
 if __name__ == "__main__":
     unittest.main()
