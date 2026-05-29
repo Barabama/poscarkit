@@ -16,6 +16,7 @@ FUNC_NAMES = [
     ("Count CN", "#E8A838"),
     ("Slice", "#D94A4A"),
     ("Slice to CountCN", "#9B59B6"),
+    ("Surface", "#E74C3C"),
     ("Thermo", "#1ABC9C"),
     ("Supercell", "#E67E22"),
     ("Compare", "#8E44AD"),
@@ -401,7 +402,7 @@ class PoscaKitGUI:
                     cmd_modeling, cmd_countcn, cmd_slice,
                     cmd_slice_to_countcn, cmd_supercell,
                     cmd_compare, cmd_merge, cmd_separate,
-                    cmd_import_to_model, cmd_thermo,
+                    cmd_import_to_model, cmd_thermo, cmd_surface,
                 )
                 handlers = {
                     "Modeling": cmd_modeling,
@@ -409,6 +410,7 @@ class PoscaKitGUI:
                     "Count CN": cmd_countcn,
                     "Slice": cmd_slice,
                     "Slice to CountCN": cmd_slice_to_countcn,
+                    "Surface": cmd_surface,
                     "Thermo": cmd_thermo,
                     "Supercell": cmd_supercell,
                     "Compare": cmd_compare,
