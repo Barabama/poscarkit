@@ -420,9 +420,10 @@ class TestSummaryCSV(unittest.TestCase):
     def test_summary_csv_columns(self):
         """Summary CSV has all required columns with valid values."""
         poscar = _make_fcc_bulk_poscar(self.temp_dir)
+        tname = "test_csv"
         builder = SurfaceBuilder(
             poscar=poscar, miller=(1, 1, 1), layers=2, vacuum=15.0,
-            outdir=self.temp_dir,
+            outdir=self.temp_dir, name=tname,
         )
         builder._transform_cell()
         builder._identify_layers()
@@ -432,8 +433,7 @@ class TestSummaryCSV(unittest.TestCase):
         self.assertGreater(len(slabs), 0)
 
         miller_str = "111"
-        name = poscar.stem
-        csv_path = self.temp_dir / f"{name}-slab-{miller_str}" / "summary.csv"
+        csv_path = self.temp_dir / f"{tname}-slab-{miller_str}" / "summary.csv"
         self.assertTrue(csv_path.exists(), f"Summary CSV not found at {csv_path}")
 
         import csv as csv_mod

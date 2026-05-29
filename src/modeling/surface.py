@@ -53,8 +53,10 @@ class SurfaceBuilder:
         fix_z_only: bool = False,
         outdir: Path | None = None,
         precision: int = 2,
+        name: str = "surface",
     ):
         self.poscar = Path(poscar)
+        self.name = name
         self.miller = miller
         self.n_layers = layers
         self.vacuum = vacuum
@@ -383,7 +385,7 @@ class SurfaceBuilder:
 
         all_slabs = []
 
-        name = self.poscar.stem
+        name = self.name
         miller_str = "".join(str(d) for d in self.miller)
 
         subdir = outdir / f"{name}-slab-{miller_str}"

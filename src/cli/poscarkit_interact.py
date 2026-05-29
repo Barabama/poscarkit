@@ -563,6 +563,7 @@ class PoscarkitInteract:
         """
         from src.modeling.surface import SurfaceBuilder
 
+        name = self._handle_name()
         poscar = self._handle_poscar()
         outdir = self._handle_outdir()
         miller = self._handle_miller()
@@ -593,6 +594,7 @@ class PoscarkitInteract:
             fix_layers=fix_layers,
             fix_z_only=fix_z_only,
             outdir=outdir,
+            name=name,
         )
         builder._transform_cell()
         builder._identify_layers()

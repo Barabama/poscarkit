@@ -56,6 +56,7 @@ EXAMPLES:
   poscarkit compare --poscar1 POSCAR1.vasp --poscar2 POSCAR2.vasp
   poscarkit merge --poscars POSCAR1.vasp POSCAR2.vasp POSCAR3.vasp --outdir output/
   poscarkit separate --poscar POSCAR.vasp --key note --outdir output/
+  poscarkit surface POSCAR.vasp --miller 1 1 1 --layers 3 --name my_slab
   poscarkit import-to-model --csv tc_exps.csv --phase fcc -t 473 873 1273
   poscarkit import-to-model --csv pandat-data.csv --phase fcc -t 873 -o print
   poscarkit thermo --data sof_data.xlsx --tdb database.TDB --outdir output/
@@ -325,6 +326,7 @@ def cmd_import_to_model(args: argparse.Namespace) -> int:
 def cmd_surface(args: argparse.Namespace) -> int:
     poscar = Path(args.poscar) if args.poscar else None
     outdir = Path(args.outdir) if args.outdir else Path("output")
+    name = args.name or "surface"
     miller = tuple(args.miller)
     layers = args.layers
     vacuum = args.vacuum
@@ -348,6 +350,7 @@ def cmd_surface(args: argparse.Namespace) -> int:
         fix_z_only=fix_z_only,
         outdir=outdir,
         precision=getattr(args, "precision", 2),
+        name=name,
     )
 
     try:
@@ -636,6 +639,13 @@ def main() -> int:
         type=str,
         default="output",
         help="Output directory (default: output)",
+    )
+    parser_surface.add_argument(
+        "--name",
+        "-n",
+        type=str,
+        default="surface",
+        help="Name for output directory and files (default: surface)",
     )
     parser_surface.add_argument(
         "--precision",

@@ -708,6 +708,7 @@ def config_form(parent, cfg: dict):
 # ------------------------------------------------------------------ #
 
 def surface_form(parent, cfg: dict):
+    name_var = _entry(parent, "Name", cfg, "name", "surface")
     poscar_var = tk.StringVar(value=str(cfg.get("poscar", "")))
     _file_row(parent, "POSCAR file", poscar_var)
     outdir_var = tk.StringVar(value=str(cfg.get("outdir", "output")))
@@ -722,6 +723,7 @@ def surface_form(parent, cfg: dict):
     def get_args():
         fix_raw = fix_layers_var.get().strip()
         return argparse.Namespace(
+            name=name_var.get(),
             poscar=poscar_var.get(),
             outdir=outdir_var.get(),
             miller=[int(v.get()) for v in miller_vars],
