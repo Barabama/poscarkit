@@ -59,7 +59,7 @@ class TestLayerIdentification(unittest.TestCase):
         shutil.rmtree(self.temp_dir)
 
     def test_identify_layers_fcc111(self):
-        """FCC bulk transformed to (111) orientation identifies correct layers."""
+        """FCC bulk transformed to (111) orientation identifies 3 layers."""
         poscar = _make_fcc_bulk_poscar(self.temp_dir)
         builder = SurfaceBuilder(
             poscar=poscar, miller=(1, 1, 1), layers=3, vacuum=15.0,
@@ -68,7 +68,8 @@ class TestLayerIdentification(unittest.TestCase):
         builder._transform_cell()
         layers = builder._identify_layers()
 
-        self.assertGreater(len(layers), 0, "Should find at least one layer")
+        self.assertEqual(len(layers), 3,
+                         "FCC(111) 4-atom cell should yield 3 distinct layers")
 
         for layer in layers:
             self.assertIsInstance(layer, Layer)
@@ -78,7 +79,7 @@ class TestLayerIdentification(unittest.TestCase):
                             f"z_centroid {layer.z_centroid} not in [0,1]")
 
     def test_identify_layers_bcc100(self):
-        """BCC bulk (100) transformation identifies layers."""
+        """BCC bulk (100) transformation identifies 2 layers."""
         poscar = _make_bcc_bulk_poscar(self.temp_dir)
         builder = SurfaceBuilder(
             poscar=poscar, miller=(1, 0, 0), layers=3, vacuum=15.0,
@@ -87,10 +88,11 @@ class TestLayerIdentification(unittest.TestCase):
         builder._transform_cell()
         layers = builder._identify_layers()
 
-        self.assertGreater(len(layers), 0)
+        self.assertEqual(len(layers), 2,
+                         "BCC(100) 2-atom cell should yield 2 distinct layers")
 
     def test_identify_layers_custom_miller(self):
-        """Arbitrary Miller index (2,1,0) on FCC bulk."""
+        """FCC (2,1,0) transformation identifies 10 layers."""
         poscar = _make_fcc_bulk_poscar(self.temp_dir)
         builder = SurfaceBuilder(
             poscar=poscar, miller=(2, 1, 0), layers=3, vacuum=15.0,
@@ -99,7 +101,8 @@ class TestLayerIdentification(unittest.TestCase):
         builder._transform_cell()
         layers = builder._identify_layers()
 
-        self.assertGreater(len(layers), 0)
+        self.assertEqual(len(layers), 10,
+                         "FCC(210) 4-atom cell should yield 10 distinct layers")
 
 
 if __name__ == "__main__":

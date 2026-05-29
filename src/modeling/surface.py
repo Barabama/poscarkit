@@ -1,7 +1,5 @@
 # src/modeling/surface.py
 
-import csv
-import logging
 from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
@@ -20,7 +18,7 @@ class Layer:
         index: Layer index (0 = lowest z, ascending).
         z_centroid: Mean fractional z coordinate of atoms in this layer.
         atoms: List of Atom objects in this layer.
-        composition: Element composition string (e.g. "Co3Ni3V1").
+        composition: Element composition string (e.g. "Co3Ni3V").
     """
     index: int
     z_centroid: float
@@ -74,7 +72,6 @@ class SurfaceBuilder:
         self._bulk_struct = SimplePoscar.read_poscar(self.poscar)
         self._transformed: Struct | None = None
         self._layers: list[Layer] = []
-        self._gaps: list[float] = []
 
     def _transform_cell(self) -> Struct:
         """Transform bulk cell so z-axis aligns with surface normal.
@@ -112,8 +109,10 @@ class SurfaceBuilder:
         return self._transformed
 
     def _identify_layers(self) -> list[Layer]:
-        """Identify atomic layers in the transformed bulk using circular gap detection.
+        """Identify atomic layers in the transformed bulk.
 
+        Groups atoms by their rounded fractional z-coordinate, which
+        reliably separates crystallographic layers regardless of cell size.
         Returns list of Layer objects ordered by fractional z ascending.
         """
         if self._transformed is None:
@@ -123,47 +122,41 @@ class SurfaceBuilder:
         coords = struct.get_coords(direct=True)
         z_vals = coords[:, 2]
 
-        # Sort atoms by z
-        sorted_idx = np.argsort(z_vals)
-        sorted_z = z_vals[sorted_idx]
-
-        n_atoms = len(sorted_z)
+        n_atoms = len(z_vals)
         if n_atoms == 0:
             return []
 
-        # gaps between consecutive atoms
-        gaps = np.diff(sorted_z)
-        # wrap-around gap
-        wrap_gap = np.array([1.0 - sorted_z[-1] + sorted_z[0]])
+        # Round z to configured precision
+        z_rounded = np.round(z_vals, decimals=self.precision)
 
-        all_gaps = np.concatenate([gaps, wrap_gap])
-        threshold = np.median(all_gaps) * 3.0
+        # Group atoms by rounded z
+        unique_z = np.sort(np.unique(z_rounded))
 
-        # Build layers from large-gap-delimited groups
-        groups = []
-        current_group = [sorted_idx[0]]
+        # Merge top and bottom if they represent the same layer
+        # (periodic boundary: z ~ 0.0 and z ~ 1.0 round to 0.00 and 1.00)
+        if len(unique_z) >= 2:
+            gap = 1.0 - unique_z[-1] + unique_z[0]
+            # If the wrap gap is <= the precision unit, merge
+            wrap_threshold = 1.5 * 10 ** (-self.precision)
+            if gap <= wrap_threshold:
+                # Merge: atoms at z ~ 1.0 become part of z ~ 0.0 layer
+                z_rounded[z_rounded >= unique_z[-1] - 1e-10] = unique_z[0]
+                unique_z = unique_z[:-1]  # Remove the top group
 
-        for i in range(1, n_atoms):
-            if gaps[i - 1] > threshold:
-                groups.append(current_group)
-                current_group = []
-            current_group.append(sorted_idx[i])
-
-        # Handle wrap: if wrap_gap is small, merge first and last
-        if wrap_gap <= threshold and groups:
-            groups[0] = current_group + groups[0]
-        else:
-            groups.append(current_group)
-
-        # Convert to Layer objects
+        # Build Layer objects from groups
         result = []
-        for li, indices in enumerate(groups):
-            atoms_in_layer = [struct[idx] for idx in indices]
-            z_centroid = float(np.mean([struct[idx].coord[2] for idx in indices]))
+        for li, zu in enumerate(unique_z):
+            mask = np.isclose(z_rounded, zu, atol=0.5 * 10 ** (-self.precision))
+            indices = np.where(mask)[0]
+            atoms_in_layer = [struct[i] for i in indices]
+            z_centroid = float(np.mean(z_vals[indices]))
             z_centroid = z_centroid % 1.0
 
             sym_counts = Counter(a.symbol for a in atoms_in_layer)
-            comp = "".join(f"{s}{c}" for s, c in sorted(sym_counts.items()))
+            comp = "".join(
+                f"{s}{c}" if c > 1 else s
+                for s, c in sorted(sym_counts.items())
+            )
 
             result.append(Layer(
                 index=li,
@@ -172,10 +165,8 @@ class SurfaceBuilder:
                 composition=comp,
             ))
 
-        # Sort by z_centroid
+        # Sort by z_centroid ascending
         result.sort(key=lambda layer: layer.z_centroid)
-
-        # Re-index after sorting
         for i, layer in enumerate(result):
             layer.index = i
 
