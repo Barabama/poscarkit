@@ -257,8 +257,24 @@ class Slicer:
             transform=fig.transFigure,
         )
 
-        # Adjust layout to include annotation and ensure canvas expands to fit text
-        # plt.tight_layout()
+        # -- Scale bar (10 Å) in lower-left corner --
+        ax = plt.gca()
+        bar_length = 10.0
+        bar_y0 = float(y_min + y_margin + (y_max - y_min) * 0.03)
+        bar_x0 = float(x_min + x_margin + (x_max - x_min) * 0.03)
+        bar_height = float((y_max - y_min) * 0.015)
+        from matplotlib.patches import Rectangle
+        ax.add_patch(
+            Rectangle((bar_x0, bar_y0), bar_length, bar_height,
+                      linewidth=1.2, edgecolor="black", facecolor="white")
+        )
+        ax.text(
+            bar_x0 + bar_length / 2, bar_y0 + bar_height * 3,
+            r"10 $\mathrm{\AA}$",
+            ha="center", va="bottom", fontsize=14,
+            fontname="Times New Roman", weight="bold",
+        )
+
         plt.savefig(imgpath, bbox_inches="tight", bbox_extra_artists=[legend, annotation])
         plt.close()
 
