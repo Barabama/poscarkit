@@ -262,22 +262,23 @@ class Slicer:
         bar_length = 10.0
         bar_y0 = float(y_min + y_margin + (y_max - y_min) * 0.03)
         bar_x0 = float(x_min + x_margin + (x_max - x_min) * 0.03)
-        bar_height = float((y_max - y_min) * 0.015)
+        bar_height = float((y_max - y_min) * 0.01)
         from matplotlib.patches import Rectangle
         # Semi-transparent white backdrop to prevent atom overlap
+        pad = bar_height * 0.5
         ax.add_patch(
             Rectangle(
-                (bar_x0 - bar_height, bar_y0 - bar_height),
-                bar_length + bar_height * 2, bar_height * 12,
+                (bar_x0 - pad, bar_y0 - pad),
+                bar_length + pad * 2, bar_height * 5 + pad * 2,
                 facecolor="white", alpha=0.7, edgecolor="none", zorder=2,
             )
         )
         ax.add_patch(
             Rectangle((bar_x0, bar_y0), bar_length, bar_height,
-                      linewidth=1.2, edgecolor="black", facecolor="white", zorder=3)
+                      linewidth=0.5, edgecolor="black", facecolor="black", zorder=3)
         )
         ax.text(
-            bar_x0 + bar_length / 2, bar_y0 + bar_height * 3,
+            bar_x0 + bar_length / 2, bar_y0 + bar_height * 1.5,
             r"10 $\mathrm{\AA}$",
             ha="center", va="bottom", fontsize=14,
             fontname="Times New Roman", weight="bold", zorder=3,
