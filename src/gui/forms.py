@@ -10,6 +10,19 @@ from pathlib import Path
 #  Shared widget helpers                                             #
 # ------------------------------------------------------------------ #
 
+def _get_phase_list(cfg: dict) -> list[str]:
+    """Dynamically discover available phases from config dict.
+    A phase is any top-level dict key containing a 'cell' entry.
+    Standard phases (FCC, BCC, HCP) are always listed first.
+    """
+    standard = ["FCC", "BCC", "HCP"]
+    discovered = []
+    for key, value in cfg.items():
+        if isinstance(value, dict) and "cell" in value and key not in standard:
+            discovered.append(key)
+    return [""] + standard + discovered
+
+
 def _entry(parent, label, cfg, key, default=""):
     """Labelled Entry row — self-packing."""
     f = tk.Frame(parent)
@@ -293,7 +306,7 @@ def modeling_form(parent, cfg: dict):
     _file_row(parent, "POSCAR file", poscar_var)
     outdir_var = tk.StringVar(value=str(cfg.get("outdir", "output")))
     _dir_row(parent, "Output dir", outdir_var)
-    _, phase_var = _combo(parent, "Phase", ["", "FCC", "BCC", "HCP"], cfg, "phase")
+    _, phase_var = _combo(parent, "Phase", _get_phase_list(cfg), cfg, "phase")
     config_var = tk.StringVar(value="config.toml")
 
     # SOF editor container (rebuilt on phase/config change)
@@ -358,7 +371,7 @@ def modeling_form(parent, cfg: dict):
 def import_to_modeling_form(parent, cfg: dict):
     csv_var = tk.StringVar()
     _file_row(parent, "CSV/XLSX file", csv_var)
-    _, phase_var = _combo(parent, "Phase", ["", "FCC", "BCC", "HCP"], cfg, "phase")
+    _, phase_var = _combo(parent, "Phase", _get_phase_list(cfg), cfg, "phase")
     temps_var = tk.StringVar()
     f_t = tk.Frame(parent)
     f_t.pack(fill=tk.X, pady=2)
@@ -630,7 +643,7 @@ def config_form(parent, cfg: dict):
     _file_row(parent, "POSCAR file", poscar_var)
     outdir_var = tk.StringVar(value=str(cfg.get("outdir", "output")))
     _dir_row(parent, "Output dir", outdir_var)
-    _, phase_var = _combo(parent, "Phase", ["", "FCC", "BCC", "HCP"], cfg, "phase")
+    _, phase_var = _combo(parent, "Phase", _get_phase_list(cfg), cfg, "phase")
 
     # SOF editor container (rebuilt on phase/config change)
     sof_container = tk.Frame(parent)
