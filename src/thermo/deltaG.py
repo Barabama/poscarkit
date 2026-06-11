@@ -77,6 +77,13 @@ def _eval_tdb_expr(expr_str: str, T: np.ndarray) -> np.ndarray:
     restricted eval — the namespace contains only numpy arrays and math
     functions, with no access to builtins.
     """
-    expr = expr_str.replace("LN(", "log(").replace("EXP(", "exp(")
+    import re
+    expr = expr_str.replace("LN(", "log(").replace("ln(", "log(").replace("EXP(", "exp(")
+    # Prevent numpy 'negative integer power' error: T**(-1) → T**(-1.0)
+    expr = re.sub(
+        r'\*\*(\()?(-?\d+)(\))?(?![\d.])',
+        lambda m: f'**{m.group(1) or ""}{m.group(2)}.0{m.group(3) or ""}',
+        expr,
+    )
     ns = {"T": T, "log": np.log, "exp": np.exp, "__builtins__": {}}
     return eval(expr, ns)

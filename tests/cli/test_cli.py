@@ -14,6 +14,12 @@ from src.cli.poscarkit import (
     cmd_compare,
     cmd_merge,
     cmd_separate,
+    cmd_countcn,
+    cmd_slice,
+    cmd_slice_to_countcn,
+    cmd_import_to_model,
+    cmd_thermo,
+    cmd_surface,
 )
 import argparse
 
@@ -342,6 +348,296 @@ class TestCLI(unittest.TestCase):
         )
 
         exit_code = cmd_separate(args)
+        self.assertEqual(exit_code, 1)
+
+    # ------------------------------------------------------------------ #
+    #  Count CN                                                          #
+    # ------------------------------------------------------------------ #
+
+    def test_cmd_countcn(self):
+        """Test countcn command with KDTree backend."""
+        outdir = self.test_dir / "output"
+        args = argparse.Namespace(
+            name="test_countcn",
+            poscar=str(self.poscar_file),
+            outdir=str(outdir),
+            cutoff_mult=1.1,
+            parallel=2,
+            by_ase=False,
+            pbc=False,
+        )
+        cmd_countcn(args)
+        self.assertTrue(outdir.exists())
+        self.assertGreater(len(list(outdir.rglob("*.csv"))), 0)
+
+    def test_cmd_countcn_ase(self):
+        """Test countcn command with ASE backend."""
+        outdir = self.test_dir / "output"
+        args = argparse.Namespace(
+            name="test_countcn_ase",
+            poscar=str(self.poscar_file),
+            outdir=str(outdir),
+            cutoff_mult=1.1,
+            parallel=2,
+            by_ase=True,
+            pbc=False,
+        )
+        cmd_countcn(args)
+        self.assertTrue(outdir.exists())
+
+    def test_cmd_countcn_pbc(self):
+        """Test countcn command with PBC enabled."""
+        outdir = self.test_dir / "output"
+        args = argparse.Namespace(
+            name="test_countcn_pbc",
+            poscar=str(self.poscar_file),
+            outdir=str(outdir),
+            cutoff_mult=1.1,
+            parallel=2,
+            by_ase=False,
+            pbc=True,
+        )
+        cmd_countcn(args)
+        self.assertTrue(outdir.exists())
+
+    def test_cmd_countcn_invalid_poscar(self):
+        """Test countcn command with invalid POSCAR file."""
+        outdir = self.test_dir / "output"
+        args = argparse.Namespace(
+            name="test_countcn",
+            poscar=str(self.test_dir / "nonexistent.vasp"),
+            outdir=str(outdir),
+            cutoff_mult=1.1,
+            parallel=2,
+            by_ase=False,
+            pbc=False,
+        )
+        exit_code = cmd_countcn(args)
+        self.assertEqual(exit_code, 1)
+
+    # ------------------------------------------------------------------ #
+    #  Slice                                                             #
+    # ------------------------------------------------------------------ #
+
+    def test_cmd_slice(self):
+        """Test slice command."""
+        outdir = self.test_dir / "output"
+        args = argparse.Namespace(
+            name="test_slice",
+            poscar=str(self.poscar_file),
+            outdir=str(outdir),
+            miller_index=[1, 1, 1],
+        )
+        cmd_slice(args)
+        self.assertTrue(outdir.exists())
+        self.assertGreater(len(list(outdir.rglob("*.vasp"))), 0)
+
+    def test_cmd_slice_invalid_poscar(self):
+        """Test slice command with invalid POSCAR file."""
+        outdir = self.test_dir / "output"
+        args = argparse.Namespace(
+            name="test_slice",
+            poscar=str(self.test_dir / "nonexistent.vasp"),
+            outdir=str(outdir),
+            miller_index=[1, 1, 1],
+        )
+        exit_code = cmd_slice(args)
+        self.assertEqual(exit_code, 1)
+
+    # ------------------------------------------------------------------ #
+    #  Slice to CountCN                                                  #
+    # ------------------------------------------------------------------ #
+
+    def test_cmd_slice_to_countcn(self):
+        """Test slice-to-countcn command."""
+        outdir = self.test_dir / "output"
+        args = argparse.Namespace(
+            name="test_slice_to_countcn",
+            poscar=str(self.poscar_file),
+            outdir=str(outdir),
+            miller_index=[0, 0, 1],
+            pbc=False,
+            by_ase=False,
+        )
+        cmd_slice_to_countcn(args)
+        self.assertTrue(outdir.exists())
+
+    def test_cmd_slice_to_countcn_invalid_poscar(self):
+        """Test slice-to-countcn command with invalid POSCAR file."""
+        outdir = self.test_dir / "output"
+        args = argparse.Namespace(
+            name="test_slice_to_countcn",
+            poscar=str(self.test_dir / "nonexistent.vasp"),
+            outdir=str(outdir),
+            miller_index=[0, 0, 1],
+            pbc=False,
+            by_ase=False,
+        )
+        exit_code = cmd_slice_to_countcn(args)
+        self.assertEqual(exit_code, 1)
+
+    # ------------------------------------------------------------------ #
+    #  Surface                                                           #
+    # ------------------------------------------------------------------ #
+
+    def _make_large_fcc_fixture(self, path):
+        """Build a 3x3x3 FCC bulk supercell for surface slab testing."""
+        from ase.build import bulk
+        import numpy as np
+        from src.modeling.base import SimplePoscar, Struct, Atom
+
+        atoms = bulk("Au", "fcc", a=4.08, cubic=True)
+        atoms = atoms * (3, 3, 3)
+        cell = np.array(atoms.get_cell())
+        pos = atoms.get_positions()
+        syms = atoms.get_chemical_symbols()
+        atom_list = [
+            Atom(i, sym, np.array(coord), note=f"site-{sym}",
+                 constr=["T", "T", "T"])
+            for i, (sym, coord) in enumerate(zip(syms, pos))
+        ]
+        struct = Struct(cell=cell, is_direct=False, atom_list=atom_list)
+        SimplePoscar.write_poscar(path, struct, "FCC bulk 3x3x3")
+        return path
+
+    def test_cmd_surface(self):
+        """Test surface command with 3x3x3 FCC bulk."""
+        outdir = self.test_dir / "output"
+        large_poscar = self.test_dir / "bulk_fcc_333.vasp"
+        if not large_poscar.exists():
+            self._make_large_fcc_fixture(large_poscar)
+        args = argparse.Namespace(
+            poscar=str(large_poscar),
+            miller=[1, 0, 0],
+            layers=3,
+            vacuum=15.0,
+            fix_layers=None,
+            fix_z_only=False,
+            outdir=str(outdir),
+            name="test_surface",
+            precision=2,
+        )
+        cmd_surface(args)
+        self.assertTrue(outdir.exists())
+        self.assertGreater(len(list(outdir.rglob("*.vasp"))), 0)
+
+    # ------------------------------------------------------------------ #
+    #  Import to Model                                                   #
+    # ------------------------------------------------------------------ #
+
+    def test_cmd_import_to_model_print(self):
+        """Test import-to-model in print mode (no file I/O)."""
+        csv_path = Path("ref_sof_data/tc_exps.csv")
+        config_path = Path("config.toml")
+        if not csv_path.is_file() or not config_path.is_file():
+            self.skipTest("Reference CSV or config.toml not found")
+        outdir = self.test_dir / "output"
+        args = argparse.Namespace(
+            csv=str(csv_path),
+            config=str(config_path),
+            phase="fcc",
+            temperatures=[873.0],
+            sublattice_map=None,
+            outdir=str(outdir),
+            name="test_import",
+            factors=[3, 3, 3],
+            seeds=None,
+            batch_size=1,
+            enable_sqs=False,
+            iterations=10000000,
+            output="print",
+        )
+        exit_code = cmd_import_to_model(args)
+        self.assertEqual(exit_code, 0)
+
+    def test_cmd_import_to_model_invalid_csv(self):
+        """Test import-to-model with missing CSV file."""
+        args = argparse.Namespace(
+            csv=str(self.test_dir / "nonexistent.csv"),
+            config="config.toml",
+            phase="fcc",
+            temperatures=[873.0],
+            sublattice_map=None,
+            outdir="output",
+            name="test_import",
+            factors=[3, 3, 3],
+            seeds=None,
+            batch_size=1,
+            enable_sqs=False,
+            iterations=10000000,
+            output="run",
+        )
+        exit_code = cmd_import_to_model(args)
+        self.assertEqual(exit_code, 1)
+
+    def test_cmd_import_to_model_no_temps(self):
+        """Test import-to-model with no temperatures."""
+        csv_path = Path("ref_sof_data/tc_exps.csv")
+        if not csv_path.is_file():
+            self.skipTest("Reference CSV not found")
+        args = argparse.Namespace(
+            csv=str(csv_path),
+            config="config.toml",
+            phase="fcc",
+            temperatures=[],
+            sublattice_map=None,
+            outdir="output",
+            name="test_import",
+            factors=[3, 3, 3],
+            seeds=None,
+            batch_size=1,
+            enable_sqs=False,
+            iterations=10000000,
+            output="run",
+        )
+        exit_code = cmd_import_to_model(args)
+        self.assertEqual(exit_code, 1)
+
+    # ------------------------------------------------------------------ #
+    #  Thermo                                                            #
+    # ------------------------------------------------------------------ #
+
+    def test_cmd_thermo(self):
+        """Test thermo command with reference fixture files."""
+        data_path = Path("ref_sof_data/tc_exps.csv")
+        tdb_path = Path("ref_tdb/test1.tdb")
+        if not data_path.is_file() or not tdb_path.is_file():
+            self.skipTest("Reference data or TDB file not found")
+        outdir = self.test_dir / "output"
+        args = argparse.Namespace(
+            data=str(data_path),
+            tdb=str(tdb_path),
+            outdir=str(outdir),
+            name="test_thermo",
+        )
+        cmd_thermo(args)
+        self.assertTrue(outdir.exists())
+
+    def test_cmd_thermo_invalid_data(self):
+        """Test thermo command with missing data file."""
+        outdir = self.test_dir / "output"
+        args = argparse.Namespace(
+            data=str(self.test_dir / "nonexistent.xlsx"),
+            tdb="ref_tdb/test1.tdb",
+            outdir=str(outdir),
+            name="test_thermo",
+        )
+        exit_code = cmd_thermo(args)
+        self.assertEqual(exit_code, 1)
+
+    def test_cmd_thermo_invalid_tdb(self):
+        """Test thermo command with missing TDB file."""
+        data_path = Path("ref_sof_data/tc_exps.csv")
+        if not data_path.is_file():
+            self.skipTest("Reference data file not found")
+        outdir = self.test_dir / "output"
+        args = argparse.Namespace(
+            data=str(data_path),
+            tdb=str(self.test_dir / "nonexistent.tdb"),
+            outdir=str(outdir),
+            name="test_thermo",
+        )
+        exit_code = cmd_thermo(args)
         self.assertEqual(exit_code, 1)
 
 

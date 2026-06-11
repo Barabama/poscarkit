@@ -36,8 +36,7 @@ class TestModelingWorkflow(unittest.TestCase):
     def setUp(self):
         """Set up test fixtures."""
         # Create a temporary directory for test outputs
-        # self.test_dir = Path(tempfile.mkdtemp())  # Using actual temp directory now
-        self.test_dir = Path("output")
+        self.test_dir = Path(tempfile.mkdtemp())
         self.output_dir = self.test_dir.joinpath("output")
         self.output_dir.mkdir(exist_ok=True, parents=True)  # Ensure parents are created
 

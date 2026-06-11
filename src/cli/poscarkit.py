@@ -302,7 +302,7 @@ def cmd_import_to_model(args: argparse.Namespace) -> int:
         logging.error("No temperatures specified. Use --temperatures / -t")
         return 1
 
-    from workflow.import_to_model import run_import_to_model
+    from src.workflow.import_to_model import run_import_to_model
 
     results = run_import_to_model(
         csv_path=str(csv_path),

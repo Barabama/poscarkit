@@ -3,7 +3,7 @@
 **A toolkit for modeling VASP POSCAR files based on Sublattice Occupying Fractions (SOFs).**
 **基于亚晶格占位分数 (SOFs) 的 VASP POSCAR 结构建模工具包.**
 
-[![Version](https://img.shields.io/badge/version-0.10.4-blue)](./pyproject.toml)
+[![Version](https://img.shields.io/badge/version-0.10.5-blue)](./pyproject.toml)
 [![Python](https://img.shields.io/badge/python-≥3.10-blue)](./pyproject.toml)
 [![License](https://img.shields.io/badge/license-MIT-green)](./LICENSE)
 
@@ -58,7 +58,8 @@ python main.py modeling --help          # with args → CLI · 带参数→命�
 - **SOF editor · 占位编辑器**: Modeling form includes an inline SOF table (add/remove elements, real-time sum check)
 - **Log area · 日志区**: real-time logging output at the bottom
 - **Run in background · 后台运行**: tasks execute in a separate thread, UI stays responsive
-- **Save as defaults · 保存配置**: checkbox to persist current form values to `config.toml`
+- **Save Config · 保存配置**: button on the Config form to persist all settings to `config.toml`
+- **Load from config · 从配置加载**: button on each form to reload the latest config values into the form
 - Scrollable form area with draggable form/log divider · 表单区可滚动，表单/日志分隔线可拖拽
 
 ---
@@ -153,13 +154,17 @@ vacuum (bottom 2 Å + top), and a summary CSV with composition deviation, dipole
 
 ## Interactive Mode · 交互模式
 
-`python main.py` (no arguments) enters a numbered menu · `python main.py`（无参数）进入菜单:
+Launch the interactive numbered menu:
+
+```bash
+python -m src.cli.poscarkit_interact
+```
 
 ```
  1) Help                5) Slice to layers    9)  Merge
  2) Read config         6) Slice to CountCN  10) Separate
- 3) Run Modeling        7) Make Supercell    11) Import+Model
- 4) Count CN            8) Compare           12) Thermo
+ 3) Run Modeling        7) Make Supercell    11) Import to Model
+ 4) Count CN            8) Compare           12) Thermo Analysis
                                           13) Surface Slab
 ```
 
@@ -230,6 +235,7 @@ Custom phases can be added · 可添加自定义相 (see `config.toml` Advanced 
 │   │   └── plot.py              #    thermo plots · 热力学绘图
 │   ├── utils/                   # utilities · 工具
 │   └── workflow/                # high-level workflows · 高层工作流
+│       ├── import_to_model.py   #    import SOFs from CSV/XLSX and run modeling
 │       ├── modeling.py          #    supercell + allocation · 超胞+分配
 │       ├── slice_to_countcn.py  #    slice + CN per layer · 切片+逐层配位
 │       └── thermo.py            #    Sconf + DeltaG pipeline · 热力学管道
@@ -248,6 +254,9 @@ Custom phases can be added · 可添加自定义相 (see `config.toml` Advanced 
 python -m unittest discover tests             # all tests · 全部测试
 python -m unittest tests.modeling.test_simple_poscar
 python -m unittest tests.modeling.test_countcn
+python -m unittest tests.modeling.test_slice
+python -m unittest tests.modeling.test_supercell
+python -m unittest tests.modeling.test_surface
 python -m unittest tests.workflow.test_modeling
 ```
 
@@ -264,9 +273,6 @@ nuitka --standalone --onefile --output-dir=dist --jobs=4 --lto=yes \
     --nofollow-import-to=matplotlib.tests --nofollow-import-to=pandas.tests \
     --nofollow-import-to=pytest --nofollow-import-to=setuptools.tests \
     --windows-icon-from-ico="src/gui/poscarkit.ico" --windows-console-mode=disable \
-    --output-file=poscarkit-0.10.3.exe \
-    --file-version=0.10.3 \
-    --copyright="(C) 2025 MCMF, Fuzhou University" \
     main.py
 ```
 

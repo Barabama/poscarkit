@@ -478,7 +478,7 @@ class PoscarkitInteract:
         """Import SOFs from CSV/XLSX and run modeling."""
         from src.io.readers import detect_format, read as read_sof_data
         from src.io.ir import get_sofs_at, parse_sublattice_map
-        from workflow.import_to_model import run_import_to_model as run_wf
+        from src.workflow.import_to_model import run_import_to_model as run_wf
 
         csv_path = Path(input("Enter CSV/XLSX file path\n> ").strip())
         while not csv_path.is_file():
