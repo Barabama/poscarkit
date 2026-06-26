@@ -47,7 +47,12 @@ def read_tc_exps(path: str, phase_hint: str | None = None) -> SOFData:
 
     T = _align_and_extract_T(df_y, df_g)
 
-    composition = _extract_composition_from_x(df_x, phase)
+    try:
+        composition = _extract_composition_from_x(df_x, phase)
+    except ValueError:
+        # No X sheet — derive composition from Y site fractions + site ratios
+        composition = _derive_composition_from_y(df_y, phase, site_ratios)
+
     elements = sorted(composition.keys())
 
     Y_subl = _extract_Y_columns(df_y, phase, elements, T)
@@ -128,6 +133,37 @@ def _extract_composition_from_x(
     if not comp:
         raise ValueError(f"No X({phase},ELEM) columns found in TC data")
     return comp
+
+
+def _derive_composition_from_y(
+    df_y: pd.DataFrame, phase: str, site_ratios: list[float]
+) -> dict[str, float]:
+    """Derive nominal composition from Y site fractions when X sheet is absent.
+
+    x_j = Σ_k (ratio_k * y_j^(k))  — weighted average across sublattices.
+    Composition is T-independent; uses mean Y across all rows for noise reduction.
+    """
+    n_subl = len(site_ratios)
+    # Collect mean Y values per (subl, element) across all T
+    subl_means: list[dict[str, float]] = [{} for _ in range(n_subl)]
+    for col in df_y.columns:
+        m = re.match(
+            rf"Y\({phase},\s*(\w+)(?:#(\d+))?\)", str(col), re.IGNORECASE
+        )
+        if not m:
+            continue
+        elem = m.group(1).upper()
+        subl = int(m.group(2)) - 1 if m.group(2) else 0
+        if subl < n_subl:
+            subl_means[subl][elem] = float(df_y[col].mean())
+
+    comp: dict[str, float] = {}
+    for k, ratio in enumerate(site_ratios):
+        for elem, y_mean in subl_means[k].items():
+            comp[elem] = comp.get(elem, 0.0) + ratio * y_mean
+
+    # Drop near-zero elements
+    return {e: v for e, v in comp.items() if v > 1e-12}
 
 
 def _extract_Y_columns(
