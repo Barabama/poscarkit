@@ -90,7 +90,7 @@ def _find_T_col(df: pd.DataFrame) -> str:
 
 def _T_indices(df: pd.DataFrame, T_common: np.ndarray) -> np.ndarray:
     t_col = _find_T_col(df)
-    return np.where(np.isin(df[t_col].values, T_common))[0]
+    return np.where(np.isin(np.round(df[t_col].values, 6), T_common))[0]
 
 
 def _align_and_extract_T(

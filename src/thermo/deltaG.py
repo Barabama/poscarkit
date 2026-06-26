@@ -61,8 +61,8 @@ def calc_deltaG_random(
         resolved_expr = resolve_expression(raw_expr, functions)
         terms.append(f"{weight:.15e}*({resolved_expr})")
 
-    # Entropy contribution: R * T * Sconf_random
-    terms.append(f"{R:.15e}*T*{sconf_random:.15e}")
+    # Entropy contribution: -T * Sconf_random   (Sconf already includes R)
+    terms.append(f"-1.0*T*{sconf_random:.15e}")
 
     expr_str = "+".join(terms)
     return _eval_tdb_expr(expr_str, T_values)

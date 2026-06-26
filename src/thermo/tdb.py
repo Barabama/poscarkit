@@ -77,10 +77,11 @@ def parse_tdb(tdb_path: str, phase: str | None = None) -> dict:
 
 
 def resolve_expression(expr: str, functions: dict[str, str]) -> str:
-    """Replace all SERXX# / GHSERXX# references in an expression with function bodies.
+    """Replace all SERXX# / GHSERXX# / ETOT_SER_XX# references with function bodies.
 
     "0.25*SERCO#" → "0.25*((-6.815E+05+...))"
     "GHSERFE#"    → "((-6.815E+05+...))"
+    "ETOT_SER_CO#" → "((-6.638E+05+...))"
     Function bodies are wrapped in parentheses to preserve operator precedence.
     """
 
@@ -94,8 +95,8 @@ def resolve_expression(expr: str, functions: dict[str, str]) -> str:
             return f"({functions[ghser_name]})"
         raise KeyError(f"Function not found in TDB: {ser_name} (also tried {ghser_name})")
 
-    # Match both SERXX# and GHSERXX# (case-insensitive element suffix)
-    expr = re.sub(r"(?:GH)?SER[A-Za-z]+#", _replace_ser, expr)
+    # Match SERXX#, GHSERXX#, and ETOT_SER_XX# (case-insensitive element suffix)
+    expr = re.sub(r"(?:(?:GH)?SER[A-Za-z]+|ETOT_SER_[A-Za-z]+)#", _replace_ser, expr)
     return expr
 
 
@@ -130,9 +131,14 @@ def _parse_parameter(record: str, target_phase: str | None) -> tuple[str, str] |
 
     PARAMETER G(FCC,CO:CR;0) 1.00 ...expr...; 6000.00 N REF1 !
     """
+    # Normalize inconsistent whitespace: some TDBs have spaces around
+    # ":" and ";" in parameter signatures (e.g. G(FCC,V :AL;0)).
+    # Removing them avoids fragile regex patterns.
+    record_norm = re.sub(r"\s*([:;])", r"\1", record)
+
     m = re.match(
         r"PARAMETER\s+G\((\S+),(\S+);(\d+)\)\s+\S+\s+(.+);\s*\S+",
-        record,
+        record_norm,
         re.IGNORECASE,
     )
     if not m:
