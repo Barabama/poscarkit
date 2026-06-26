@@ -144,13 +144,19 @@ cell = [[2.6525, -4.593, 0], [2.6525, 4.593, 0], [0, 0, 4.242]]
 # ====== Advanced Usage ======
 # It is allowed to add custom structures
 
-# phase = "MyPhase"
-# [MyPhase]
-# cell = [[2, 2, 0],[2, 2, 0],[0, 0, 3.8]]
-# subl1.atoms=["Au", [[0, 0, 0]]]
-# subl2.atoms=["Cu", [[0.5, 0.5, 0.5]]]
-# [MyPhase.subl1.sofs]
-# Au = 1.0
-# [MyPhase.subl2.sofs]
-# Cu = 1.0
+# phase = "L10"
+# [L10]
+# cell = [3.86, 3.86, 3.64]
+# 1a.atoms=["Au", [[0, 0, 0]]]
+# 1c.atoms=["Cu", [[0.5, 0.5, 0]]]
+# 2e.atoms=["Ni", [[0, 0.5, 0.5], [0.5, 0, 0.5]]]
+# [L10.1a.sofs]
+# Fe = 0.2
+# Ni = 0.8
+# [L10.1c.sofs]
+# Cu = 0.7
+# Mn = 0.3
+# [L10.2e.sofs]
+# Ni = 0.5
+# Pt = 0.5
 """

@@ -3,7 +3,7 @@
 **A toolkit for modeling VASP POSCAR files based on Sublattice Occupying Fractions (SOFs).**
 **基于亚晶格占位分数 (SOFs) 的 VASP POSCAR 结构建模工具包.**
 
-[![Version](https://img.shields.io/badge/version-0.10.5-blue)](./pyproject.toml)
+[![Version](https://img.shields.io/badge/version-0.10.6-blue)](./pyproject.toml)
 [![Python](https://img.shields.io/badge/python-≥3.10-blue)](./pyproject.toml)
 [![License](https://img.shields.io/badge/license-MIT-green)](./LICENSE)
 
