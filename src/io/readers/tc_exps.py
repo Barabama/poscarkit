@@ -28,17 +28,19 @@ def read_tc_exps(path: str, phase_hint: str | None = None) -> SOFData:
     if path.endswith(".csv"):
         df = pd.read_csv(path)
         df.columns = [str(c).strip() for c in df.columns]
-        df_y = df_g = df_x = df
+        df_y = df_g = df_h = df_s = df_x = df
     else:
         xl = pd.ExcelFile(path)
         if len(xl.sheet_names) > 1:
             df_y = _find_and_read(xl, path, "Y(")
             df_g = _find_and_read(xl, path, "G(")
+            df_h = _find_and_read(xl, path, "H(")
+            df_s = _find_and_read(xl, path, "S(")
             df_x = _find_and_read(xl, path, "X(")
         else:
             df = pd.read_excel(path)
             df.columns = [str(c).strip() for c in df.columns]
-            df_y = df_g = df_x = df
+            df_y = df_g = df_h = df_s = df_x = df
 
     phase = phase_hint or _detect_phase_from_columns(df_g)
     phase = phase.upper()
@@ -58,6 +60,8 @@ def read_tc_exps(path: str, phase_hint: str | None = None) -> SOFData:
     Y_subl = _extract_Y_columns(df_y, phase, elements, T)
 
     G_real = _extract_G_real(df_g, phase, T)
+    H_real = _extract_H_real(df_h, phase, T)
+    S_real = _extract_S_real(df_s, phase, T)
 
     return SOFData(
         source_path=path,
@@ -68,6 +72,8 @@ def read_tc_exps(path: str, phase_hint: str | None = None) -> SOFData:
         composition=composition,
         elements=elements,
         G_real=G_real,
+        H_real=H_real,
+        S_real=S_real,
     )
 
 
@@ -220,3 +226,41 @@ def _extract_G_real(
         return None
     idx_g = _T_indices(df_g, T)
     return df_g[target_col].values[idx_g]
+
+
+def _extract_H_real(
+    df_h: pd.DataFrame, phase: str, T: np.ndarray
+) -> np.ndarray | None:
+    """Extract enthalpy from H(PHASE) column, aligned to T."""
+    col_name = f"H({phase})"
+    target_col = None
+    if col_name in df_h.columns:
+        target_col = col_name
+    else:
+        for col in df_h.columns:
+            if re.match(rf"H\({phase}\)", str(col), re.IGNORECASE):
+                target_col = col
+                break
+    if target_col is None:
+        return None
+    idx_h = _T_indices(df_h, T)
+    return df_h[target_col].values[idx_h]
+
+
+def _extract_S_real(
+    df_s: pd.DataFrame, phase: str, T: np.ndarray
+) -> np.ndarray | None:
+    """Extract entropy from S(PHASE) column, aligned to T."""
+    col_name = f"S({phase})"
+    target_col = None
+    if col_name in df_s.columns:
+        target_col = col_name
+    else:
+        for col in df_s.columns:
+            if re.match(rf"S\({phase}\)", str(col), re.IGNORECASE):
+                target_col = col
+                break
+    if target_col is None:
+        return None
+    idx_s = _T_indices(df_s, T)
+    return df_s[target_col].values[idx_s]

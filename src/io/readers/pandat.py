@@ -39,6 +39,8 @@ def read_pandat(path: str, phase_hint: str | None = None) -> SOFData:
     Y_subl = _extract_Y_columns(df, phase, elements)
 
     G_real = _extract_G_real(df, phase)
+    H_real = _extract_H_real(df, phase)
+    S_real = _extract_S_real(df, phase)
 
     return SOFData(
         source_path=path,
@@ -49,6 +51,8 @@ def read_pandat(path: str, phase_hint: str | None = None) -> SOFData:
         composition=composition,
         elements=elements,
         G_real=G_real,
+        H_real=H_real,
+        S_real=S_real,
     )
 
 
@@ -126,5 +130,29 @@ def _extract_G_real(df: pd.DataFrame, phase: str) -> np.ndarray | None:
     for col in df.columns:
         lower = str(col).lower()
         if lower == "g":
+            return df[col].values.astype(float)
+    return None
+
+
+def _extract_H_real(df: pd.DataFrame, phase: str) -> np.ndarray | None:
+    """Extract enthalpy from H(@PHASE) column."""
+    col_name = f"H(@{phase})"
+    if col_name in df.columns:
+        return df[col_name].values.astype(float)
+    for col in df.columns:
+        lower = str(col).lower()
+        if lower == "h":
+            return df[col].values.astype(float)
+    return None
+
+
+def _extract_S_real(df: pd.DataFrame, phase: str) -> np.ndarray | None:
+    """Extract entropy from S(@PHASE) column."""
+    col_name = f"S(@{phase})"
+    if col_name in df.columns:
+        return df[col_name].values.astype(float)
+    for col in df.columns:
+        lower = str(col).lower()
+        if lower == "s":
             return df[col].values.astype(float)
     return None
