@@ -38,6 +38,8 @@ def read_teacher(path: str, phase_hint: str | None = None) -> SOFData:
     composition = _derive_composition(Y_subl, site_ratios, elements)
 
     G_real = _find_G_column(df)
+    H_real = _find_H_column(df)
+    S_real = _find_S_column(df)
 
     return SOFData(
         source_path=path,
@@ -48,6 +50,8 @@ def read_teacher(path: str, phase_hint: str | None = None) -> SOFData:
         composition=composition,
         elements=elements,
         G_real=G_real,
+        H_real=H_real,
+        S_real=S_real,
     )
 
 
@@ -106,10 +110,7 @@ def _derive_composition(
 
 
 def _find_G_column(df: pd.DataFrame) -> np.ndarray | None:
-    """Attempt to locate a Gibbs free energy column.
-
-    Looks for: 'G', 'G()', 'G(@)', 'gibbs', 'deltaG' patterns.
-    """
+    """Locate Gibbs free energy column: G, G(), G(@), gibbs, deltaG."""
     for col in df.columns:
         col_str = str(col).strip()
         if col_str.upper() == "G":
@@ -119,5 +120,35 @@ def _find_G_column(df: pd.DataFrame) -> np.ndarray | None:
         if col_str.upper().startswith("G(@"):
             return df[col].values.astype(float)
         if "gibbs" in col_str.lower() or "deltaG" in col_str.lower():
+            return df[col].values.astype(float)
+    return None
+
+
+def _find_H_column(df: pd.DataFrame) -> np.ndarray | None:
+    """Locate enthalpy column: H, H(), H(@), enthalpy."""
+    for col in df.columns:
+        col_str = str(col).strip()
+        if col_str.upper() in ("H", "H(T)"):
+            return df[col].values.astype(float)
+        if col_str.upper().startswith("H("):
+            return df[col].values.astype(float)
+        if col_str.upper().startswith("H(@"):
+            return df[col].values.astype(float)
+        if "enthalpy" in col_str.lower() or "deltaH" in col_str.lower():
+            return df[col].values.astype(float)
+    return None
+
+
+def _find_S_column(df: pd.DataFrame) -> np.ndarray | None:
+    """Locate entropy column: S, S(), S(@), entropy."""
+    for col in df.columns:
+        col_str = str(col).strip()
+        if col_str.upper() in ("S", "S(T)"):
+            return df[col].values.astype(float)
+        if col_str.upper().startswith("S("):
+            return df[col].values.astype(float)
+        if col_str.upper().startswith("S(@"):
+            return df[col].values.astype(float)
+        if "entropy" in col_str.lower() or "deltaS" in col_str.lower():
             return df[col].values.astype(float)
     return None

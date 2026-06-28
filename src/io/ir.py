@@ -75,6 +75,8 @@ class SOFData:
     composition: dict[str, float]
     elements: list[str]
     G_real: np.ndarray | None = None
+    H_real: np.ndarray | None = None
+    S_real: np.ndarray | None = None
 
     def __post_init__(self):
         if not self.site_ratios:
