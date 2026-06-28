@@ -14,6 +14,10 @@ except Exception:
 VERSION = f"Version: {__version__} | © 2025 MCMF, Fuzhou University"
 CONTACT = "Email: wubo@fzu.edu.cn | Phone: +86 130 2381 9517"
 
+# GitHub repository for update checking
+GITHUB_REPO = "Barabama/poscarkit"
+GITHUB_API = f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest"
+
 
 def normalize_config_keys(cfg: dict) -> dict:
     """Merge case-variant phase keys so [BCC] and [bcc] resolve to the
