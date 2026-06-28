@@ -3,11 +3,13 @@
 import logging
 import threading
 import tkinter as tk
+import webbrowser
 from collections.abc import Callable
 from tkinter import ttk
 
 from src.gui.forms import FORMS, DESCRIPTIONS
-from src.config import VERSION
+from src.config import VERSION, GITHUB_REPO
+from src.utils.network import get_latest_version
 
 FUNC_NAMES = [
     ("Config", "#7F8C8D"),
@@ -265,12 +267,97 @@ class PoscaKitGUI:
                 row_frame, text=f"{label}:", font=("Arial", 10, "bold"),
                 fg="#2C3E50", width=12, anchor="w",
             ).pack(side=tk.LEFT)
-            tk.Label(
-                row_frame, text=value, font=("Arial", 10), fg="#333",
-                wraplength=480, justify=tk.LEFT,
-            ).pack(side=tk.LEFT, padx=(4, 0))
+            # Use an Entry (readonly) for selectable text
+            bg = frame.cget("bg") or "#F0F0F0"
+            val_entry = tk.Entry(
+                row_frame, font=("Arial", 10), fg="#333", bd=0,
+                readonlybackground=bg, width=max(len(value) + 2, 30),
+            )
+            val_entry.insert(0, value)
+            val_entry.configure(state="readonly")
+            val_entry.pack(side=tk.LEFT, padx=(4, 0))
+
+        # --- update checker ---
+        ttk.Separator(frame, orient=tk.HORIZONTAL).pack(fill=tk.X, pady=(12, 8))
+        self._build_update_checker(frame, version)
 
         return frame
+
+    def _build_update_checker(self, parent: tk.Frame, current_version: str):
+        """Add update check section to the About panel."""
+        tk.Label(
+            parent, text="Update Check", font=("Arial", 11, "bold"), fg="#2C3E50",
+        ).pack(anchor="w")
+
+        inner = tk.Frame(parent)
+        inner.pack(fill=tk.X, pady=(4, 0))
+
+        info_frame = tk.Frame(inner)
+        info_frame.pack(side=tk.LEFT, fill=tk.X, expand=True)
+
+        tk.Label(info_frame, text=f"Current version:  v{current_version}",
+                 font=("Arial", 10), fg="#333", anchor="w").pack(fill=tk.X)
+
+        self._update_status_var = tk.StringVar(value="Checking for updates...")
+        self._update_status_label = tk.Label(
+            info_frame, textvariable=self._update_status_var,
+            font=("Arial", 10), fg="#888", anchor="w",
+        )
+        self._update_status_label.pack(fill=tk.X)
+
+        # Button frame
+        btn_frame = tk.Frame(inner)
+        btn_frame.pack(side=tk.RIGHT, padx=(12, 0))
+
+        self._update_btn = tk.Button(
+            btn_frame, text="Check Update", bg="#2980B9", fg="white",
+            font=("Arial", 10), padx=12, pady=2,
+            command=lambda: self._check_update(current_version),
+        )
+        self._update_btn.pack()
+
+        # Store release URL for download button
+        self._release_url: str = ""
+        self._latest_version: str = ""
+
+        # Start automatic check in background
+        self.root.after(500, lambda: self._check_update(current_version))
+
+    def _check_update(self, current_version: str):
+        """Check for updates in a background thread, then update UI."""
+        self._update_status_var.set("Checking...")
+        self._update_btn.configure(state=tk.DISABLED, text="...")
+
+        def _do_check():
+            result = get_latest_version(GITHUB_REPO)
+            self.root.after(0, lambda: self._on_update_result(result, current_version))
+
+        threading.Thread(target=_do_check, daemon=True).start()
+
+    def _on_update_result(self, result: dict | None, current_version: str):
+        """Update UI with check result."""
+        if result is None:
+            self._update_status_var.set("─── Unable to connect GitHub")
+            self._update_status_label.configure(fg="#888")
+            self._update_btn.configure(state=tk.NORMAL, text="Retry", bg="#2980B9")
+            return
+
+        latest = result["version"]
+        self._latest_version = latest
+        self._release_url = result["url"]
+
+        # Simple version comparison (string works for semver 'x.y.z')
+        if latest == current_version:
+            self._update_status_var.set("✔ Up to date  (v" + latest + ")")
+            self._update_status_label.configure(fg="#27AE60")  # green
+            self._update_btn.configure(text="Check Again", state=tk.NORMAL, bg="#2980B9")
+        else:
+            self._update_status_var.set("✦ New version available:  v" + latest)
+            self._update_status_label.configure(fg="#E67E22")  # orange
+            self._update_btn.configure(
+                text="Go to Download", state=tk.NORMAL, bg="#E67E22",
+                command=lambda: webbrowser.open(self._release_url),
+            )
 
     # ------------------------------------------------------------------ #
     #  Form switching                                                    #

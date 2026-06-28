@@ -381,6 +381,13 @@ def main() -> int:
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
 
+    parser.add_argument(
+        "--version", action="store_true", help="Show version and exit"
+    )
+    parser.add_argument(
+        "--check-update", action="store_true", help="Check for updates on GitHub"
+    )
+
     subparsers = parser.add_subparsers(dest="command", help="Available commands")
 
     # Help command
@@ -855,7 +862,26 @@ def main() -> int:
     )
     parser_thermo.set_defaults(func=cmd_thermo)
 
+    from src.config import __version__ as version_str
+    from src.config import GITHUB_REPO
+
     args = parser.parse_args()
+
+    if args.version:
+        print(f"poscarkit v{version_str}")
+        return 0
+
+    if args.check_update:
+        from src.utils.network import get_latest_version
+
+        print(f"Current: v{version_str}")
+        result = get_latest_version(GITHUB_REPO)
+        if result:
+            print(f"Latest:  v{result['version']} ({result['published_at']})")
+            print(f"URL:     {result['url']}")
+        else:
+            print("Failed to check for updates.")
+        return 0
 
     if not args.command:
         parser.print_help()
