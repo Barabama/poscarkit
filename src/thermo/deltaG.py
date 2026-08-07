@@ -49,7 +49,9 @@ def calc_deltaG_random(
         if weight < 1e-30:
             continue
 
-        key = f"{phase},{':'.join(combo)}"
+        # TDB parameter keys are stored all-caps (see _parse_parameter);
+        # uppercase the composition symbols so the lookup is case-insensitive.
+        key = f"{phase.upper()},{':'.join(e.upper() for e in combo)}"
         if key not in params:
             raise KeyError(
                 f"End-member parameter not found in TDB: {key}. "

@@ -12,6 +12,7 @@ import numpy as np
 
 from src.modeling.base import SimplePoscar, Struct
 from src.modeling.supercell import make_supercell
+from src.utils.elements import canonicalize_element
 from src.utils.progress import progress
 
 
@@ -168,6 +169,14 @@ class ModelStruct:
                 fractions = {elem: 1.0}
             else:
                 fractions = _ask_normalize_fractions(site=site, fractions=fractions)
+
+            # Canonicalize element symbols ('CO' -> 'Co') so generated
+            # POSCARs always carry valid chemical symbols for ASE backends,
+            # regardless of whether the SOFs came from an export file or a
+            # hand-written config.
+            fractions = {
+                canonicalize_element(s): f for s, f in fractions.items()
+            }
 
             # Get multiplicity from length of atoms
             if "atoms" not in data:

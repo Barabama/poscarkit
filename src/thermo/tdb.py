@@ -154,7 +154,11 @@ def _parse_parameter(record: str, target_phase: str | None) -> tuple[str, str] |
         return None  # end-member only, skip interaction parameters
 
     expr = expr.replace("LN(", "ln(")
-    key = f"{p_phase.upper()},{components}"
+    # Element symbols in TDB signatures are conventionally all-caps
+    # (e.g. G(FCC,CO:CR;0)).  Uppercase each component so lookups are
+    # case-insensitive against canonicalized SOFData elements ('Co').
+    components_key = ":".join(c.upper() for c in components.split(":"))
+    key = f"{p_phase.upper()},{components_key}"
     return key, expr
 
 

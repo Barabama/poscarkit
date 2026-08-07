@@ -132,6 +132,8 @@ class TestGetSofsAt(unittest.TestCase):
             phase="FCC",
             site_ratios=[0.25, 0.75],
             T=np.array([1073.0, 1273.0]),
+            # All-caps input (as in export files) is canonicalized to
+            # Co/Cr/Cu on construction.
             Y_subl=[
                 {"CO": np.array([0.5, 0.6]), "CU": np.array([0.5, 0.4])},
                 {"CR": np.array([0.3, 0.4]), "CU": np.array([0.7, 0.6])},
@@ -143,16 +145,16 @@ class TestGetSofsAt(unittest.TestCase):
     def test_exact_match(self):
         result = get_sofs_at(self.ir, 1073.0)
         self.assertIn("1a", result)
-        self.assertAlmostEqual(result["1a"]["CO"], 0.5, places=4)
+        self.assertAlmostEqual(result["1a"]["Co"], 0.5, places=4)
 
     def test_nearest_match(self):
         result = get_sofs_at(self.ir, 1080.0)
-        self.assertAlmostEqual(result["1a"]["CO"], 0.5, places=4)
+        self.assertAlmostEqual(result["1a"]["Co"], 0.5, places=4)
 
     def test_custom_map(self):
         result = get_sofs_at(self.ir, 1073.0, sublattice_map={1: "3c", 2: "1a"})
         self.assertIn("3c", result)
-        self.assertAlmostEqual(result["3c"]["CO"], 0.5, places=4)
+        self.assertAlmostEqual(result["3c"]["Co"], 0.5, places=4)
 
 
 class TestBuildStructureInfo(unittest.TestCase):
@@ -193,9 +195,9 @@ class TestReadTeacher(unittest.TestCase):
         ir = read(str(path), phase_hint="FCC")
         self.assertEqual(ir.phase, "FCC")
         self.assertEqual(len(ir.T), 2)
-        self.assertIn("CO", ir.elements)
-        # Sublattice 1 has CO and CU
-        self.assertAlmostEqual(float(ir.Y_subl[0]["CO"][0]), 0.16, places=4)
+        self.assertIn("Co", ir.elements)
+        # Sublattice 1 has Co and Cu
+        self.assertAlmostEqual(float(ir.Y_subl[0]["Co"][0]), 0.16, places=4)
 
 
 class TestReadTcExps(unittest.TestCase):
@@ -215,8 +217,8 @@ class TestReadTcExps(unittest.TestCase):
         )
         ir = read(path, phase_hint="FCC")
         self.assertEqual(ir.phase, "FCC")
-        self.assertAlmostEqual(float(ir.Y_subl[0]["CO"][0]), 0.5, places=4)
-        self.assertAlmostEqual(float(ir.Y_subl[1]["CO"][0]), 0.2, places=4)
+        self.assertAlmostEqual(float(ir.Y_subl[0]["Co"][0]), 0.5, places=4)
+        self.assertAlmostEqual(float(ir.Y_subl[1]["Co"][0]), 0.2, places=4)
 
 
 class TestReadPandat(unittest.TestCase):
@@ -238,8 +240,8 @@ class TestReadPandat(unittest.TestCase):
         )
         ir = read(str(path))
         self.assertEqual(ir.phase, "FCC")
-        self.assertAlmostEqual(float(ir.Y_subl[0]["CO"][0]), 0.1, places=4)
-        self.assertAlmostEqual(float(ir.Y_subl[1]["CO"][0]), 0.4, places=4)
+        self.assertAlmostEqual(float(ir.Y_subl[0]["Co"][0]), 0.1, places=4)
+        self.assertAlmostEqual(float(ir.Y_subl[1]["Co"][0]), 0.4, places=4)
 
 
 if __name__ == "__main__":
