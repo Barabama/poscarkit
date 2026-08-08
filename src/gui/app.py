@@ -8,7 +8,7 @@ from collections.abc import Callable
 from tkinter import ttk
 
 from src.gui.forms import FORMS, DESCRIPTIONS
-from src.config import VERSION, GITHUB_REPO
+from src.config import VERSION, GITHUB_REPO, __version__
 from src.utils.network import get_latest_version
 
 FUNC_NAMES = [
@@ -212,10 +212,9 @@ class PoscaKitGUI:
         frame = tk.Frame(self._form_frame, padx=24, pady=18)
 
         # --- gather metadata ---
-        try:
-            version = importlib.metadata.version("poscarkit")
-        except Exception:
-            version = "unknown"
+        # Version comes from src.config (resolved as baked-in build version,
+        # package metadata, or placeholder) so compiled exes report the tag.
+        version = __version__
 
         # Authors / maintainers from package metadata
         try:

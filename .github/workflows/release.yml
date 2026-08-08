@@ -106,12 +106,21 @@ jobs:
         id: version
         shell: pwsh
         run: |
+          $pyver = python -c "import tomllib; print(tomllib.load(open('pyproject.toml', 'rb'))['project']['version'])"
           if ("${{ inputs.version }}" -ne "") {
+            if ("${{ inputs.version }}" -ne $pyver) {
+              Write-Error "Release version ${{ inputs.version }} differs from pyproject.toml version $pyver. Bump pyproject.toml on main first so wheel/exe/tag stay consistent."
+              exit 1
+            }
             echo "version=${{ inputs.version }}" >> $env:GITHUB_OUTPUT
           } else {
-            $version = python -c "import tomllib; print(tomllib.load(open('pyproject.toml', 'rb'))['project']['version'])"
-            echo "version=$version" >> $env:GITHUB_OUTPUT
+            echo "version=$pyver" >> $env:GITHUB_OUTPUT
           }
+
+      - name: Bake version into source
+        shell: pwsh
+        run: |
+          Set-Content -Path src/config/_version.py -Value "__version__ = '${{ steps.version.outputs.version }}'"
 
       - name: Build executable with Nuitka
         uses: Nuitka/Nuitka-Action@main
@@ -162,12 +171,20 @@ jobs:
       - name: Get version
         id: version
         run: |
+          PYVER=$(python -c "import tomllib; print(tomllib.load(open('pyproject.toml', 'rb'))['project']['version'])")
           if [ -n "${{ inputs.version }}" ]; then
+            if [ "${{ inputs.version }}" != "$PYVER" ]; then
+              echo "::error::Release version ${{ inputs.version }} differs from pyproject.toml version $PYVER. Bump pyproject.toml on main first so wheel/exe/tag stay consistent."
+              exit 1
+            fi
             echo "version=${{ inputs.version }}" >> $GITHUB_OUTPUT
           else
-            VERSION=$(python -c "import tomllib; print(tomllib.load(open('pyproject.toml', 'rb'))['project']['version'])")
-            echo "version=$VERSION" >> $GITHUB_OUTPUT
+            echo "version=$PYVER" >> $GITHUB_OUTPUT
           fi
+
+      - name: Bake version into source
+        run: |
+          echo "__version__ = '${{ steps.version.outputs.version }}'" > src/config/_version.py
 
       - name: Build executable with Nuitka
         uses: Nuitka/Nuitka-Action@main
@@ -248,11 +265,15 @@ jobs:
       - name: Get version
         id: version
         run: |
+          PYVER=$(python -c "import tomllib; print(tomllib.load(open('pyproject.toml', 'rb'))['project']['version'])")
           if [ -n "${{ inputs.version }}" ]; then
+            if [ "${{ inputs.version }}" != "$PYVER" ]; then
+              echo "::error::Release version ${{ inputs.version }} differs from pyproject.toml version $PYVER. Bump pyproject.toml on main first so wheel/exe/tag stay consistent."
+              exit 1
+            fi
             echo "version=${{ inputs.version }}" >> $GITHUB_OUTPUT
           else
-            VERSION=$(python -c "import tomllib; print(tomllib.load(open('pyproject.toml', 'rb'))['project']['version'])")
-            echo "version=$VERSION" >> $GITHUB_OUTPUT
+            echo "version=$PYVER" >> $GITHUB_OUTPUT
           fi
 
       - name: List release files
