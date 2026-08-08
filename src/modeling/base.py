@@ -15,6 +15,7 @@ import numpy as np
 from ase import Atoms
 
 from src.utils.progress import progress
+from src.utils.elements import canonicalize_element
 
 
 @dataclass
@@ -460,8 +461,12 @@ class SimplePoscar:
 
     @staticmethod
     def struct2atoms(struct: Struct) -> Atoms:
-        """Convert Struct to Atoms, preserving note/constr/meta in arrays."""
-        symbols = struct.symbols
+        """Convert Struct to Atoms, preserving note/constr/meta in arrays.
+
+        Element symbols are canonicalized (e.g. 'CO' -> 'Co') because ASE
+        rejects non-canonical chemical symbols with a KeyError.
+        """
+        symbols = [canonicalize_element(s) for s in struct.symbols]
         cell = struct.cell
         positions = struct.get_coords(False)
         atoms = Atoms(symbols=symbols, cell=cell, positions=positions, pbc=True)

@@ -8,6 +8,8 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
+from src.utils.elements import canonicalize_element
+
 # Fallback phase name → sublattice site ratios (must sum to 1.0).
 # When a TDB is provided, ratios are extracted from the TDB's PHASE records
 # and take precedence over this map via get_site_ratios().
@@ -79,6 +81,19 @@ class SOFData:
     S_real: np.ndarray | None = None
 
     def __post_init__(self):
+        # Export files (Thermo-Calc/Pandat/teacher) use all-caps element
+        # symbols like 'CO', 'CU', 'NI'.  Canonicalize them to 'Co', 'Cu',
+        # 'Ni' so downstream POSCAR generation and ASE backends see valid
+        # chemical symbols.
+        self.elements = sorted(
+            {canonicalize_element(e) for e in self.elements}
+        )
+        self.composition = {
+            canonicalize_element(e): v for e, v in self.composition.items()
+        }
+        self.Y_subl = [
+            {canonicalize_element(e): v for e, v in y.items()} for y in self.Y_subl
+        ]
         if not self.site_ratios:
             raise ValueError("site_ratios must not be empty")
         if abs(sum(self.site_ratios) - 1.0) > 1e-6:

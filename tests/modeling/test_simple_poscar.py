@@ -393,6 +393,30 @@ class TestBridgeRoundtrip(unittest.TestCase):
         self.assertEqual(restored[0].meta, None)
         self.assertEqual(restored[0].constr, ["T", "T", "T"])
 
+    def test_struct2atoms_canonicalizes_uppercase_symbols(self):
+        """struct2atoms title-cases all-caps symbols so ASE accepts them.
+
+        Regression: POSCARs generated from Thermo-Calc / Pandat exports
+        carry symbols like 'CO', 'CU', 'NI', which ASE rejects with a
+        KeyError.  struct2atoms must canonicalize them to 'Co', 'Cu', 'Ni'.
+        """
+        cell = np.array([[4.0, 0.0, 0.0], [0.0, 4.0, 0.0], [0.0, 0.0, 4.0]])
+        atoms = [
+            Atom(0, "CO", np.array([0.0, 0.0, 0.0]), note="1a-CO", meta="s01"),
+            Atom(1, "CU", np.array([0.5, 0.5, 0.5]), note="3c-CU", meta="s02"),
+            Atom(2, "NI", np.array([0.0, 0.5, 0.5]), note="3c-NI", meta="s03"),
+        ]
+        struct = Struct(cell=cell, is_direct=True, atom_list=atoms)
+
+        ase_atoms = SimplePoscar.struct2atoms(struct)
+        self.assertEqual(ase_atoms.get_chemical_symbols(), ["Co", "Cu", "Ni"])
+
+        # Round-trip back through atoms2struct also yields canonical symbols.
+        restored = SimplePoscar.atoms2struct(ase_atoms)
+        self.assertEqual(
+            sorted(a.symbol for a in restored), ["Co", "Cu", "Ni"]
+        )
+
     def test_atoms2struct_no_custom_arrays(self):
         """atoms2struct works on bare ASE Atoms with no custom arrays."""
         from ase import Atoms
