@@ -11,6 +11,7 @@ from typing import TypedDict
 
 from src.modeling.base import SimplePoscar
 from src.modeling.countcn import CNCounter
+from src.modeling.layers import DEFAULT_LAYER_GAP
 from src.modeling.slice import Slicer
 from src.modeling.supercell import unitcell2file, supercell2file
 from src.workflow.modeling import run_modeling
@@ -117,6 +118,7 @@ class Config(TypedDict, total=False):
     cutoff_mult: float
     by_ase: bool
     separate_key: str
+    gap: float
 
 
 class PoscarkitInteract:
@@ -388,7 +390,9 @@ class PoscarkitInteract:
         outdir = self._handle_outdir()
         miller = self._handle_miller()
         slicer = Slicer(name, poscar, miller)
-        results = slicer.slice2files(outdir=outdir)
+        results = slicer.slice2files(
+            outdir=outdir, gap=self.config.get("gap", DEFAULT_LAYER_GAP)
+        )
         return results
 
     def run_slice_to_countcn(self) -> list[Path]:
@@ -411,6 +415,7 @@ class PoscarkitInteract:
             miller_index=miller,
             pbc=pbc,
             by_ase=by_ase,
+            gap=self.config.get("gap", DEFAULT_LAYER_GAP),
         )
         return results
 

@@ -5,6 +5,8 @@ import tkinter as tk
 from tkinter import ttk, filedialog
 from pathlib import Path
 
+from src.modeling.layers import DEFAULT_LAYER_GAP
+
 
 # ------------------------------------------------------------------ #
 #  Shared widget helpers                                             #
@@ -460,6 +462,7 @@ def slice_form(parent, cfg: dict):
     _dir_row(parent, "Output dir", outdir_var)
     miller_vars = _int_entries(parent, "Miller index", 3, cfg,
                                "slice_direction", (0, 0, 1))
+    gap_var = _entry(parent, "Layer gap (Å)", cfg, "gap", DEFAULT_LAYER_GAP)
 
     def get_args():
         return argparse.Namespace(
@@ -467,6 +470,7 @@ def slice_form(parent, cfg: dict):
             poscar=poscar_var.get(),
             outdir=outdir_var.get(),
             miller_index=[int(v.get()) for v in miller_vars],
+            gap=float(gap_var.get() or DEFAULT_LAYER_GAP),
         )
 
     return get_args
@@ -487,6 +491,7 @@ def slice_to_countcn_form(parent, cfg: dict):
     ase_var = _checkbox(parent, "Use ASE backend", cfg.get("by_ase", False))
     pbc_var = _checkbox(parent, "Periodic boundary (PBC)", cfg.get("pbc", False))
     _link_ase_pbc(ase_var, pbc_var)
+    gap_var = _entry(parent, "Layer gap (Å)", cfg, "gap", DEFAULT_LAYER_GAP)
 
     def get_args():
         return argparse.Namespace(
@@ -496,6 +501,7 @@ def slice_to_countcn_form(parent, cfg: dict):
             miller_index=[int(v.get()) for v in miller_vars],
             pbc=pbc_var.get(),
             by_ase=ase_var.get(),
+            gap=float(gap_var.get() or DEFAULT_LAYER_GAP),
         )
 
     return get_args
@@ -732,6 +738,7 @@ def surface_form(parent, cfg: dict):
     vacuum_var = _entry(parent, "Vacuum (Å)", cfg, "vacuum", "15.0")
     fix_layers_var = _entry(parent, "Fix layers (blank=auto)", cfg, "fix_layers", "")
     fix_z_var = _checkbox(parent, "Fix z-only (TTF)", cfg.get("fix_z_only", False))
+    gap_var = _entry(parent, "Layer gap (Å)", cfg, "gap", DEFAULT_LAYER_GAP)
 
     def get_args():
         fix_raw = fix_layers_var.get().strip()
@@ -744,6 +751,7 @@ def surface_form(parent, cfg: dict):
             vacuum=float(vacuum_var.get() or "15.0"),
             fix_layers=int(fix_raw) if fix_raw else None,
             fix_z_only=fix_z_var.get(),
+            gap=float(gap_var.get() or DEFAULT_LAYER_GAP),
         )
 
     return get_args

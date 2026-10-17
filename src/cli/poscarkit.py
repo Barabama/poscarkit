@@ -10,6 +10,7 @@ from typing import Any
 
 from src.modeling.base import SimplePoscar
 from src.modeling.countcn import CNCounter
+from src.modeling.layers import DEFAULT_LAYER_GAP
 from src.modeling.slice import Slicer
 from src.workflow.modeling import run_modeling
 from src.modeling.supercell import unitcell2file, supercell2file
@@ -155,7 +156,7 @@ def cmd_slice(args: argparse.Namespace) -> int:
     outdir.mkdir(parents=True, exist_ok=True)
 
     slicer = Slicer(name=name, poscar=poscar, miller_index=miller_index)
-    results = slicer.slice2files(outdir=outdir)
+    results = slicer.slice2files(outdir=outdir, gap=getattr(args, "gap", DEFAULT_LAYER_GAP))
 
     logging.info(f"Slicing completed. Generated {len(results)} layers:")
     for result in results:
@@ -179,7 +180,7 @@ def cmd_slice_to_countcn(args: argparse.Namespace) -> int:
 
     results = slice2files_with_countcn(
         name=name, poscar=poscar, outdir=outdir, miller_index=miller_index,
-        pbc=pbc, by_ase=by_ase,
+        pbc=pbc, by_ase=by_ase, gap=getattr(args, "gap", DEFAULT_LAYER_GAP),
     )
 
     logging.info(f"Slice to CountCN completed. Results saved to:")
@@ -350,6 +351,7 @@ def cmd_surface(args: argparse.Namespace) -> int:
         fix_z_only=fix_z_only,
         outdir=outdir,
         precision=getattr(args, "precision", 2),
+        gap=getattr(args, "gap", DEFAULT_LAYER_GAP),
         name=name,
     )
 
@@ -547,6 +549,12 @@ def main() -> int:
         metavar=("H", "K", "L"),
         help="Miller index of the slice (e.g., 1 1 1)",
     )
+    parser_slice.add_argument(
+        "--gap",
+        type=float,
+        default=DEFAULT_LAYER_GAP,
+        help="Minimum inter-layer gap in Angstrom for layer detection (default: 0.3)",
+    )
     parser_slice.set_defaults(func=cmd_slice)
 
     # Slice to CountCN command
@@ -593,6 +601,12 @@ def main() -> int:
         "-a",
         action="store_true",
         help="Use ASE backend for CN counting (default: False)",
+    )
+    parser_slice_to_countcn.add_argument(
+        "--gap",
+        type=float,
+        default=DEFAULT_LAYER_GAP,
+        help="Minimum inter-layer gap in Angstrom for layer detection (default: 0.3)",
     )
     parser_slice_to_countcn.set_defaults(func=cmd_slice_to_countcn)
 
@@ -658,7 +672,13 @@ def main() -> int:
         "--precision",
         type=int,
         default=2,
-        help="Decimal precision for z-coordinate grouping (default: 2)",
+        help="Deprecated and ignored; layers are identified by --gap",
+    )
+    parser_surface.add_argument(
+        "--gap",
+        type=float,
+        default=DEFAULT_LAYER_GAP,
+        help="Minimum inter-layer gap in Angstrom for layer detection (default: 0.3)",
     )
     parser_surface.set_defaults(func=cmd_surface)
 

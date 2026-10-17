@@ -42,7 +42,7 @@ Atomic allocation (`src/modeling/model.py`):
 - SOF→integer conversion log is saved as CSV (`<name>-sof-integers.csv`) via `run_modeling()`.
 
 Surface slab builder (`src/modeling/surface.py`):
-- `SurfaceBuilder` — generates asymmetric surface slabs from bulk POSCAR. Uses ASE `cut()` for cell transformation, rounded-projection z-grouping for layer identification, gap-based cutting plane detection, coordinate unwrapping for slab assembly, vacuum distribution (default 15 Å), and selective dynamics (FFF or TTF). Outputs N and N+1 layer slabs with metrics summary CSV (composition deviation, dipole moment, surface energy estimate, layer compositions, etc.).
+- `SurfaceBuilder` — generates asymmetric surface slabs from bulk POSCAR. Uses ASE `cut()` with a commensurate scaled basis for cell transformation, gap-based layer clustering along the surface normal, gap-based cutting plane detection, coordinate unwrapping for slab assembly, vacuum distribution (default 15 Å), and selective dynamics (FFF or TTF). Outputs N and N+1 layer slabs with metrics summary CSV (composition deviation, dipole moment, surface energy estimate, layer compositions, etc.).
 - `Layer` dataclass holds per-layer atoms, z-centroid, composition string.
 
 ### Analysis modules
@@ -54,8 +54,8 @@ Surface slab builder (`src/modeling/surface.py`):
 - Outputs: per-pair POSCAR files, CSV tables, faceted/stacked histograms, heatmap (uses matplotlib Agg backend)
 
 `Slicer` (`src/modeling/slice.py`):
-- Transforms structure to new basis defined by Miller index (`cut` from `ase.build.tools`)
-- Groups atoms by projection onto surface normal using rounded fractional z-coordinates
+- Transforms structure to a commensurate scaled basis defined by the Miller index (`cut` from `ase.build.tools`, with an atom-count-conserving tolerance ladder)
+- Groups atoms into layers by clustering their projection onto the surface normal and splitting at real gaps (`gap`, default 0.3 Å) — see `src/modeling/layers.py`
 - Exports layers as POSCAR + PNG scatter plot (with 10 Å scale bar and semi-transparent backdrop) + Excel
 
 ### IO layer (`src/io/`)
