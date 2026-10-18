@@ -21,6 +21,13 @@ except ImportError:
 if not _HAS_TKINTER:
     raise unittest.SkipTest("tkinter is not installed")
 
+try:
+    _probe_root = tk.Tk()
+    _probe_root.withdraw()
+    _probe_root.destroy()
+except Exception as exc:
+    raise unittest.SkipTest(f"Tk runtime unavailable: {exc}") from exc
+
 
 # ================================================================== #
 #  Pure logic tests — no Tk dependency                               #
@@ -307,6 +314,8 @@ class TestSaveToConfig(unittest.TestCase):
 # ================================================================== #
 #  Widget integration tests — require Tk display                     #
 # ================================================================== #
+
+_HAS_TK = True
 
 try:
     _test_root = tk.Tk()
