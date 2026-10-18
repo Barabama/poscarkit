@@ -95,13 +95,13 @@ graph TD
 | 类别 | 要求 |
 |------|------|
 | 操作系统 | Windows 10/11 64位、Linux 64位 |
-| 运行环境 | Python ≥3.10 |
+| 运行环境 | Python ≥3.11 |
 | 关键依赖 | 数值计算（NumPy、SciPy）、数据处理（Pandas、openpyxl）、可视化（Matplotlib、seaborn）、材料科学（ASE）、进度反馈（tqdm）、SQS优化（sqsgenerator）、图形界面（Tkinter，Python标准库） |
 | 硬件 | 双核CPU / 4GB内存 / 500MB硬盘（推荐四核 / 8GB+） |
 
 ### 2.4 开发环境
 
-开发语言Python 3.10+，版本控制Git，构建系统setuptools，支持编译为独立可执行文件，测试框架unittest，开源许可MIT。
+开发语言Python 3.11+，版本控制Git，构建系统setuptools，支持编译为独立可执行文件，测试框架unittest，开源许可MIT。
 
 ---
 

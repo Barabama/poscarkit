@@ -4,7 +4,7 @@
 **基于亚晶格占位分数 (SOFs) 的 VASP POSCAR 结构建模工具包.**
 
 [![Version](https://img.shields.io/badge/version-0.10.8-blue)](./pyproject.toml)
-[![Python](https://img.shields.io/badge/python-≥3.10-blue)](./pyproject.toml)
+[![Python](https://img.shields.io/badge/python-≥3.11-blue)](./pyproject.toml)
 [![License](https://img.shields.io/badge/license-MIT-green)](./LICENSE)
 
 ---
