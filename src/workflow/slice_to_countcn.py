@@ -6,6 +6,7 @@ from pathlib import Path
 
 from src.modeling.base import SimplePoscar
 from src.modeling.countcn import CNCounter
+from src.modeling.layers import DEFAULT_LAYER_GAP
 from src.modeling.slice import Slicer
 from src.utils.progress import progress
 
@@ -17,6 +18,7 @@ def slice2files_with_countcn(
     miller_index: tuple[int, int, int],
     pbc: bool = False,
     by_ase: bool = False,
+    gap: float = DEFAULT_LAYER_GAP,
 ) -> list[Path]:
     """
     Slice a structure into layers and count the CNs in each layer.
@@ -28,7 +30,7 @@ def slice2files_with_countcn(
         miller_index: Miller index of the slice.
         pbc: Whether to use periodic boundary conditions.
         by_ase: Whether to use ASE backend for CN counting.
-        pbc: Whether to use periodic boundary conditions.
+        gap: Minimum inter-layer gap in Angstrom used to identify layers.
 
     Returns:
         A list of paths to the output dirs.
@@ -57,9 +59,9 @@ def slice2files_with_countcn(
     SimplePoscar.write_poscar(poscar=output, struct=transfd, comment=str(output.stem))
 
     # Group by normal
-    layers = [ls for ls in slicer.group_by_normal()]
+    layers = [ls for ls in slicer.group_by_normal(gap=gap)]
     num_layers = len(layers)
-    logging.info(f"Number of layers: {num_layers}")
+    logging.info(f"Number of layers: {num_layers} (gap={gap} A)")
     ll = len(str(num_layers))
     results = []
     for i, (proj, layer) in progress(

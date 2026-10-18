@@ -7,52 +7,58 @@ from collections import defaultdict
 from itertools import chain
 
 import numpy as np
-from ase.build.tools import cut
 from ase.data import chemical_symbols, covalent_radii
 
 from src.modeling import color_map
 from src.modeling.base import Struct, SimplePoscar
+from src.modeling.layers import (
+    DEFAULT_LAYER_GAP,
+    cut_commensurate,
+    layer_indices,
+    scaled_basis,
+)
 from src.utils.progress import progress
 
 
 class Slicer:
 
     def __init__(self, name: str, poscar: Path, miller_index: tuple[int, int, int]):
-        self.basis_map = {
-            (0, 0, 1): [(1, 0, 0), (0, 1, 0), (0, 0, 1)],
-            (1, 1, 0): [(0, 0, -1), (-1, 1, 0), (1, 1, 0)],
-            (1, 1, 1): [(1, 1, -2), (-1, 1, 0), (1, 1, 1)],
-        }
         self.name = name
         self.poscar = poscar
         self.miller_index = miller_index
         self.basis = self.get_basis()
-        self.basis_norm = np.array([self.normalize(v) for v in self.basis])
         self.struct = SimplePoscar.read_poscar(poscar)
         self.transformed = self.transform_struct()
 
     def normalize(self, vector: np.ndarray) -> np.ndarray:
         return vector / np.linalg.norm(vector)
 
+    @staticmethod
+    def _axis_label(vector: np.ndarray) -> str:
+        """Format a (possibly fractional) direction as small integers.
+
+        The basis is in fractional coordinates, so e.g. ``(0.5, -0.5, 0)``
+        is shown as ``[ 1 -1  0]``, which is the lattice direction it runs
+        along.
+        """
+        vec = np.asarray(vector, dtype=float)
+        scaled = vec * 2.0 if not np.allclose(vec, np.round(vec)) else vec.copy()
+        ints = np.round(scaled).astype(int)
+        divisor = int(np.gcd.reduce(np.abs(ints))) or 1
+        ints = ints // divisor
+        return " ".join(f"{v:2d}" for v in ints)
+
     def get_basis(self) -> np.ndarray:
         """
         Get basis vectors by miller index.
+
+        The vectors are in scaled (fractional) coordinates, which is what
+        ``ase.build.tools.cut`` expects.
+
         Returns:
             np.ndarray: Basis vectors
         """
-        miller_index = self.miller_index
-        if miller_index in self.basis_map:
-            basis = [np.array(v) for v in self.basis_map[self.miller_index]]
-        else:
-            n = np.array(miller_index)
-            # Find other two vectors vertical to n
-            t0 = np.array([1, 0, 0]) if abs(n[0]) < abs(n[1]) else np.array([0, 1, 0])
-            b1 = np.cross(n, t0)
-            b2 = np.cross(n, b1)
-            basis = [b1, b2, n]
-
-        basis = np.array(basis)
-        return basis
+        return scaled_basis(self.miller_index)
 
     def transform_struct(self) -> Struct:
         """
@@ -62,47 +68,34 @@ class Slicer:
             Struct: Transformed Struct
         """
         struct = self.struct
-        basis_norm = self.basis_norm
         atoms = SimplePoscar.struct2atoms(struct)
-        a, b, c = basis_norm
-        transformed = cut(atoms, a, b, c)
+        transformed, tolerance = cut_commensurate(atoms, self.basis)
+        logging.info(
+            f"Cut with basis {self.basis.tolist()} "
+            f"(tolerance={tolerance}, atoms={len(transformed)})"
+        )
         newstruct = SimplePoscar.atoms2struct(transformed)
         return newstruct
 
-    def group_by_normal(self, precision: int = 2):
-        """Group atoms by distance to the normal vector.
+    def group_by_normal(self, gap: float = DEFAULT_LAYER_GAP):
+        """Group atoms into atomic layers along the surface normal.
 
-        Uses fractional coordinates along the surface normal with circular
-        gap detection to correctly handle atoms near the periodic boundary.
+        Atoms are clustered by their projection onto the normal, splitting
+        where the gap between consecutive projections exceeds ``gap``.  This
+        is translation-invariant, unlike rounding to a fixed number of
+        decimal places: a thermally broadened layer (~0.07 A wide) is kept
+        together instead of being shredded by a 0.01 A bin.
 
         Args:
-            precision: Precision of distance (decimal places for rounding)
+            gap: Minimum inter-layer gap in Angstrom.
 
         Yields:
-            Tuple: (Projection, Struct)
+            Tuple: (Fractional projection of the layer centre, Struct)
         """
         transfd = self.transformed
+        coords = transfd.get_coords(direct=False)
 
-        # Use fractional coordinates along the c-axis (surface normal)
-        coords_direct = transfd.get_coords(direct=True)
-        projs = coords_direct[:, 2]
-
-        # Round and group by unique z
-        z_rounded = np.round(projs, decimals=precision)
-        unique_z = np.sort(np.unique(z_rounded))
-
-        # Merge top and bottom if they represent the same layer (periodic boundary)
-        if len(unique_z) >= 2:
-            wrap_gap = 1.0 - unique_z[-1] + unique_z[0]
-            if wrap_gap <= 1.5 * 10 ** (-precision):
-                z_rounded[z_rounded >= unique_z[-1] - 1e-10] = unique_z[0]
-                unique_z = unique_z[:-1]
-
-        # Yield groups
-        for zu in unique_z:
-            mask = np.isclose(z_rounded, zu, atol=0.5 * 10 ** (-precision))
-            indices = np.where(mask)[0]
-            proj = round(float(np.mean(projs[indices])), precision)
+        for proj, indices in layer_indices(coords, transfd.cell, gap=gap):
             layer = transfd.copy(atom_list=[transfd[i] for i in indices])
             yield proj, layer
 
@@ -196,13 +189,13 @@ class Slicer:
 
         plt.title(title, fontname="Times New Roman", fontsize=24, weight="bold")
         plt.xlabel(
-            f"[{' '.join(f'{v:2}' for v in basis[0])}] Coordinate (Å)",
+            f"[{self._axis_label(basis[0])}] Coordinate (Å)",
             fontname="Times New Roman",
             fontsize=20,
             weight="bold",
         )
         plt.ylabel(
-            f"[{' '.join(f'{v:2}' for v in basis[1])}] Coordinate (Å)",
+            f"[{self._axis_label(basis[1])}] Coordinate (Å)",
             fontname="Times New Roman",
             fontsize=20,
             weight="bold",
@@ -287,12 +280,15 @@ class Slicer:
         plt.savefig(imgpath, bbox_inches="tight", bbox_extra_artists=[legend, annotation])
         plt.close()
 
-    def slice2files(self, outdir: Path | str) -> list[Path]:
+    def slice2files(
+        self, outdir: Path | str, gap: float = DEFAULT_LAYER_GAP
+    ) -> list[Path]:
         """
         Slice a structure and save to files.
 
         Args:
             outdir: Output directory
+            gap: Minimum inter-layer gap in Angstrom
         Returns:
             List[Path]: Path to layer files
         """
@@ -320,9 +316,9 @@ class Slicer:
         SimplePoscar.write_poscar(poscar=output, struct=transfd, comment=str(output.stem))
 
         # Group by normal
-        layers = [ls for ls in self.group_by_normal()]
+        layers = [ls for ls in self.group_by_normal(gap=gap)]
         num_layers = len(layers)
-        logging.info(f"Number of layers: {num_layers}")
+        logging.info(f"Number of layers: {num_layers} (gap={gap} A)")
         ll = len(str(num_layers))
         results = []
         for i, (proj, layer) in progress(

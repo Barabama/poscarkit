@@ -8,9 +8,35 @@ import csv
 import logging
 
 import numpy as np
-from ase.build.tools import cut
 
 from src.modeling.base import Atom, Struct, SimplePoscar
+from src.modeling.layers import (
+    DEFAULT_LAYER_GAP,
+    cut_commensurate,
+    layer_indices,
+)
+
+
+def _rotation_to_z(normal: np.ndarray) -> np.ndarray:
+    """Return a rotation matrix that maps ``normal`` onto the +z axis."""
+    normal = np.asarray(normal, dtype=float)
+    normal = normal / np.linalg.norm(normal)
+    z_axis = np.array([0.0, 0.0, 1.0])
+
+    cross = np.cross(normal, z_axis)
+    sin = float(np.linalg.norm(cross))
+    cos = float(np.dot(normal, z_axis))
+
+    if sin < 1e-12:
+        # Already aligned (identity) or anti-parallel (180 degree flip).
+        return np.eye(3) if cos > 0 else np.diag([1.0, -1.0, -1.0])
+
+    skew = np.array([
+        [0.0, -cross[2], cross[1]],
+        [cross[2], 0.0, -cross[0]],
+        [-cross[1], cross[0], 0.0],
+    ])
+    return np.eye(3) + skew + skew @ skew * ((1.0 - cos) / (sin ** 2))
 
 
 @dataclass
@@ -40,7 +66,8 @@ class SurfaceBuilder:
         fix_layers: Number of bottom layers to fix (None = auto).
         fix_z_only: If True, fix only z-direction (TTF) instead of all (FFF).
         outdir: Output directory.
-        precision: Decimal precision for z-coordinate grouping.
+        precision: Deprecated and unused. Layers are identified with ``gap``.
+        gap: Minimum inter-layer gap in Angstrom used to identify layers.
     """
 
     def __init__(
@@ -53,6 +80,7 @@ class SurfaceBuilder:
         fix_z_only: bool = False,
         outdir: Path | None = None,
         precision: int = 2,
+        gap: float = DEFAULT_LAYER_GAP,
         name: str = "surface",
     ):
         self.poscar = Path(poscar)
@@ -64,6 +92,7 @@ class SurfaceBuilder:
         self.fix_z_only = fix_z_only
         self.outdir = Path(outdir) if outdir else Path("output")
         self.precision = precision
+        self.gap = gap
 
         self.vacuum_bottom = 2.0
         self.vacuum_top = vacuum - self.vacuum_bottom
@@ -110,56 +139,45 @@ class SurfaceBuilder:
             b_dir = np.cross(n, a_dir)
             c_dir = n
 
-        transformed_atoms = cut(atoms, a=a_dir, b=b_dir, c=c_dir)
+        transformed_atoms, tolerance = cut_commensurate(
+            atoms, np.array([a_dir, b_dir, c_dir], dtype=float)
+        )
+        logging.info(
+            f"Cut with basis {[a_dir, b_dir, c_dir]} "
+            f"(tolerance={tolerance}, atoms={len(transformed_atoms)})"
+        )
         self._transformed = SimplePoscar.atoms2struct(transformed_atoms)
         return self._transformed
 
     def _identify_layers(self) -> list[Layer]:
         """Identify atomic layers in the transformed bulk.
 
-        Groups atoms by their rounded fractional z-coordinate, which
-        reliably separates crystallographic layers regardless of cell size.
+        Layers are found by clustering atoms along the surface normal and
+        splitting at real gaps (see :func:`src.modeling.layers.layer_indices`).
+        This keeps a thermally broadened layer (~0.07 A wide) together, unlike
+        rounding to a fixed number of decimal places, which shreds such a layer
+        into several fragments.
+
         Returns list of Layer objects ordered by fractional z ascending.
         """
         if self._transformed is None:
             raise RuntimeError("Must call _transform_cell() before _identify_layers()")
 
         struct = self._transformed
-        coords = struct.get_coords(direct=True)
-        z_vals = coords[:, 2]
+        # Compute Cartesian positions without mutating the struct: _build_slab
+        # relies on the stored coordinates being direct.
+        coords_direct = struct.get_coords(direct=True)
+        coords_cart = np.dot(coords_direct, struct.cell)
 
-        n_atoms = len(z_vals)
-        if n_atoms == 0:
+        if len(coords_direct) == 0:
             return []
 
-        # Round z to configured precision
-        z_rounded = np.round(z_vals, decimals=self.precision)
-
-        # Group atoms by rounded z
-        unique_z = np.sort(np.unique(z_rounded))
-
-        # Merge top and bottom if they represent the same layer
-        # (periodic boundary: z ~ 0.0 and z ~ 1.0 round to 0.00 and 1.00)
-        if len(unique_z) >= 2:
-            gap = 1.0 - unique_z[-1] + unique_z[0]
-            # If the wrap gap is <= the precision unit, merge
-            wrap_threshold = 1.5 * 10 ** (-self.precision)
-            if gap <= wrap_threshold:
-                # Merge: atoms at z ~ 1.0 become part of z ~ 0.0 layer
-                z_rounded[z_rounded >= unique_z[-1] - 1e-10] = unique_z[0]
-                unique_z = unique_z[:-1]  # Remove the top group
+        groups = layer_indices(coords_cart, struct.cell, gap=self.gap)
 
         # Build Layer objects from groups
         result = []
-        for li, zu in enumerate(unique_z):
-            mask = np.isclose(z_rounded, zu, atol=0.5 * 10 ** (-self.precision))
-            indices = np.where(mask)[0]
+        for li, (z_centroid, indices) in enumerate(groups):
             atoms_in_layer = [struct[i] for i in indices]
-            # Handle PBC merge: atoms near z=1.0 wrap to near z=0.0 for correct centroid
-            z_layer = z_vals[indices].copy()
-            if np.max(z_layer) - np.min(z_layer) > 0.5:
-                z_layer[z_layer > 0.5] -= 1.0
-            z_centroid = float(np.mean(z_layer)) % 1.0
 
             sym_counts = Counter(a.symbol for a in atoms_in_layer)
             comp = "".join(
@@ -173,11 +191,6 @@ class SurfaceBuilder:
                 atoms=atoms_in_layer,
                 composition=comp,
             ))
-
-        # Sort by z_centroid ascending
-        result.sort(key=lambda layer: layer.z_centroid)
-        for i, layer in enumerate(result):
-            layer.index = i
 
         self._layers = result
         return result
@@ -300,24 +313,30 @@ class SurfaceBuilder:
             frac[2] = zw
             atom.coord = np.dot(frac, xform_cell)
 
-        # 3. Build new cell: a, b unchanged; c = thickness + vacuum
-        a_vec = xform_cell[0].copy()
-        b_vec = xform_cell[1].copy()
+        # 3. Rotate so the stacking direction points along Cartesian z, then
+        #    build the new cell: a, b unchanged in-plane, c = thickness + vacuum.
+        #    For (110) the transformed c axis has no z component at all, so
+        #    without this rotation the slab would not lie along its own c axis.
         c_dir = xform_cell[2]
         c_dir_norm = c_dir / np.linalg.norm(c_dir)
+        rotation = _rotation_to_z(c_dir_norm)
 
-        z_cart = np.array([a.coord[2] for a in all_atoms])
-        slab_thickness = float(np.max(z_cart) - np.min(z_cart))
+        proj = np.array([float(np.dot(a.coord, c_dir_norm)) for a in all_atoms])
+        slab_thickness = float(np.max(proj) - np.min(proj))
         c_length = slab_thickness + self.vacuum_bottom + self.vacuum_top
-        c_vec = c_dir_norm * c_length
 
+        a_vec = rotation @ xform_cell[0]
+        b_vec = rotation @ xform_cell[1]
+        c_vec = np.array([0.0, 0.0, c_length])
         new_cell = np.array([a_vec, b_vec, c_vec])
 
-        # 4. Translate atoms: bottom of slab at z = vacuum_bottom
-        z_min = float(np.min(z_cart))
-        z_shift = self.vacuum_bottom - z_min
+        # 4. Rotate atoms and translate so the bottom of the slab sits at
+        #    z = vacuum_bottom.
+        z_shift = self.vacuum_bottom - float(np.min(proj))
         for atom in all_atoms:
-            atom.coord[2] += z_shift
+            rotated = rotation @ atom.coord
+            rotated[2] += z_shift
+            atom.coord = rotated
 
         slab_struct = Struct(cell=new_cell, is_direct=False, atom_list=all_atoms)
         slab_struct.get_coords(direct=True)
@@ -337,8 +356,7 @@ class SurfaceBuilder:
         Parameters:
             slab: The slab to apply constraints to.
             n_layers: Number of atomic layers in the slab. If None, detected
-                      from unique Cartesian z-values (fallback for backward
-                      compatibility).
+                      from the gap-based layer clustering.
         """
         if self.fix_layers is not None:
             n_fix = self.fix_layers
@@ -346,10 +364,9 @@ class SurfaceBuilder:
             n_fix = (self.n_layers + 1) // 2
 
         coords = slab.get_coords(direct=False)
-        z_vals = coords[:, 2]
-        z_unique = np.sort(np.unique(np.round(z_vals, decimals=self.precision)))
+        groups = layer_indices(coords, slab.cell, gap=self.gap)
 
-        slab_layers = n_layers if n_layers is not None else max(1, len(z_unique))
+        slab_layers = n_layers if n_layers is not None else max(1, len(groups))
 
         if n_fix > slab_layers:
             raise ValueError(
@@ -362,16 +379,18 @@ class SurfaceBuilder:
                 atom.constr = ["T", "T", "T"]
             return slab
 
-        fix_threshold = z_unique[min(n_fix, len(z_unique) - 1)] + 0.01
         fix_constr = ["T", "T", "F"] if self.fix_z_only else ["F", "F", "F"]
         free_constr = ["T", "T", "T"]
 
         for atom in slab:
-            atom_z = atom.coord[2]
-            if atom_z <= fix_threshold:
-                atom.constr = fix_constr.copy()
-            else:
-                atom.constr = free_constr.copy()
+            atom.constr = free_constr.copy()
+
+        # Fix the lowest layers as whole layers: a relaxed layer is a
+        # continuous distribution, so a z threshold would cut through it.
+        n_fix_groups = min(n_fix, len(groups) - 1) + 1
+        for _, indices in groups[:n_fix_groups]:
+            for idx in indices:
+                slab[int(idx)].constr = fix_constr.copy()
 
         return slab
 
@@ -449,33 +468,24 @@ class SurfaceBuilder:
             deviations.append(abs(surf_frac - bulk_frac))
         composition_deviation = sum(deviations) / len(deviations) if deviations else 0.0
 
-        z_unique = np.sort(np.unique(np.round(z_vals, decimals=self.precision)))
-        if len(z_unique) >= 2:
-            top_threshold = z_unique[-2] + 0.01
-            top_atoms = int(np.sum(z_vals >= top_threshold))
+        # Identify layers by clustering, not by rounding: a relaxed layer is a
+        # continuous distribution and would be split by a decimal grid.
+        groups = layer_indices(coords, slab.cell, gap=self.gap)
+        if groups:
+            _, top_indices = groups[-1]
+            top_atoms = len(top_indices)
             surface_energy_est = top_atoms / max(total, 1)
+            top_layer_z_std = float(np.std(z_vals[top_indices]))
         else:
             surface_energy_est = 1.0
+            top_layer_z_std = 0.0
 
         z_center = (np.max(z_vals) + np.min(z_vals)) / 2.0
         dipole = float(np.sum(z_vals - z_center))
 
-        if len(z_unique) >= 2:
-            top_threshold = z_unique[-2] + 0.01
-            top_zs = z_vals[z_vals >= top_threshold]
-            top_layer_z_std = float(np.std(top_zs)) if len(top_zs) > 0 else 0.0
-        else:
-            top_layer_z_std = 0.0
-
-        z_rounded = np.round(z_vals, decimals=self.precision)
-        z_unique_rounded = np.sort(np.unique(z_rounded))
         layer_comps_list = []
-        for zu in z_unique_rounded:
-            mask = np.abs(z_rounded - zu) < 0.5 * (10 ** (-self.precision))
-            layer_syms = [
-                slab[i].symbol for i, m in enumerate(mask) if m
-            ]
-            layer_count = Counter(layer_syms)
+        for _, indices in groups:
+            layer_count = Counter(slab[int(i)].symbol for i in indices)
             layer_comps_list.append("".join(
                 f"{s}{c}" if c > 1 else s
                 for s, c in sorted(layer_count.items())

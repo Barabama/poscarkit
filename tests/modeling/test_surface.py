@@ -321,8 +321,9 @@ class TestVacuumAndConstraints(unittest.TestCase):
             self.assertGreaterEqual(float(np.min(z_vals)), 0.0)
             self.assertLessEqual(float(np.max(z_vals)), cell_c)
 
-            # Bottom vacuum region: [0, 2A) should be empty
-            bottom_atoms = [z for z in z_vals if z < 2.0]
+            # Bottom vacuum region: [0, 2A) should be empty.  Allow 1e-6 A of
+            # round-off from the direct-coordinate POSCAR round trip.
+            bottom_atoms = [z for z in z_vals if z < 2.0 - 1e-6]
             self.assertEqual(len(bottom_atoms), 0,
                 "No atoms should be in bottom vacuum region [0, 2A)")
 
