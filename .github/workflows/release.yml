@@ -1,6 +1,9 @@
 name: Build and Release
 
 on:
+  push:
+    tags:
+      - 'v*'
   workflow_dispatch:
     inputs:
       version:
@@ -28,9 +31,36 @@ on:
         type: boolean
         default: false
 
+# A tag push and a manual dispatch for the same version must not race.
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
+  # A tag push is the whole release trigger, so the tag and pyproject.toml
+  # must agree before anything is built.  A mismatch would otherwise publish
+  # a release under a tag that does not exist.
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Check tag matches pyproject version
+        if: github.event_name == 'push'
+        run: |
+          PYVER=$(python3 -c "import tomllib; print(tomllib.load(open('pyproject.toml', 'rb'))['project']['version'])")
+          TAG="${GITHUB_REF_NAME}"
+          if [ "$TAG" != "v$PYVER" ]; then
+            echo "::error::Tag $TAG does not match pyproject.toml version $PYVER. Bump pyproject.toml on main, then re-tag."
+            exit 1
+          fi
+          echo "Tag $TAG matches pyproject.toml version $PYVER"
+
   test:
-    if: inputs.test_first
+    needs: [validate]
+    # Tag pushes always run the suite; manual dispatches opt in.
+    if: github.event_name == 'push' || inputs.test_first
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
@@ -55,8 +85,8 @@ jobs:
           pytest tests/ -v
 
   build-wheel:
-    needs: [test]
-    if: always() && (needs.test.result == 'success' || needs.test.result == 'skipped')
+    needs: [validate, test]
+    if: always() && needs.validate.result == 'success' && (needs.test.result == 'success' || needs.test.result == 'skipped')
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -84,8 +114,8 @@ jobs:
           retention-days: 7
 
   build-exe-windows:
-    needs: [test]
-    if: inputs.build_executable && always() && (needs.test.result == 'success' || needs.test.result == 'skipped')
+    needs: [validate, test]
+    if: (github.event_name == 'push' || inputs.build_executable) && always() && needs.validate.result == 'success' && (needs.test.result == 'success' || needs.test.result == 'skipped')
     runs-on: windows-latest
     steps:
       - name: Checkout code
@@ -151,8 +181,8 @@ jobs:
           if-no-files-found: warn
 
   build-exe-linux:
-    needs: [test]
-    if: inputs.build_executable && always() && (needs.test.result == 'success' || needs.test.result == 'skipped')
+    needs: [validate, test]
+    if: (github.event_name == 'push' || inputs.build_executable) && always() && needs.validate.result == 'success' && (needs.test.result == 'success' || needs.test.result == 'skipped')
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -214,7 +244,8 @@ jobs:
 
   publish-pypi:
     needs: [build-wheel]
-    if: inputs.publish_pypi
+    # Never publish to PyPI from a tag push; that stays a deliberate action.
+    if: github.event_name == 'workflow_dispatch' && inputs.publish_pypi
     runs-on: ubuntu-latest
     environment:
       name: pypi
@@ -232,8 +263,8 @@ jobs:
         uses: pypa/gh-action-pypi-publish@release/v1
 
   create-release:
-    needs: [build-wheel, build-exe-windows, build-exe-linux]
-    if: inputs.create_release && always() && (needs.build-wheel.result == 'success')
+    needs: [validate, build-wheel, build-exe-windows, build-exe-linux]
+    if: (github.event_name == 'push' || inputs.create_release) && always() && needs.validate.result == 'success' && (needs.build-wheel.result == 'success')
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -285,6 +316,26 @@ jobs:
           tag_name: v${{ steps.version.outputs.version }}
           name: poscarkit v${{ steps.version.outputs.version }}
           generate_release_notes: true
+          # Prepended to the notes GitHub generates from the commits since the
+          # previous release.
+          body: |
+            ## Installation
+
+            ```bash
+            pip install poscarkit==${{ steps.version.outputs.version }}
+            ```
+
+            Or download the standalone executable for your platform below
+            (Windows `-win-x64.exe`, Linux `-linux-x64`). No Python required.
+
+            **Upgrading from v0.10.7 or earlier:** sliced layer output changes.
+            Layers are now identified by clustering the projection onto the
+            surface normal and splitting at real gaps instead of rounding to a
+            fixed number of decimal places. Previously a thermally broadened
+            layer (~0.07 A wide) was split into several fragments, and (110) /
+            (111) were cut with a non-commensurate cell. Re-run `slice` on any
+            structure processed with an older version; re-grouping the old
+            output will not recover the correct layers.
           files: dist/*
           draft: false
           prerelease: false
