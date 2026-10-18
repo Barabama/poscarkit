@@ -81,8 +81,22 @@ jobs:
           pip install -e .[dev]
 
       - name: Run tests
+        shell: bash
         run: |
-          pytest tests/ -v
+          set -o pipefail
+          pytest tests/ -v --tb=short 2>&1 | tee pytest.log
+
+      # Logs are not readable without admin access, but annotations are.  On
+      # failure, surface each failing test as an annotation so the failure is
+      # visible from the API and the run summary.
+      - name: Report failures as annotations
+        if: failure()
+        shell: bash
+        run: |
+          grep -E "^(FAILED|ERROR) " pytest.log | while IFS= read -r line; do
+            echo "::error title=pytest::$line"
+          done
+          tail -n 40 pytest.log
 
   build-wheel:
     needs: [validate, test]
