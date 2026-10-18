@@ -8,6 +8,19 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch, MagicMock
 
+# src.gui.app imports tkinter at module scope, so even the pure-logic tests
+# below cannot run where tkinter is absent (e.g. Linux CI without python3-tk).
+# Skip the whole module rather than fail.
+try:
+    import tkinter as tk
+    _HAS_TKINTER = True
+except ImportError:
+    tk = None
+    _HAS_TKINTER = False
+
+if not _HAS_TKINTER:
+    raise unittest.SkipTest("tkinter is not installed")
+
 
 # ================================================================== #
 #  Pure logic tests — no Tk dependency                               #
@@ -296,7 +309,6 @@ class TestSaveToConfig(unittest.TestCase):
 # ================================================================== #
 
 try:
-    import tkinter as tk
     _test_root = tk.Tk()
     _test_root.withdraw()
     _test_root.destroy()

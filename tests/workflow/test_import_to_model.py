@@ -3,6 +3,7 @@ import unittest
 import shutil
 from pathlib import Path
 
+from src.config import DEFAULT_CONFIG
 from src.modeling.base import SimplePoscar
 from src.workflow.import_to_model import run_import_to_model
 
@@ -28,10 +29,16 @@ class TestImportToModelSymbolCase(unittest.TestCase):
         self.test_dir = Path(tempfile.mkdtemp())
         self.addCleanup(shutil.rmtree, self.test_dir, ignore_errors=True)
 
+        # config.toml is a local, git-ignored working file, so a fresh clone
+        # (and therefore CI) does not have one.  Materialise the packaged
+        # default instead of depending on the developer's working tree.
+        self.config_path = self.test_dir / "config.toml"
+        self.config_path.write_text(DEFAULT_CONFIG, encoding="utf-8")
+
     def test_generated_poscar_has_canonical_symbols(self):
         output = run_import_to_model(
             csv_path=str(_SAMPLE),
-            config_path="config.toml",
+            config_path=str(self.config_path),
             phase="FCC",
             temperatures=[1000.0],
             factors=(2, 2, 2),
